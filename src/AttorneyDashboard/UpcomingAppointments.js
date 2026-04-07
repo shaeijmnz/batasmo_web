@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import './UpcomingAppointments.css';
 import { fetchAttorneyUpcomingAppointments, rescheduleAttorneyAppointment } from '../lib/userApi';
 
@@ -117,22 +117,50 @@ function UpcomingAppointments({ onNavigate, profile }) {
     return () => {
       isMounted = false;
     };
-  }, [profile]);
+  }, [profile?.id]);
 
   const now = new Date();
   const todayDate = now.toDateString();
   const tomorrow = new Date(now);
-  tomorrow.setDate(now.getDate() + 1);
+  const attorneyDisplayName = profile?.full_name || 'Attorney';
+  const currentYear = now.getFullYear();
 
-  const todayAppts = appointments.filter(a => {
-    const parsed = new Date(a.scheduledAt || `${a.date} ${new Date().getFullYear()}`);
-    return !Number.isNaN(parsed.getTime()) && parsed.toDateString() === todayDate;
-  });
-  const tomorrowAppts = appointments.filter(a => {
-    const parsed = new Date(a.scheduledAt || `${a.date} ${new Date().getFullYear()}`);
-    return !Number.isNaN(parsed.getTime()) && parsed.toDateString() === tomorrow.toDateString();
-  });
-  const weekAppts = appointments.filter(a => !todayAppts.includes(a) && !tomorrowAppts.includes(a));
+  tomorrow.setDate(now.getDate() + 1);
+  const tomorrowDate = tomorrow.toDateString();
+
+  const { todayAppts, tomorrowAppts, weekAppts } = useMemo(() => {
+    const today = [];
+    const nextDay = [];
+    const week = [];
+
+    appointments.forEach((appointment) => {
+      const parsed = new Date(appointment.scheduledAt || `${appointment.date} ${currentYear}`);
+      if (Number.isNaN(parsed.getTime())) {
+        week.push(appointment);
+        return;
+      }
+
+      const apptDate = parsed.toDateString();
+      if (apptDate === todayDate) {
+        today.push(appointment);
+      } else if (apptDate === tomorrowDate) {
+        nextDay.push(appointment);
+      } else {
+        week.push(appointment);
+      }
+    });
+
+    return {
+      todayAppts: today,
+      tomorrowAppts: nextDay,
+      weekAppts: week,
+    };
+  }, [appointments, currentYear, todayDate, tomorrowDate]);
+
+  const attorneyAvatarSrc = useMemo(
+    () => `https://ui-avatars.com/api/?name=${encodeURIComponent(attorneyDisplayName)}&background=1c1f2e&color=fff&size=38`,
+    [attorneyDisplayName],
+  );
 
   const handleReschedule = async (date, time, note) => {
     try {
@@ -232,7 +260,7 @@ function UpcomingAppointments({ onNavigate, profile }) {
       {/* Topbar */}
       <header className="ua-topbar">
         <div className="ua-topbar__left">
-          <button className="ua-menu-btn" onClick={() => setDrawerOpen(!drawerOpen)}>
+          <button className="ua-menu-btn" onClick={() => setDrawerOpen(v => !v)}>
             <MenuIcon />
           </button>
           <div className="ua-topbar__title">
@@ -260,11 +288,11 @@ function UpcomingAppointments({ onNavigate, profile }) {
           )}
           <div className="ua-profile" style={{ cursor: 'pointer' }} onClick={() => onNavigate('attorney-profile')}>
             <div className="ua-profile__info">
-              <span className="ua-profile__name">{profile?.full_name || 'Attorney'}</span>
+              <span className="ua-profile__name">{attorneyDisplayName}</span>
               <span className="ua-profile__status">PENDING</span>
             </div>
             <div className="ua-profile__avatar">
-              <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(profile?.full_name || 'Attorney')}&background=1c1f2e&color=fff&size=38`} alt="avatar" />
+              <img src={attorneyAvatarSrc} alt="avatar" loading="lazy" decoding="async" />
             </div>
           </div>
         </div>

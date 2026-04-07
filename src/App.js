@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { supabase } from './lib/supabaseClient';
 import { getCurrentSessionProfile, normalizeRole, pageFromRole, signOutUser } from './lib/userApi';
 
@@ -15,40 +15,40 @@ import Login from './LoginAuth/Login';
 import ForgotPassword from './LoginAuth/ForgotPassword';
 import ResetPassword from './LoginAuth/ResetPassword';
 
-/* ── ClientDashboard ── */
-import HomePage from './ClientDashboard/HomePage';
-import BookAppointment from './ClientDashboard/BookAppointment';
-import NotarialRequest from './ClientDashboard/NotarialRequest';
-import MyAppointments from './ClientDashboard/MyAppointments';
-import ProfilePage from './ClientDashboard/ProfilePage';
-import ChatRoom from './ClientDashboard/ChatRoom';
-import MyNotarialRequests from './ClientDashboard/MyNotarialRequests';
-import Announcements from './ClientDashboard/Announcements';
-import TransactionHistory from './ClientDashboard/TransactionHistory';
-import AttorneyHome from './AttorneyDashboard/AttorneyHome';
-import ConsultationRequests from './AttorneyDashboard/ConsultationRequests';
-import UpcomingAppointments from './AttorneyDashboard/UpcomingAppointments';
-import NotarialRequestsAtty from './AttorneyDashboard/NotarialRequestsAtty';
-import AttorneyEarnings from './AttorneyDashboard/AttorneyEarnings';
-import AttorneyMessages from './AttorneyDashboard/AttorneyMessages';
-import AttorneyAnnouncements from './AttorneyDashboard/AttorneyAnnouncements';
-import AttorneyProfile from './AttorneyDashboard/AttorneyProfile';
-import ManageAvailability from './AttorneyDashboard/ManageAvailability';
+/* ── Dashboard Pages (lazy-loaded to reduce initial bundle size) ── */
+const HomePage = lazy(() => import('./ClientDashboard/HomePage'));
+const BookAppointment = lazy(() => import('./ClientDashboard/BookAppointment'));
+const NotarialRequest = lazy(() => import('./ClientDashboard/NotarialRequest'));
+const MyAppointments = lazy(() => import('./ClientDashboard/MyAppointments'));
+const ProfilePage = lazy(() => import('./ClientDashboard/ProfilePage'));
+const ChatRoom = lazy(() => import('./ClientDashboard/ChatRoom'));
+const MyNotarialRequests = lazy(() => import('./ClientDashboard/MyNotarialRequests'));
+const Announcements = lazy(() => import('./ClientDashboard/Announcements'));
+const TransactionHistory = lazy(() => import('./ClientDashboard/TransactionHistory'));
 
-/* ── AdminDashboard ── */
-import AdminDashboard from './AdminDashboard/AdminDashboard';
-import AdminClients from './AdminDashboard/AdminClients';
-import AdminAttorneys from './AdminDashboard/AdminAttorneys';
-import AdminRequests from './AdminDashboard/AdminRequests';
-import AdminConsultations from './AdminDashboard/AdminConsultations';
-import AdminConsultationStats from './AdminDashboard/AdminConsultationStats';
-import AdminUsers from './AdminDashboard/AdminUsers';
-import AdminAddUser from './AdminDashboard/AdminAddUser';
-import AdminUserLogs from './AdminDashboard/AdminUserLogs';
-import AdminNotarialRequests from './AdminDashboard/AdminNotarialRequests';
-import AdminReports from './AdminDashboard/AdminReports';
-import AdminProfile from './AdminDashboard/AdminProfile';
-import AdminCMS from './AdminDashboard/AdminCMS';
+const AttorneyHome = lazy(() => import('./AttorneyDashboard/AttorneyHome'));
+const ConsultationRequests = lazy(() => import('./AttorneyDashboard/ConsultationRequests'));
+const UpcomingAppointments = lazy(() => import('./AttorneyDashboard/UpcomingAppointments'));
+const NotarialRequestsAtty = lazy(() => import('./AttorneyDashboard/NotarialRequestsAtty'));
+const AttorneyEarnings = lazy(() => import('./AttorneyDashboard/AttorneyEarnings'));
+const AttorneyMessages = lazy(() => import('./AttorneyDashboard/AttorneyMessages'));
+const AttorneyAnnouncements = lazy(() => import('./AttorneyDashboard/AttorneyAnnouncements'));
+const AttorneyProfile = lazy(() => import('./AttorneyDashboard/AttorneyProfile'));
+const ManageAvailability = lazy(() => import('./AttorneyDashboard/ManageAvailability'));
+
+const AdminDashboard = lazy(() => import('./AdminDashboard/AdminDashboard'));
+const AdminClients = lazy(() => import('./AdminDashboard/AdminClients'));
+const AdminAttorneys = lazy(() => import('./AdminDashboard/AdminAttorneys'));
+const AdminRequests = lazy(() => import('./AdminDashboard/AdminRequests'));
+const AdminConsultations = lazy(() => import('./AdminDashboard/AdminConsultations'));
+const AdminConsultationStats = lazy(() => import('./AdminDashboard/AdminConsultationStats'));
+const AdminUsers = lazy(() => import('./AdminDashboard/AdminUsers'));
+const AdminAddUser = lazy(() => import('./AdminDashboard/AdminAddUser'));
+const AdminUserLogs = lazy(() => import('./AdminDashboard/AdminUserLogs'));
+const AdminNotarialRequests = lazy(() => import('./AdminDashboard/AdminNotarialRequests'));
+const AdminReports = lazy(() => import('./AdminDashboard/AdminReports'));
+const AdminProfile = lazy(() => import('./AdminDashboard/AdminProfile'));
+const AdminCMS = lazy(() => import('./AdminDashboard/AdminCMS'));
 
 const CLIENT_PAGES = [
   'home-logged',
@@ -106,6 +106,16 @@ const CLIENT_NOTARY_BLOCKED_PAGES = new Set([
   'my-notarial-requests',
 ])
 
+const PUBLIC_PAGES = new Set([
+  'home',
+  'signup',
+  'otp',
+  'verified',
+  'login',
+  'forgot-password',
+  'reset-password',
+])
+
 function App() {
   const [page, setPage] = useState('home');
   const [signupContext, setSignupContext] = useState({ email: '', role: 'Client' });
@@ -157,27 +167,29 @@ function App() {
     };
   }, []);
 
-  const handleAuthSuccess = (profile) => {
+  const handleAuthSuccess = useCallback((profile) => {
     setCurrentProfile(profile);
     setPage(pageFromRole(profile?.role));
-  };
+  }, []);
 
-  const handleNavigate = (nextPage) => {
+  const handleNavigate = useCallback((nextPage) => {
     const role = normalizeRole(currentProfile?.role || '')
     if ((role === 'Client' || !role) && CLIENT_NOTARY_BLOCKED_PAGES.has(nextPage)) {
       window.alert(NOTARY_WARNING_MESSAGE)
       return
     }
     setPage(nextPage)
-  }
+  }, [currentProfile?.role])
 
-  const handleSignOut = async () => {
+  const handleSignOut = useCallback(async () => {
     await signOutUser();
     setCurrentProfile(null);
     setPage('home');
-  };
+  }, []);
 
-  const isPublicPage = ['home', 'signup', 'otp', 'verified', 'login', 'forgot-password', 'reset-password'].includes(page);
+  const isPublicPage = PUBLIC_PAGES.has(page);
+
+  const renderLazy = (node) => <Suspense fallback={null}>{node}</Suspense>
 
   useEffect(() => {
     if (!currentProfile?.role) return
@@ -206,37 +218,37 @@ function App() {
   if (page === 'login') return <Login onNavigate={handleNavigate} onAuthSuccess={handleAuthSuccess} />;
   if (page === 'forgot-password') return <ForgotPassword onNavigate={handleNavigate} />;
   if (page === 'reset-password') return <ResetPassword onNavigate={handleNavigate} />;
-  if (page === 'home-logged') return <HomePage onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} />;
-  if (page === 'book-appointment') return <BookAppointment onNavigate={handleNavigate} profile={currentProfile} />;
-  if (page === 'notarial-request') return <NotarialRequest onNavigate={handleNavigate} profile={currentProfile} />;
-  if (page === 'my-appointments') return <MyAppointments onNavigate={handleNavigate} profile={currentProfile} />;
-  if (page === 'profile') return <ProfilePage onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} onProfileUpdated={setCurrentProfile} />;
-  if (page === 'chat-room') return <ChatRoom onNavigate={handleNavigate} />;
-  if (page === 'my-notarial-requests') return <MyNotarialRequests onNavigate={handleNavigate} profile={currentProfile} />;
-  if (page === 'announcements') return <Announcements onNavigate={handleNavigate} profile={currentProfile} />;
-  if (page === 'transaction-history') return <TransactionHistory onNavigate={handleNavigate} profile={currentProfile} />;
-  if (page === 'attorney-home') return <AttorneyHome onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} />;
-  if (page === 'consultation-requests') return <ConsultationRequests onNavigate={handleNavigate} profile={currentProfile} />;
-  if (page === 'upcoming-appointments') return <UpcomingAppointments onNavigate={handleNavigate} profile={currentProfile} />;
-  if (page === 'notarial-requests-atty') return <NotarialRequestsAtty onNavigate={handleNavigate} profile={currentProfile} />;
-  if (page === 'attorney-earnings') return <AttorneyEarnings onNavigate={handleNavigate} profile={currentProfile} />;
-  if (page === 'attorney-messages') return <AttorneyMessages onNavigate={handleNavigate} profile={currentProfile} />;
-  if (page === 'attorney-announcements') return <AttorneyAnnouncements onNavigate={handleNavigate} profile={currentProfile} />;
-  if (page === 'attorney-profile') return <AttorneyProfile onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} onProfileUpdated={setCurrentProfile} />;
-  if (page === 'manage-availability') return <ManageAvailability onNavigate={handleNavigate} profile={currentProfile} />;
-  if (page === 'admin-home') return <AdminDashboard onNavigate={handleNavigate} />;
-  if (page === 'admin-users') return <AdminUsers onNavigate={handleNavigate} />;
-  if (page === 'admin-clients') return <AdminClients onNavigate={handleNavigate} />;
-  if (page === 'admin-attorneys') return <AdminAttorneys onNavigate={handleNavigate} />;
-  if (page === 'admin-add-user') return <AdminAddUser onNavigate={handleNavigate} />;
-  if (page === 'admin-user-logs') return <AdminUserLogs onNavigate={handleNavigate} />;
-  if (page === 'admin-requests') return <AdminRequests onNavigate={handleNavigate} />;
-  if (page === 'admin-consultations') return <AdminConsultations onNavigate={handleNavigate} />;
-  if (page === 'admin-consultation-stats') return <AdminConsultationStats onNavigate={handleNavigate} />;
-  if (page === 'admin-notarial') return <AdminNotarialRequests onNavigate={handleNavigate} />;
-  if (page === 'admin-reports') return <AdminReports onNavigate={handleNavigate} />;
-  if (page === 'admin-cms') return <AdminCMS onNavigate={handleNavigate} />;
-  if (page === 'admin-profile') return <AdminProfile onNavigate={handleNavigate} />;
+  if (page === 'home-logged') return renderLazy(<HomePage onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} />);
+  if (page === 'book-appointment') return renderLazy(<BookAppointment onNavigate={handleNavigate} profile={currentProfile} />);
+  if (page === 'notarial-request') return renderLazy(<NotarialRequest onNavigate={handleNavigate} profile={currentProfile} />);
+  if (page === 'my-appointments') return renderLazy(<MyAppointments onNavigate={handleNavigate} profile={currentProfile} />);
+  if (page === 'profile') return renderLazy(<ProfilePage onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} onProfileUpdated={setCurrentProfile} />);
+  if (page === 'chat-room') return renderLazy(<ChatRoom onNavigate={handleNavigate} />);
+  if (page === 'my-notarial-requests') return renderLazy(<MyNotarialRequests onNavigate={handleNavigate} profile={currentProfile} />);
+  if (page === 'announcements') return renderLazy(<Announcements onNavigate={handleNavigate} profile={currentProfile} />);
+  if (page === 'transaction-history') return renderLazy(<TransactionHistory onNavigate={handleNavigate} profile={currentProfile} />);
+  if (page === 'attorney-home') return renderLazy(<AttorneyHome onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} />);
+  if (page === 'consultation-requests') return renderLazy(<ConsultationRequests onNavigate={handleNavigate} profile={currentProfile} />);
+  if (page === 'upcoming-appointments') return renderLazy(<UpcomingAppointments onNavigate={handleNavigate} profile={currentProfile} />);
+  if (page === 'notarial-requests-atty') return renderLazy(<NotarialRequestsAtty onNavigate={handleNavigate} profile={currentProfile} />);
+  if (page === 'attorney-earnings') return renderLazy(<AttorneyEarnings onNavigate={handleNavigate} profile={currentProfile} />);
+  if (page === 'attorney-messages') return renderLazy(<AttorneyMessages onNavigate={handleNavigate} profile={currentProfile} />);
+  if (page === 'attorney-announcements') return renderLazy(<AttorneyAnnouncements onNavigate={handleNavigate} profile={currentProfile} />);
+  if (page === 'attorney-profile') return renderLazy(<AttorneyProfile onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} onProfileUpdated={setCurrentProfile} />);
+  if (page === 'manage-availability') return renderLazy(<ManageAvailability onNavigate={handleNavigate} profile={currentProfile} />);
+  if (page === 'admin-home') return renderLazy(<AdminDashboard onNavigate={handleNavigate} />);
+  if (page === 'admin-users') return renderLazy(<AdminUsers onNavigate={handleNavigate} />);
+  if (page === 'admin-clients') return renderLazy(<AdminClients onNavigate={handleNavigate} />);
+  if (page === 'admin-attorneys') return renderLazy(<AdminAttorneys onNavigate={handleNavigate} />);
+  if (page === 'admin-add-user') return renderLazy(<AdminAddUser onNavigate={handleNavigate} />);
+  if (page === 'admin-user-logs') return renderLazy(<AdminUserLogs onNavigate={handleNavigate} />);
+  if (page === 'admin-requests') return renderLazy(<AdminRequests onNavigate={handleNavigate} />);
+  if (page === 'admin-consultations') return renderLazy(<AdminConsultations onNavigate={handleNavigate} />);
+  if (page === 'admin-consultation-stats') return renderLazy(<AdminConsultationStats onNavigate={handleNavigate} />);
+  if (page === 'admin-notarial') return renderLazy(<AdminNotarialRequests onNavigate={handleNavigate} />);
+  if (page === 'admin-reports') return renderLazy(<AdminReports onNavigate={handleNavigate} />);
+  if (page === 'admin-cms') return renderLazy(<AdminCMS onNavigate={handleNavigate} />);
+  if (page === 'admin-profile') return renderLazy(<AdminProfile onNavigate={handleNavigate} />);
 
   return <LandingPage onNavigate={handleNavigate} />;
 }

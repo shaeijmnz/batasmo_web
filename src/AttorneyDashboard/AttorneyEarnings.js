@@ -104,7 +104,7 @@ export default function AttorneyEarnings({ onNavigate, profile }) {
     return () => {
       isMounted = false;
     };
-  }, [profile]);
+  }, [profile?.id]);
 
   const totalPages = Math.ceil(transactions.length / PAGE_SIZE) || 1;
   const paginated = transactions.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);

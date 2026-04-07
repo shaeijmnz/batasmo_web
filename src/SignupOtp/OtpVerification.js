@@ -20,6 +20,14 @@ const ShieldIcon = () => (
   </svg>
 );
 
+const getErrorMessage = (error, fallback) => {
+  if (!error) return fallback;
+  if (typeof error === 'string') return error;
+  if (typeof error.message === 'string') return error.message;
+  if (typeof error.error_description === 'string') return error.error_description;
+  return fallback;
+};
+
 function OtpVerification({ onNavigate, email = '', role = 'Client' }) {
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [timer, setTimer] = useState(59);
@@ -69,7 +77,7 @@ function OtpVerification({ onNavigate, email = '', role = 'Client' }) {
         inputs.current[0]?.focus();
       })
       .catch((error) => {
-        setErrorText(error.message || 'Failed to resend OTP.');
+        setErrorText(getErrorMessage(error, 'Failed to resend OTP.'));
       })
       .finally(() => {
         setIsResending(false);
@@ -110,7 +118,7 @@ function OtpVerification({ onNavigate, email = '', role = 'Client' }) {
 
       onNavigate(pageFromRole(pendingRole));
     } catch (error) {
-      setErrorText(error.message || 'Invalid or expired OTP code.');
+      setErrorText(getErrorMessage(error, 'Invalid or expired OTP code.'));
     } finally {
       setIsVerifying(false);
     }

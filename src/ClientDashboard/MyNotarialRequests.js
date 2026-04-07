@@ -81,7 +81,7 @@ function MyNotarialRequests({ onNavigate, profile }) {
     return () => {
       isMounted = false;
     };
-  }, [profile]);
+  }, [profile?.id]);
 
   const filteredRequests = activeFilter === 'All'
     ? requests

@@ -88,7 +88,7 @@ export default function AttorneyAnnouncements({ onNavigate, profile }) {
     return () => {
       isMounted = false;
     };
-  }, [profile]);
+  }, [profile?.id]);
 
   const sidebarItems = [
     { label: 'Dashboard',    icon: <DashboardIcon />,    nav: 'attorney-home' },

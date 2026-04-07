@@ -148,7 +148,7 @@ function Announcements({ onNavigate, profile }) {
     return () => {
       isMounted = false;
     };
-  }, [profile]);
+  }, [profile?.id]);
 
   const filters = ['All', 'Reschedule', 'Update', 'Reminder', 'General'];
 

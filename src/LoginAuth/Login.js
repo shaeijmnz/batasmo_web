@@ -4,16 +4,6 @@ import { checkEmailLockout, signInWithEmail } from '../lib/authApi';
 import { getCurrentSessionProfile, normalizeRole, pageFromRole } from '../lib/userApi';
 import { isValidEmail, VALID_EMAIL_MESSAGE } from '../lib/validators';
 
-const ScalesIcon = ({ size = 24, color = '#f5a623' }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="12" y1="3" x2="12" y2="21" />
-    <path d="M5 21h14" />
-    <path d="M3 6l9-3 9 3" />
-    <path d="M3 6l3 9H0L3 6z" />
-    <path d="M21 6l3 9h-6l3-9z" />
-  </svg>
-);
-
 const MailIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
@@ -44,6 +34,7 @@ const EyeIcon = ({ show }) => (
 function Login({ onNavigate, onAuthSuccess }) {
   const [form, setForm] = useState({ email: '', password: '' });
   const [showPass, setShowPass] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorText, setErrorText] = useState('');
   const [lockoutSeconds, setLockoutSeconds] = useState(0);
@@ -157,45 +148,47 @@ function Login({ onNavigate, onAuthSuccess }) {
   };
 
   return (
-    <div className="lg-page">
-      {/* Navbar */}
-      <nav className="lg-nav">
-        <div className="lg-nav__inner">
-          <div className="lg-nav__logo" onClick={() => onNavigate('home')} style={{ cursor: 'pointer' }}>
-            <ScalesIcon size={28} color="#f5a623" />
-            <span>BatasMo</span>
-          </div>
-          <ul className="lg-nav__links">
-            <li><a href="#home" onClick={() => onNavigate('home')}>Home</a></li>
-            <li><a href="#attorneys">Attorneys</a></li>
-            <li><a href="#services">Services</a></li>
-            <li><a href="#about">About</a></li>
-          </ul>
-          <div className="lg-nav__actions">
-            <button className="lg-btn lg-btn--outline" onClick={() => onNavigate('login')}>Login</button>
-            <button className="lg-btn lg-btn--gold" onClick={() => onNavigate('signup')}>Sign Up</button>
+    <div className="lg-auth-page">
+      <div className="lg-auth-bg" />
+
+      <main className="lg-auth-main">
+        <div className="lg-auth-top">
+          <button className="lg-back-button" onClick={() => onNavigate('home')}>
+            Back
+          </button>
+
+          <div className="lg-brand-badge" onClick={() => onNavigate('home')}>
+            <img src="/auth/logo.jpg" alt="BatasMo" className="lg-brand-logo" />
+            <span className="lg-brand-text">BatasMo</span>
           </div>
         </div>
-      </nav>
 
-      {/* Main */}
-      <main className="lg-main">
-        <div className="lg-card">
-          <div className="lg-card__icon-wrap">
-            <LockIcon color="#1e3a8a" />
+        <section className="lg-hero-card">
+          <p className="lg-kicker">SECURE CLIENT ACCESS</p>
+          <h1>Welcome back</h1>
+          <p>Sign in to continue managing your consultations, appointments, and legal records.</p>
+
+          <div className="lg-segment-wrap">
+            <button type="button" className="lg-segment-btn lg-segment-btn--active">LOG IN</button>
+            <button type="button" className="lg-segment-btn" onClick={() => onNavigate('signup')}>SIGN UP</button>
           </div>
-          <h2 className="lg-card__title">Welcome Back</h2>
-          <p className="lg-card__sub">Log in to your account</p>
+        </section>
+
+        <section className="lg-form-card">
+          <div className="lg-form-heading">
+            <h2>Secure Access</h2>
+            <p>Use your credentials to continue.</p>
+          </div>
 
           <form className="lg-form" onSubmit={handleSubmit}>
-            <div className="lg-field">
+            <div className="lg-input-group">
               <label>Email Address</label>
               <div className="lg-input-wrap">
                 <MailIcon />
                 <input
                   type="email"
                   name="email"
-                  placeholder="Enter your email"
+                  placeholder="name@domain.com"
                   value={form.email}
                   onChange={handleChange}
                   onBlur={handleEmailBlur}
@@ -203,7 +196,7 @@ function Login({ onNavigate, onAuthSuccess }) {
               </div>
             </div>
 
-            <div className="lg-field">
+            <div className="lg-input-group">
               <label>Password</label>
               <div className="lg-input-wrap">
                 <LockIcon />
@@ -218,31 +211,46 @@ function Login({ onNavigate, onAuthSuccess }) {
                   <EyeIcon show={showPass} />
                 </button>
               </div>
-              <div className="lg-forgot">
-                <span onClick={() => onNavigate('forgot-password')}>Forgot Password?</span>
-              </div>
             </div>
 
-            {errorText ? <p>{errorText}</p> : null}
+            <div className="lg-options-row">
+              <label className="lg-checkbox-container">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={() => setRememberMe((prev) => !prev)}
+                />
+                <span className="lg-checkmark" />
+                <span className="lg-option-text">Remember me</span>
+              </label>
+
+              <button type="button" className="lg-link-button" onClick={() => onNavigate('forgot-password')}>
+                Forgot password?
+              </button>
+            </div>
+
+            {errorText ? <p className="lg-error-text">{errorText}</p> : null}
 
             <button
               type="submit"
-              className="lg-btn lg-btn--primary lg-btn--full"
+              className="lg-primary-btn"
               disabled={isSubmitting || (lockoutSeconds > 0 && form.email.trim().toLowerCase() === lockedEmail)}
             >
               {lockoutSeconds > 0 && form.email.trim().toLowerCase() === lockedEmail
                 ? `Locked (${formatLockout(lockoutSeconds)})`
                 : isSubmitting
                   ? 'Signing In...'
-                  : 'Log In'}
+                  : 'LOG IN'}
             </button>
           </form>
 
-          <p className="lg-signup-link">
-            Don't have an account?{' '}
-            <span onClick={() => onNavigate('signup')}>Sign up here</span>
-          </p>
-        </div>
+          <div className="lg-footer-row">
+            <span>Don&apos;t have an account? </span>
+            <button type="button" className="lg-link-button" onClick={() => onNavigate('signup')}>
+              Sign up
+            </button>
+          </div>
+        </section>
       </main>
     </div>
   );

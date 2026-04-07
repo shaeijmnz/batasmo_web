@@ -342,7 +342,7 @@ function BookAppointment({ onNavigate, profile }) {
         <div className="ba-grid">
           {attorneys.map((a, i) => (
             <div key={i} className="ba-card">
-              <img src={a.img} alt={a.name} className="ba-card__photo" />
+              <img src={a.img} alt={a.name} className="ba-card__photo" loading="lazy" decoding="async" />
               <div className="ba-card__name">
                 {a.name} <VerifiedIcon />
               </div>
@@ -373,7 +373,7 @@ function BookAppointment({ onNavigate, profile }) {
             
             <div className="ba-modal__content">
               <div className="ba-profile-header">
-                <img src={selectedAttorney.img} alt={selectedAttorney.name} className="ba-profile-photo" />
+                <img src={selectedAttorney.img} alt={selectedAttorney.name} className="ba-profile-photo" loading="lazy" decoding="async" />
                 <div className="ba-profile-info">
                   <h3 className="ba-profile-name">
                     {selectedAttorney.name} <VerifiedIcon />

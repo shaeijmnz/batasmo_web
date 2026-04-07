@@ -113,7 +113,7 @@ export default function ManageAvailability({ onNavigate, profile }) {
     return () => {
       isMounted = false;
     };
-  }, [profile]);
+  }, [profile?.id]);
 
   const updateSlot = (index, field, value) => {
     setSlots((prev) => prev.map((slot, idx) => (idx === index ? { ...slot, [field]: value } : slot)));

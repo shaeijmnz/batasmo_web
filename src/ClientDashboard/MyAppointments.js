@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import './MyAppointments.css';
 import { fetchClientAppointmentsData, payForAppointment } from '../lib/userApi';
 import { isValidPhoneNumber, VALID_PHONE_MESSAGE } from '../lib/validators';
@@ -121,18 +121,20 @@ function MyAppointments({ onNavigate, profile }) {
     return () => {
       isMounted = false;
     };
-  }, [profile]);
+  }, [profile?.id]);
 
-  const statusCounts = {
+  const statusCounts = useMemo(() => ({
     Pending: appointments.filter(a => a.status === 'PENDING').length,
     Approved: appointments.filter(a => a.status === 'APPROVED').length,
     Completed: appointments.filter(a => a.status === 'COMPLETED').length,
     Rejected: appointments.filter(a => a.status === 'REJECTED').length,
-  };
+  }), [appointments]);
 
-  const filteredAppointments = filterStatus === 'All' 
-    ? appointments 
-    : appointments.filter(a => a.status === filterStatus.toUpperCase());
+  const filteredAppointments = useMemo(() => (
+    filterStatus === 'All'
+      ? appointments
+      : appointments.filter(a => a.status === filterStatus.toUpperCase())
+  ), [appointments, filterStatus]);
 
   const getStatusBadgeColor = (status) => {
     switch(status) {

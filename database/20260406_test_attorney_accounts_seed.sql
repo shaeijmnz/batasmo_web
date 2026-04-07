@@ -11,6 +11,7 @@ DO $$
 DECLARE
   v_default_password text := 'BatasMo#AttyTest2026!';
   v_user_id uuid;
+  v_instance_id uuid := '00000000-0000-0000-0000-000000000000'::uuid;
   v_has_cms_directory boolean := to_regclass('public.cms_attorney_directory') is not null;
   v_has_audit_logs boolean := to_regclass('public.audit_logs') is not null;
   v_email text;
@@ -21,6 +22,12 @@ DECLARE
   v_image_url text;
   v_row jsonb;
 BEGIN
+  SELECT COALESCE(
+    (SELECT instance_id FROM auth.users ORDER BY created_at DESC LIMIT 1),
+    v_instance_id
+  )
+  INTO v_instance_id;
+
   ALTER TABLE public.attorney_profiles
   ADD COLUMN IF NOT EXISTS prc_id text;
 
@@ -78,8 +85,8 @@ BEGIN
 
     SELECT id INTO v_user_id
     FROM auth.users
-    WHERE email = v_email
-    ORDER BY deleted_at IS NULL DESC, updated_at DESC
+    WHERE lower(email) = v_email
+    ORDER BY updated_at DESC NULLS LAST
     LIMIT 1;
 
     IF v_user_id IS NULL THEN
@@ -87,6 +94,7 @@ BEGIN
 
       INSERT INTO auth.users (
         id,
+        instance_id,
         aud,
         role,
         email,
@@ -99,6 +107,7 @@ BEGIN
       )
       VALUES (
         v_user_id,
+        v_instance_id,
         'authenticated',
         'authenticated',
         v_email,
@@ -123,9 +132,9 @@ BEGIN
       VALUES (
         gen_random_uuid(),
         v_user_id,
-        jsonb_build_object('sub', v_user_id::text, 'email', v_email),
+        jsonb_build_object('sub', v_user_id::text, 'email', v_email, 'email_verified', true),
         'email',
-        v_user_id::text,
+        v_email,
         now(),
         now(),
         now()
@@ -140,51 +149,47 @@ BEGIN
         encrypted_password = crypt(v_default_password, gen_salt('bf')),
         raw_app_meta_data = jsonb_build_object('provider', 'email', 'providers', jsonb_build_array('email')),
         email_confirmed_at = COALESCE(email_confirmed_at, now()),
-        deleted_at = null,
-        banned_until = null,
-        is_sso_user = false,
-        is_anonymous = false,
         raw_user_meta_data = COALESCE(raw_user_meta_data, '{}'::jsonb) || jsonb_build_object('full_name', v_full_name, 'role', 'Attorney'),
         updated_at = now()
       WHERE id = v_user_id;
     END IF;
 
-    IF EXISTS (
-      SELECT 1
-      FROM auth.identities
-      WHERE user_id = v_user_id
-        AND provider = 'email'
-    ) THEN
-      UPDATE auth.identities
-      SET
-        identity_data = jsonb_build_object('sub', v_user_id::text, 'email', v_email),
-        last_sign_in_at = now(),
-        updated_at = now()
-      WHERE user_id = v_user_id
-        AND provider = 'email';
-    ELSE
-      INSERT INTO auth.identities (
-        id,
-        user_id,
-        identity_data,
-        provider,
-        provider_id,
-        last_sign_in_at,
-        created_at,
-        updated_at
-      )
-      VALUES (
-        gen_random_uuid(),
-        v_user_id,
-        jsonb_build_object('sub', v_user_id::text, 'email', v_email),
-        'email',
-        v_user_id::text,
-        now(),
-        now(),
-        now()
-      )
-      ON CONFLICT (provider, provider_id) DO NOTHING;
-    END IF;
+    DELETE FROM auth.identities
+    WHERE provider = 'email'
+      AND provider_id = v_email
+      AND user_id <> v_user_id;
+
+    DELETE FROM auth.identities
+    WHERE provider = 'email'
+      AND user_id = v_user_id
+      AND provider_id <> v_email;
+
+    INSERT INTO auth.identities (
+      id,
+      user_id,
+      identity_data,
+      provider,
+      provider_id,
+      last_sign_in_at,
+      created_at,
+      updated_at
+    )
+    VALUES (
+      gen_random_uuid(),
+      v_user_id,
+      jsonb_build_object('sub', v_user_id::text, 'email', v_email, 'email_verified', true),
+      'email',
+      v_email,
+      now(),
+      now(),
+      now()
+    )
+    ON CONFLICT (provider, provider_id) DO UPDATE
+    SET
+      user_id = EXCLUDED.user_id,
+      identity_data = EXCLUDED.identity_data,
+      last_sign_in_at = now(),
+      updated_at = now();
 
     IF v_has_audit_logs THEN
       DELETE FROM public.audit_logs

@@ -13,24 +13,6 @@ const ScalesIcon = ({ size = 24, color = '#f5a623' }) => (
   </svg>
 );
 
-const DocumentIcon = ({ size = 24, color = '#f5a623' }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-    <polyline points="14 2 14 8 20 8" />
-    <line x1="16" y1="13" x2="8" y2="13" />
-    <line x1="16" y1="17" x2="8" y2="17" />
-    <polyline points="10 9 9 9 8 9" />
-  </svg>
-);
-
-const PersonIcon = ({ size = 28, color = '#fff' }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-    <circle cx="9" cy="7" r="4" />
-    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-  </svg>
-);
 
 const ShieldIcon = ({ size = 28, color = '#fff' }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -42,12 +24,6 @@ const CheckCircleIcon = ({ size = 28, color = '#fff' }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="20 6 9 17 4 12" />
     <circle cx="12" cy="12" r="10" />
-  </svg>
-);
-
-const CheckIcon = ({ size = 16, color = '#f5a623' }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="20 6 9 17 4 12" />
   </svg>
 );
 
@@ -100,227 +76,220 @@ function LandingPage({ onNavigate }) {
   }, [])
 
   return (
-    <div className="bm-page">
-
-      {/* ── NAVBAR ── */}
-      <nav className="bm-nav">
-        <div className="bm-nav__inner">
-          <div className="bm-nav__logo">
-            <ScalesIcon size={28} color="#f5a623" />
-            <span>BatasMo</span>
+    <div className="lp-page">
+      <nav className="lp-nav">
+        <div className="lp-shell lp-nav-shell">
+          <div className="lp-brand-wrap">
+            <img src="/logo/logo.jpg" alt="BatasMo" className="lp-brand-logo" />
+            <h2 className="lp-brand">BatasMo</h2>
           </div>
-          <ul className="bm-nav__links">
-            <li><a href="#home">Home</a></li>
-            <li><a href="#attorneys">Attorneys</a></li>
-            <li><a href="#services">Services</a></li>
-            <li><a href="#why">Why Choose Us</a></li>
-            <li><a href="#download">Download</a></li>
-          </ul>
-          <div className="bm-nav__actions">
-            <button className="bm-btn bm-btn--outline" onClick={() => onNavigate('login')}>Login</button>
-            <button className="bm-btn bm-btn--gold" onClick={() => onNavigate('signup')}>Sign Up</button>
+
+          <div className="lp-nav-links">
+            <a href="#home">Home</a>
+            <a href="#about">About</a>
+            <a href="#services">Services</a>
+            <a href="#attorneys">Attorneys</a>
+          </div>
+
+          <div className="lp-nav-buttons">
+            <button className="lp-btn lp-btn-ghost" onClick={() => onNavigate('login')}>Login</button>
+            <button className="lp-btn lp-btn-gold" onClick={() => onNavigate('signup')}>Sign Up</button>
           </div>
         </div>
       </nav>
 
-      {/* ── HERO ── */}
-      <section className="bm-hero" id="home">
-        <div className="bm-hero__content">
-          <h1 className="bm-hero__title">{landingContent.hero_title}</h1>
-          <p className="bm-hero__sub">
-            {landingContent.hero_subtitle}
-          </p>
-          <button className="bm-btn bm-btn--dark bm-btn--lg">
-            <DownloadIcon size={16} color="#fff" />
-            Download Our Mobile App
-          </button>
-          <div className="bm-hero__badges"></div>
+      <header className="lp-hero" id="home">
+        <div className="lp-overlay" />
+        <div className="lp-shell lp-hero-content">
+          <p className="lp-eyebrow">LEGAL HELP ON DEMAND</p>
+          <h1>{landingContent.hero_title}</h1>
+          <p>{landingContent.hero_subtitle}</p>
+          <div className="lp-hero-buttons">
+            <button className="lp-btn lp-btn-gold" onClick={() => onNavigate('login')}>Book Consultation</button>
+            <button className="lp-btn lp-btn-outline">
+              <DownloadIcon size={16} color="#ffffff" />
+              Download Our App
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <section className="lp-values">
+        <div className="lp-shell lp-value-grid">
+          <article className="lp-value-card">
+            <p className="lp-value-icon"><ShieldIcon size={16} color="#f5d074" /></p>
+            <h3>Reliable</h3>
+            <p>Consistent legal outcomes and timely updates from every engagement.</p>
+          </article>
+          <article className="lp-value-card">
+            <p className="lp-value-icon"><ScalesIcon size={16} color="#f5d074" /></p>
+            <h3>Trustworthy</h3>
+            <p>Verified professionals, transparent fees, and clear legal guidance.</p>
+          </article>
+          <article className="lp-value-card">
+            <p className="lp-value-icon"><CheckCircleIcon size={16} color="#f5d074" /></p>
+            <h3>Committed</h3>
+            <p>Focused support for consultations, documentation, and notarization.</p>
+          </article>
         </div>
       </section>
 
-      {/* ── SERVICES ── */}
-      <section className="bm-services" id="services">
-        <div className="bm-section-header">
+      <section className="lp-legacy" id="about">
+        <div className="lp-shell lp-legacy-grid">
+          <div className="lp-legacy-panel">
+            <p className="lp-eyebrow">ABOUT BATASMO</p>
+            <h2>Accessible legal support for every Filipino.</h2>
+            <p>
+              We connect you with verified attorneys and trusted notarial services through one secure platform.
+              Whether you need legal consultation or document notarization, BatasMo makes each step clear,
+              convenient, and mobile-first.
+            </p>
+            <a href="#services">Explore services</a>
+          </div>
+          <blockquote className="lp-legacy-quote">
+            "Your legal needs deserve speed, clarity, and confidence."
+          </blockquote>
+        </div>
+      </section>
+
+      <section className="lp-services" id="services">
+        <div className="lp-shell">
+          <p className="lp-eyebrow">AREAS OF EXPERTISE</p>
           <h2>{landingContent.services_title}</h2>
-          <p>{landingContent.services_subtitle}</p>
-        </div>
-        <div className="bm-services__grid">
+          <p className="lp-services-subtitle">{landingContent.services_subtitle}</p>
 
-          {/* Legal Consultation */}
-          <div className="bm-card bm-card--white">
-            <div className="bm-card__icon bm-card__icon--blue">
-              <ScalesIcon size={22} color="#fff" />
-            </div>
-            <h3>Legal Consultation</h3>
-            <p>Get professional legal advice from our experienced attorneys specialized in various areas of law including corporate, family, criminal, and civil matters.</p>
-            <ul className="bm-checklist">
-              <li><CheckIcon /><span>Expert legal counsel</span></li>
-              <li><CheckIcon /><span>Flexible appointment scheduling</span></li>
-              <li><CheckIcon /><span>Confidential consultations</span></li>
-            </ul>
-          </div>
+          <div className="lp-services-grid">
+            <article className="lp-featured-service">
+              <span className="lp-tag">PREMIER SERVICE</span>
+              <h3>Notarial Services</h3>
+              <p>Submit documents digitally and coordinate with verified legal professionals for fast processing.</p>
+              <a href="#attorneys">Meet our attorneys</a>
+            </article>
 
-          {/* Notarial Services */}
-          <div className="bm-card bm-card--cream">
-            <div className="bm-card__icon bm-card__icon--gold">
-              <DocumentIcon size={22} color="#fff" />
-            </div>
-            <h3>Notarial Services</h3>
-            <p>Fast and reliable notarization of your important documents. Upload your documents online and schedule a convenient time for notarization.</p>
-            <ul className="bm-checklist">
-              <li><CheckIcon /><span>Quick document processing</span></li>
-              <li><CheckIcon /><span>Online document submission</span></li>
-              <li><CheckIcon /><span>Secure and certified</span></li>
-            </ul>
-          </div>
-
-        </div>
-      </section>
-
-      {/* ── ATTORNEY GALLERY ── */}
-      <section className="bm-attorneys" id="attorneys">
-        <div className="bm-section-header">
-          <h2>{landingContent.attorneys_title}</h2>
-          <p>{landingContent.attorneys_subtitle}</p>
-        </div>
-        <div className="bm-attorneys__grid">
-          {attorneyGallery.length === 0 ? (
-            <p>No approved attorneys to display yet.</p>
-          ) : (
-            attorneyGallery.map((attorney) => (
-              <article className="bm-attorney-card" key={attorney.id}>
-                <img src={attorney.image} alt={attorney.name} className="bm-attorney-card__photo" />
-                <div className="bm-attorney-card__body">
-                  <h3>{attorney.name}</h3>
-                  <p className="bm-attorney-card__fee">Consultation: PHP {Number(attorney.consultationFee || 0).toLocaleString()}</p>
-                  <p className="bm-attorney-card__meta">PRC/License: {attorney.prcId || 'Available on request'}</p>
-                  <p className="bm-attorney-card__bio">{attorney.biography}</p>
-                  <div className="bm-attorney-card__chips">
-                    {(attorney.expertiseFields || []).slice(0, 4).map((field) => (
-                      <span key={field}>{field}</span>
-                    ))}
-                  </div>
-                </div>
+            <div className="lp-service-cards">
+              <article className="lp-service-card">
+                <h3>Legal Consultation</h3>
+                <p>Expert legal advice across business, labor, family, and civil concerns.</p>
               </article>
-            ))
-          )}
-        </div>
-      </section>
-
-      {/* ── WHY CHOOSE US ── */}
-      <section className="bm-why" id="why">
-        <div className="bm-section-header">
-          <h2>Why Choose Us</h2>
-          <p>Trusted by thousands of clients nationwide for professional excellence.</p>
-        </div>
-        <div className="bm-why__grid">
-          <div className="bm-why__item">
-            <div className="bm-why__icon bm-why__icon--blue">
-              <PersonIcon size={26} color="#fff" />
+              <article className="lp-service-card">
+                <h3>Case Strategy</h3>
+                <p>Get structured recommendations and practical action plans.</p>
+              </article>
+              <article className="lp-service-card">
+                <h3>Document Review</h3>
+                <p>Identify risks and improve legal documents before signing.</p>
+              </article>
+              <article className="lp-service-card">
+                <h3>Legal Referrals</h3>
+                <p>Find the right specialist based on your legal situation.</p>
+              </article>
             </div>
-            <h4>Expert Attorneys</h4>
-            <p>Highly qualified and experienced legal professionals across all domains.</p>
-          </div>
-          <div className="bm-why__item">
-            <div className="bm-why__icon bm-why__icon--gold">
-              <ShieldIcon size={26} color="#fff" />
-            </div>
-            <h4>Secure &amp; Confidential</h4>
-            <p>Your information is protected with the highest security standards and data encryption.</p>
-          </div>
-          <div className="bm-why__item">
-            <div className="bm-why__icon bm-why__icon--blue">
-              <CheckCircleIcon size={26} color="#fff" />
-            </div>
-            <h4>Fast Service</h4>
-            <p>Quick response times and efficient document processing to save your valuable time.</p>
           </div>
         </div>
       </section>
 
-      {/* ── CTA ── */}
-      <section className="bm-cta" id="download">
-        <div className="bm-cta__phone">
-          <div className="bm-cta__mockup">
-            <ScalesIcon size={40} color="#f5a623" />
-            <span className="bm-cta__app-name">BatasMo</span>
-            <div className="bm-cta__app-divider" />
-            <span className="bm-cta__app-tagline">Professional Legal &amp;<br />Notarial Services</span>
-          </div>
-        </div>
-        <div className="bm-cta__body">
-          <h2>Ready to Get Started?</h2>
-          <p>Join hundreds of satisfied clients who trust us with their legal and notarial needs. Download the app today for free.</p>
-          <button className="bm-btn bm-btn--gold bm-btn--lg">Download for Free</button>
-          <div className="bm-hero__badges bm-cta__store-badges">
-            <div className="bm-badge bm-badge--ios" title="iOS" />
-            <div className="bm-badge bm-badge--play" title="Google Play" />
+      <section className="lp-attorneys" id="attorneys">
+        <div className="lp-shell">
+          <h2>{landingContent.attorneys_title}</h2>
+          <p className="lp-attorneys-subtitle">{landingContent.attorneys_subtitle}</p>
+          <div className="lp-partners-divider" />
+
+          <div className="lp-partners-grid">
+            {attorneyGallery.length === 0 ? (
+              <p className="lp-empty-attorneys">No approved attorneys to display yet.</p>
+            ) : (
+              attorneyGallery.map((attorney) => (
+                <article className="lp-partner-card" key={attorney.id}>
+                  <div className="lp-partner-image-wrap">
+                    <img
+                      src={attorney.image}
+                      alt={attorney.name}
+                      className="lp-partner-image"
+                      loading="lazy"
+                      decoding="async"
+                      onError={(event) => {
+                        event.currentTarget.onerror = null
+                        event.currentTarget.src = '/partners/allen.svg'
+                      }}
+                    />
+                  </div>
+
+                  <div className="lp-partner-content">
+                    <h3>{attorney.name}</h3>
+                    <p className="lp-partner-price">Consultation: PHP {Number(attorney.consultationFee || 0).toLocaleString()}</p>
+                    <p className="lp-partner-license">PRC/License: {attorney.prcId || 'Available on request'}</p>
+
+                    {(attorney.expertiseFields || []).length > 0 ? (
+                      <ul>
+                        {(attorney.expertiseFields || []).slice(0, 4).map((field) => (
+                          <li key={field}>{field}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+
+                    <p>{attorney.biography}</p>
+                  </div>
+                </article>
+              ))
+            )}
           </div>
         </div>
       </section>
 
-      {/* ── FOOTER ── */}
-      <footer className="bm-footer">
-        <div className="bm-footer__top">
+      <section className="lp-cta" id="download">
+        <div className="lp-shell">
+          <blockquote>
+            Legal counsel should be as personal as it is professional.
+          </blockquote>
+          <p className="lp-cta-name">BatasMo Legal Network</p>
+          <p className="lp-cta-role">TRUSTED DIGITAL LEGAL PLATFORM</p>
 
-          <div className="bm-footer__brand">
-            <div className="bm-nav__logo">
-              <ScalesIcon size={24} color="#f5a623" />
-              <span>BatasMo</span>
+          <div className="lp-cta-panel">
+            <h2>Need legal help? Schedule a consultation today.</h2>
+            <p>
+              Start with a secure profile, connect with licensed attorneys, and access legal support wherever you are.
+            </p>
+            <div className="lp-cta-buttons">
+              <button className="lp-btn lp-btn-gold" onClick={() => onNavigate('signup')}>Create Account</button>
+              <button className="lp-btn lp-btn-outline-dark" onClick={() => onNavigate('login')}>Log In</button>
             </div>
-            <p>Professional legal consultation and notarial services at your fingertips. We are dedicated to providing accessible legal support for everyone.</p>
           </div>
-
-          <div className="bm-footer__col">
-            <h5>Quick Links</h5>
-            <ul>
-              <li><a href="#home">Home</a></li>
-              <li><a href="#services">Services</a></li>
-              <li><a href="#privacy">Privacy Policy</a></li>
-              <li><a href="#terms">Terms of Service</a></li>
-            </ul>
-          </div>
-
-          <div className="bm-footer__col">
-            <h5>Support</h5>
-            <ul>
-              <li><a href="#help">Help Center</a></li>
-              <li><a href="#contact">Contact Us</a></li>
-              <li><a href="#app-support">App Support</a></li>
-              <li><a href="#faq">FAQs</a></li>
-            </ul>
-          </div>
-
-          <div className="bm-footer__col bm-footer__contact">
-            <h5>Contact</h5>
-            <ul>
-              <li>
-                <span className="bm-footer__contact-icon">✉</span>
-                info@batasmo.com
-              </li>
-              <li>
-                <span className="bm-footer__contact-icon">📞</span>
-                (555) 123-4567
-              </li>
-              <li>
-                <span className="bm-footer__contact-icon">📍</span>
-                123 Legal Street, Law City,<br />Metro Area 40001
-              </li>
-            </ul>
-          </div>
-
         </div>
+      </section>
 
-        <div className="bm-footer__bottom">
-          <span>© 2024 BatasMo. All rights reserved.</span>
-          <div className="bm-footer__socials">
-            <a href="#linkedin">LinkedIn</a>
-            <a href="#twitter">Twitter</a>
-            <a href="#facebook">Facebook</a>
+      <footer className="lp-footer" id="contact">
+        <div className="lp-shell lp-footer-grid">
+          <div>
+            <h2 className="lp-brand">BatasMo</h2>
           </div>
+          <div>
+            <h4>PRACTICE AREAS</h4>
+            <a href="#services">Notarial Services</a>
+            <a href="#services">Civil Law</a>
+            <a href="#services">Corporate Law</a>
+            <a href="#services">Labor Law</a>
+          </div>
+          <div>
+            <h4>CONTACT INFO</h4>
+            <p>327 Aguinaldo Highway Lalaan 1st Silang Cavite 4118</p>
+            <p>(046) 413 23 93</p>
+            <p>info@batasmo.com</p>
+          </div>
+          <div>
+            <h4>QUICK LINKS</h4>
+            <a href="#about">About</a>
+            <a href="#services">Services</a>
+            <a href="#attorneys">Attorneys</a>
+            <a href="#download">Get Started</a>
+          </div>
+        </div>
+        <div className="lp-shell lp-footer-bottom">
+          <p>Copyright 2026 BatasMo. All rights reserved.</p>
+          <p>Reliable | Trustworthy | Committed</p>
         </div>
       </footer>
 
+      <button className="lp-floating-cta" onClick={() => onNavigate('login')}>Book Consultation</button>
     </div>
   );
 }

@@ -101,7 +101,7 @@ function NotarialRequestsAtty({ onNavigate, profile }) {
     return () => {
       isMounted = false;
     };
-  }, [profile]);
+  }, [profile?.id]);
 
   const closeModal = () => {
     setModal({ type: null, requestId: null });

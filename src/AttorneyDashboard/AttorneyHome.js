@@ -115,7 +115,7 @@ function AttorneyHome({ onNavigate, profile }) {
     return () => {
       isMounted = false;
     };
-  }, [profile]);
+  }, [profile?.id]);
 
   const stats = [
     { label: 'Pending Consultations',  value: String(statsData.pendingCount), icon: <PendingIcon />,       bg: '#fffbeb', border: '#f59e0b', nav: 'consultation-requests' },

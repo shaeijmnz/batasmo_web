@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import './TransactionHistory.css';
 import { fetchClientTransactions } from '../lib/userApi';
 
@@ -90,26 +90,39 @@ function TransactionHistory({ onNavigate, profile }) {
     return () => {
       isMounted = false;
     };
-  }, [profile]);
+  }, [profile?.id]);
 
   const filters = ['All', 'Consultation', 'Notarial'];
 
-  const filtered = allTransactions.filter(txn => {
-    const matchesFilter = activeFilter === 'All' || txn.type === activeFilter.toLowerCase();
-    const matchesSearch = !searchQuery ||
-      txn.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      txn.detail.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      txn.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      txn.refNo.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesFilter && matchesSearch;
-  });
+  const filtered = useMemo(() => {
+    const normalizedSearch = searchQuery.toLowerCase();
+    return allTransactions.filter(txn => {
+      const matchesFilter = activeFilter === 'All' || txn.type === activeFilter.toLowerCase();
+      const matchesSearch = !normalizedSearch ||
+        txn.description.toLowerCase().includes(normalizedSearch) ||
+        txn.detail.toLowerCase().includes(normalizedSearch) ||
+        txn.id.toLowerCase().includes(normalizedSearch) ||
+        txn.refNo.toLowerCase().includes(normalizedSearch);
+      return matchesFilter && matchesSearch;
+    });
+  }, [allTransactions, activeFilter, searchQuery]);
 
-  // Summary stats
-  const totalSpent = allTransactions
-    .filter(t => t.status === 'completed')
-    .reduce((sum, t) => sum + parseFloat(t.amount.replace(/[₱,]/g, '')), 0);
-  const consultationCount = allTransactions.filter(t => t.type === 'consultation').length;
-  const notarialCount = allTransactions.filter(t => t.type === 'notarial').length;
+  const { totalSpent, consultationCount, notarialCount, typeCounts } = useMemo(() => {
+    const consultation = allTransactions.filter(t => t.type === 'consultation').length;
+    const notarial = allTransactions.filter(t => t.type === 'notarial').length;
+
+    return {
+      totalSpent: allTransactions
+        .filter(t => t.status === 'completed')
+        .reduce((sum, t) => sum + parseFloat(t.amount.replace(/[₱,]/g, '')), 0),
+      consultationCount: consultation,
+      notarialCount: notarial,
+      typeCounts: {
+        consultation,
+        notarial,
+      },
+    };
+  }, [allTransactions]);
 
   return (
     <div className="th-page">
@@ -182,7 +195,7 @@ function TransactionHistory({ onNavigate, profile }) {
                   {f}
                   {f !== 'All' && (
                     <span className="th-filter-count">
-                      {allTransactions.filter(t => t.type === f.toLowerCase()).length}
+                      {typeCounts[f.toLowerCase()] || 0}
                     </span>
                   )}
                 </button>

@@ -9,16 +9,6 @@ import {
   VALID_PHONE_MESSAGE,
 } from '../lib/validators';
 
-const ScalesIcon = ({ size = 24, color = '#f5a623' }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="12" y1="3" x2="12" y2="21" />
-    <path d="M5 21h14" />
-    <path d="M3 6l9-3 9 3" />
-    <path d="M3 6l3 9H0L3 6z" />
-    <path d="M21 6l3 9h-6l3-9z" />
-  </svg>
-);
-
 const PersonIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
@@ -46,6 +36,14 @@ const LockIcon = () => (
   </svg>
 );
 
+const getErrorMessage = (error, fallback) => {
+  if (!error) return fallback;
+  if (typeof error === 'string') return error;
+  if (typeof error.message === 'string') return error.message;
+  if (typeof error.error_description === 'string') return error.error_description;
+  return fallback;
+};
+
 function SignUp({ onNavigate, onEmailChange }) {
   const [form, setForm] = useState({
     fullName: '',
@@ -53,7 +51,6 @@ function SignUp({ onNavigate, onEmailChange }) {
     contact: '',
     password: '',
     confirmPassword: '',
-    role: 'Client',
     age: '',
     address: '',
     guardianName: '',
@@ -130,7 +127,7 @@ function SignUp({ onNavigate, onEmailChange }) {
         email: form.email.trim(),
         password: form.password,
         fullName: form.fullName.trim(),
-        role: form.role,
+        role: 'Client',
         phone: form.contact.trim(),
         age: parsedAge,
         address: form.address.trim(),
@@ -139,143 +136,132 @@ function SignUp({ onNavigate, onEmailChange }) {
       });
 
       localStorage.setItem('batasmo_pending_otp_email', form.email.trim());
-      localStorage.setItem('batasmo_pending_otp_role', form.role);
+      localStorage.setItem('batasmo_pending_otp_role', 'Client');
 
       if (onEmailChange) {
-        onEmailChange({ email: form.email.trim(), role: form.role });
+        onEmailChange({ email: form.email.trim(), role: 'Client' });
       }
 
       onNavigate('otp');
     } catch (error) {
-      setErrorText(error.message || 'Failed to create account.');
+      setErrorText(getErrorMessage(error, 'Failed to create account.'));
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="su-page">
-      {/* Navbar */}
-      <nav className="su-nav">
-        <div className="su-nav__inner">
-          <div className="su-nav__logo" onClick={() => onNavigate('home')} style={{ cursor: 'pointer' }}>
-            <ScalesIcon size={28} color="#f5a623" />
-            <span>BatasMo</span>
-          </div>
-          <ul className="su-nav__links">
-            <li><a href="#home" onClick={() => onNavigate('home')}>Home</a></li>
-            <li><a href="#attorneys">Attorneys</a></li>
-            <li><a href="#services">Services</a></li>
-            <li><a href="#about">About</a></li>
-          </ul>
-          <div className="su-nav__actions">
-            <button className="su-btn su-btn--outline" onClick={() => onNavigate('login')}>Login</button>
-            <button className="su-btn su-btn--gold">Sign Up</button>
+    <div className="su-auth-page">
+      <div className="su-auth-bg" />
+
+      <main className="su-auth-main">
+        <div className="su-auth-top">
+          <button className="su-back-button" onClick={() => onNavigate('home')}>
+            Back
+          </button>
+
+          <div className="su-brand-badge" onClick={() => onNavigate('home')}>
+            <img src="/auth/logo.jpg" alt="BatasMo" className="su-brand-logo" />
+            <span className="su-brand-text">BatasMo</span>
           </div>
         </div>
-      </nav>
 
-      {/* Form */}
-      <main className="su-main">
-        <div className="su-card">
-          <div className="su-card__icon-wrap">
-            <ScalesIcon size={32} color="#1e3a8a" />
+        <section className="su-hero-card">
+          <p className="su-kicker">CLIENT ACCOUNT REGISTRATION</p>
+          <h1>Create your account</h1>
+          <p>Set up a secure profile in a few steps and get legal support from verified professionals.</p>
+
+          <div className="su-segment-wrap">
+            <button type="button" className="su-segment-btn" onClick={() => onNavigate('login')}>LOG IN</button>
+            <button type="button" className="su-segment-btn su-segment-btn--active">SIGN UP</button>
           </div>
-          <h2 className="su-card__title">Create Profile</h2>
-          <p className="su-card__sub">Join the BatasMo legal network.</p>
+        </section>
 
-          <div className="su-role-toggle">
-            <button
-              type="button"
-              className={`su-role-btn ${form.role === 'Client' ? 'su-role-btn--active' : ''}`}
-              onClick={() => setForm((prev) => ({ ...prev, role: 'Client' }))}
-            >
-              Client
-            </button>
-            <button
-              type="button"
-              className={`su-role-btn ${form.role === 'Attorney' ? 'su-role-btn--active' : ''}`}
-              onClick={() => setForm((prev) => ({ ...prev, role: 'Attorney' }))}
-            >
-              Attorney
-            </button>
+        <section className="su-form-card">
+          <div className="su-form-heading">
+            <h2>Join BatasMo</h2>
+            <p>Create your legal profile and continue with OTP verification.</p>
           </div>
 
           <form className="su-form" onSubmit={handleSubmit}>
-            <div className="su-field">
+            <div className="su-input-group">
               <label>Full Name</label>
               <div className="su-input-wrap">
                 <PersonIcon />
                 <input
                   type="text"
                   name="fullName"
-                  placeholder="John Doe"
+                  placeholder="Juan Dela Cruz"
                   value={form.fullName}
                   onChange={handleChange}
                 />
               </div>
             </div>
 
-            <div className="su-field">
-              <label>Email Address</label>
-              <div className="su-input-wrap">
-                <MailIcon />
-                <input
-                  type="email"
-                  name="email"
-                  placeholder="john@example.com"
-                  value={form.email}
-                  onChange={handleChange}
-                />
+            <div className="su-input-group su-grid-2">
+              <div>
+                <label>Email Address</label>
+                <div className="su-input-wrap">
+                  <MailIcon />
+                  <input
+                    type="email"
+                    name="email"
+                    placeholder="name@domain.com"
+                    value={form.email}
+                    onChange={handleChange}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label>Contact Number</label>
+                <div className="su-input-wrap">
+                  <PhoneIcon />
+                  <input
+                    type="tel"
+                    name="contact"
+                    placeholder="09123456789"
+                    value={form.contact}
+                    onChange={handleChange}
+                  />
+                </div>
               </div>
             </div>
 
-            <div className="su-field">
-              <label>Contact Number</label>
-              <div className="su-input-wrap">
-                <PhoneIcon />
-                <input
-                  type="tel"
-                  name="contact"
-                  placeholder="09123456789"
-                  value={form.contact}
-                  onChange={handleChange}
-                />
+            <div className="su-input-group su-grid-2">
+              <div>
+                <label>Age</label>
+                <div className="su-input-wrap">
+                  <PersonIcon />
+                  <input
+                    type="number"
+                    name="age"
+                    placeholder="21"
+                    min="1"
+                    value={form.age}
+                    onChange={handleChange}
+                  />
+                </div>
               </div>
-            </div>
 
-            <div className="su-field">
-              <label>Age</label>
-              <div className="su-input-wrap">
-                <PersonIcon />
-                <input
-                  type="number"
-                  name="age"
-                  placeholder="21"
-                  min="1"
-                  value={form.age}
-                  onChange={handleChange}
-                />
-              </div>
-            </div>
-
-            <div className="su-field">
-              <label>Address</label>
-              <div className="su-input-wrap">
-                <PersonIcon />
-                <input
-                  type="text"
-                  name="address"
-                  placeholder="123 Legal St., Manila"
-                  value={form.address}
-                  onChange={handleChange}
-                />
+              <div>
+                <label>Address</label>
+                <div className="su-input-wrap">
+                  <PersonIcon />
+                  <input
+                    type="text"
+                    name="address"
+                    placeholder="123 Legal St., Manila"
+                    value={form.address}
+                    onChange={handleChange}
+                  />
+                </div>
               </div>
             </div>
 
             {Number(form.age) > 0 && Number(form.age) < 18 ? (
-              <>
-                <div className="su-field">
+              <div className="su-input-group su-grid-2">
+                <div>
                   <label>Guardian Full Name</label>
                   <div className="su-input-wrap">
                     <PersonIcon />
@@ -289,7 +275,7 @@ function SignUp({ onNavigate, onEmailChange }) {
                   </div>
                 </div>
 
-                <div className="su-field">
+                <div>
                   <label>Guardian Contact Number</label>
                   <div className="su-input-wrap">
                     <PhoneIcon />
@@ -302,49 +288,53 @@ function SignUp({ onNavigate, onEmailChange }) {
                     />
                   </div>
                 </div>
-              </>
+              </div>
             ) : null}
 
-            <div className="su-field">
-              <label>Password</label>
-              <div className="su-input-wrap">
-                <LockIcon />
-                <input
-                  type="password"
-                  name="password"
-                  placeholder="••••••••"
-                  value={form.password}
-                  onChange={handleChange}
-                />
+            <div className="su-input-group su-grid-2">
+              <div>
+                <label>Password</label>
+                <div className="su-input-wrap">
+                  <LockIcon />
+                  <input
+                    type="password"
+                    name="password"
+                    placeholder="At least 6 characters"
+                    value={form.password}
+                    onChange={handleChange}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label>Confirm Password</label>
+                <div className="su-input-wrap">
+                  <LockIcon />
+                  <input
+                    type="password"
+                    name="confirmPassword"
+                    placeholder="Re-enter password"
+                    value={form.confirmPassword}
+                    onChange={handleChange}
+                  />
+                </div>
               </div>
             </div>
 
-            <div className="su-field">
-              <label>Confirm Password</label>
-              <div className="su-input-wrap">
-                <LockIcon />
-                <input
-                  type="password"
-                  name="confirmPassword"
-                  placeholder="••••••••"
-                  value={form.confirmPassword}
-                  onChange={handleChange}
-                />
-              </div>
-            </div>
+            {errorText ? <p className="su-error-text">{errorText}</p> : null}
 
-            {errorText ? <p>{errorText}</p> : null}
-
-            <button type="submit" className="su-btn su-btn--primary su-btn--full" disabled={isSubmitting}>
-              {isSubmitting ? 'Creating Account...' : 'Create Account'}
+            <button type="submit" className="su-primary-btn" disabled={isSubmitting}>
+              {isSubmitting ? 'Creating Account...' : 'CREATE ACCOUNT'}
             </button>
           </form>
 
-          <p className="su-signin-link">
-            Already have an account?{' '}
-            <span onClick={() => onNavigate('login')}>Sign in here</span>
-          </p>
-        </div>
+          <div className="su-footer-row">
+            <span>Already have an account? </span>
+            <button type="button" className="su-link-button" onClick={() => onNavigate('login')}>
+              Log in
+            </button>
+          </div>
+        </section>
       </main>
     </div>
   );
