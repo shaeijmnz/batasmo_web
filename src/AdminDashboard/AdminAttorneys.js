@@ -111,7 +111,7 @@ function AdminAttorneys({ onNavigate }) {
                   <td>{attorney.profiles?.full_name || 'Unnamed Attorney'}</td>
                   <td>{Array.isArray(attorney.specialties) && attorney.specialties.length > 0 ? attorney.specialties.join(', ') : 'General Practice'}</td>
                   <td>{attorney.years_experience ? `${attorney.years_experience} years` : '-'}</td>
-                  <td><strong>{typeof attorney.consultation_fee === 'number' ? `PHP ${attorney.consultation_fee.toLocaleString()}` : 'PHP 0'}</strong></td>
+                  <td><strong>{`PHP ${Number(attorney.consultation_fee || 2000).toLocaleString()}`}</strong></td>
                   <td>
                     <span className={`adm-detail-badge adm-detail-badge--${attorney.is_verified ? 'active' : 'pending'}`}>
                       {attorney.is_verified ? 'Verified' : 'Pending'}

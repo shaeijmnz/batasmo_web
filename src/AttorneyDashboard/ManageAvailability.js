@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import './ManageAvailability.css';
 import { fetchAttorneyAvailabilitySlots, saveAttorneyAvailabilitySlots } from '../lib/userApi';
 
@@ -27,6 +27,11 @@ const ScheduleIcon = () => (
 const MessagesIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+  </svg>
+);
+const LogsIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><polyline points="14 2 14 8 20 8"/>
   </svg>
 );
 const AnnouncementIcon = () => (
@@ -76,6 +81,7 @@ export default function ManageAvailability({ onNavigate, profile }) {
   const [slots, setSlots] = useState([createBlankSlot()]);
   const [saved, setSaved] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const saveResetTimeoutRef = useRef(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -115,6 +121,16 @@ export default function ManageAvailability({ onNavigate, profile }) {
     };
   }, [profile?.id]);
 
+  useEffect(() => {
+    return () => {
+      if (saveResetTimeoutRef.current) {
+        clearTimeout(saveResetTimeoutRef.current);
+        saveResetTimeoutRef.current = null;
+      }
+      console.log('[lifecycle] ManageAvailability unmounted');
+    };
+  }, []);
+
   const updateSlot = (index, field, value) => {
     setSlots((prev) => prev.map((slot, idx) => (idx === index ? { ...slot, [field]: value } : slot)));
     setSaved(false);
@@ -139,12 +155,24 @@ export default function ManageAvailability({ onNavigate, profile }) {
       return;
     }
 
+    const now = new Date();
     const prepared = slots
-      .map((slot) => ({ startTime: toIso(slot.date, slot.start), endTime: toIso(slot.date, slot.end) }))
+      .map((slot) => ({
+        startTime: toIso(slot.date, slot.start),
+        endTime: toIso(slot.date, slot.end),
+      }))
+      .filter((slot) => {
+        if (!slot.startTime || !slot.endTime) return false;
+        const start = new Date(slot.startTime);
+        const end = new Date(slot.endTime);
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false;
+        if (end <= start) return false;
+        return start > now;
+      })
       .filter((slot) => Boolean(slot.startTime) && Boolean(slot.endTime));
 
     if (!prepared.length) {
-      setLoadError('Please add at least one valid schedule slot.');
+      setLoadError('Please add at least one valid future schedule slot.');
       return;
     }
 
@@ -152,7 +180,13 @@ export default function ManageAvailability({ onNavigate, profile }) {
       await saveAttorneyAvailabilitySlots({ attorneyId: profile.id, slots: prepared });
       setLoadError('');
       setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
+      if (saveResetTimeoutRef.current) {
+        clearTimeout(saveResetTimeoutRef.current);
+      }
+      saveResetTimeoutRef.current = setTimeout(() => {
+        setSaved(false);
+        saveResetTimeoutRef.current = null;
+      }, 3000);
     } catch (error) {
       setLoadError(error.message || 'Failed to save availability schedule.');
     }
@@ -161,7 +195,7 @@ export default function ManageAvailability({ onNavigate, profile }) {
   const sidebarItems = [
     { label: 'Dashboard', icon: <DashboardIcon />, nav: 'attorney-home' },
     { label: 'Consultation Management', icon: <ScheduleIcon />, nav: 'upcoming-appointments' },
-    { label: 'Messages', icon: <MessagesIcon />, nav: 'attorney-messages' },
+    { label: 'Logs', icon: <LogsIcon />, nav: 'attorney-logs' },
     { label: 'Announcement', icon: <AnnouncementIcon />, nav: 'attorney-announcements' },
     { label: 'Profile', icon: <ProfileIcon />, nav: 'attorney-profile' },
   ];

@@ -91,10 +91,6 @@ export async function signUpWithEmail({
 
 export async function signInWithEmail({ email, password }) {
   const normalizedEmail = String(email || '').trim().toLowerCase()
-  const lockoutTime = await checkEmailLockout(normalizedEmail)
-  if (lockoutTime > 0) {
-    throw new Error(`LOCKOUT:${lockoutTime}`)
-  }
 
   const { data, error } = await supabase.auth.signInWithPassword({
     email: normalizedEmail,
@@ -103,42 +99,41 @@ export async function signInWithEmail({ email, password }) {
 
   if (error) {
     const normalized = String(error.message || '').toLowerCase()
+    
+    // Check lockout only on failure
+    const lockoutTime = await checkEmailLockout(normalizedEmail)
+    if (lockoutTime > 0) {
+      throw new Error(`LOCKOUT:${lockoutTime}`)
+    }
+
+    // Log failed login in background (don't wait)
     if (normalized.includes('credential') || normalized.includes('invalid')) {
-      await supabase.rpc('log_failed_login', { user_email: normalizedEmail })
+      supabase.rpc('log_failed_login', { user_email: normalizedEmail }).catch(() => {})
     }
     throw new Error(error.message)
   }
 
-  await supabase.rpc('clear_failed_logins', { user_email: normalizedEmail })
+  // Clear failed logins in background (don't wait)
+  supabase.rpc('clear_failed_logins', { user_email: normalizedEmail }).catch(() => {})
 
   if (data?.user) {
     const meta = data.user.user_metadata || {}
+    const dbRole = normalizeRole(meta.role || 'Client')
+    const dbName = meta.full_name || normalizedEmail
 
-    const { data: existingProfile } = await supabase
+    // Update profile in background (don't wait)
+    supabase
       .from('profiles')
-      .select('role, full_name, phone, address')
-      .eq('id', data.user.id)
-      .maybeSingle()
-
-    const dbRole = normalizeRole(existingProfile?.role || meta.role || 'Client')
-    const dbName = existingProfile?.full_name || meta.full_name || normalizedEmail
-
-    await supabase
-      .from('profiles')
-      .upsert(
-        {
-          id: data.user.id,
-          email: data.user.email,
-          full_name: dbName,
-          role: dbRole,
-        },
-        { onConflict: 'id' },
-      )
+      .upsert({
+        id: data.user.id,
+        email: data.user.email,
+        full_name: dbName,
+        role: dbRole,
+      }, { onConflict: 'id' })
+      .catch(() => {})
 
     data.user.role = dbRole
     data.user.name = dbName
-    data.user.phone = existingProfile?.phone
-    data.user.address = existingProfile?.address
   }
 
   return {
@@ -185,6 +180,66 @@ export async function resendSignUpOtp({ email }) {
   const { error } = await supabase.auth.resend({
     type: 'signup',
     email,
+  })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return { success: true }
+}
+
+export async function startPasswordRecovery({ email }) {
+  const normalizedEmail = String(email || '').trim().toLowerCase()
+  const { error } = await supabase.auth.signInWithOtp({
+    email: normalizedEmail,
+    options: {
+      shouldCreateUser: false,
+    },
+  })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return { success: true }
+}
+
+export async function resendPasswordRecoveryOtp({ email }) {
+  const normalizedEmail = String(email || '').trim().toLowerCase()
+  const { error } = await supabase.auth.signInWithOtp({
+    email: normalizedEmail,
+    options: {
+      shouldCreateUser: false,
+    },
+  })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return { success: true }
+}
+
+export async function verifyRecoveryOtp({ email, token }) {
+  const normalizedEmail = String(email || '').trim().toLowerCase()
+  const normalizedToken = String(token || '').trim()
+  const { error } = await supabase.auth.verifyOtp({
+    email: normalizedEmail,
+    token: normalizedToken,
+    type: 'email',
+  })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return { success: true }
+}
+
+export async function updatePasswordForCurrentUser({ newPassword }) {
+  const { error } = await supabase.auth.updateUser({
+    password: newPassword,
   })
 
   if (error) {

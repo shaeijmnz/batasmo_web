@@ -1,9 +1,16 @@
 import { useState, useRef, useEffect } from 'react';
 import './AttorneyMessages.css';
 import {
+  deleteAppointmentMessage,
+  endConsultationSession,
   fetchAppointmentMessages,
   fetchAttorneyUpcomingAppointments,
+  getSignedUrlForAppointmentMessage,
+  isConsultationChatActiveStatus,
+  sendAppointmentAttachment,
   sendAppointmentMessage,
+  subscribeToAttorneyAppointments,
+  subscribeToAppointmentMessages,
 } from '../lib/userApi';
 
 /* ── Icons ── */
@@ -33,6 +40,11 @@ const MessagesIcon = () => (
     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
   </svg>
 );
+const LogsIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+  </svg>
+);
 const AnnouncementIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
@@ -49,7 +61,7 @@ const SendIcon = () => (
   </svg>
 );
 
-export default function AttorneyMessages({ onNavigate, profile }) {
+export default function AttorneyMessages({ onNavigate, profile, initialAppointmentId = '' }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -57,26 +69,69 @@ export default function AttorneyMessages({ onNavigate, profile }) {
   const [activeAppointmentId, setActiveAppointmentId] = useState('');
   const [isClosed, setIsClosed] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const [sending, setSending] = useState(false);
+  const [endingSession, setEndingSession] = useState(false);
+  const [deletingMessageId, setDeletingMessageId] = useState('');
+  const [signedUrlsByMessageId, setSignedUrlsByMessageId] = useState({});
   const messagesEndRef = useRef(null);
+  const imagePickerRef = useRef(null);
+  const filePickerRef = useRef(null);
+
+  const mergeRealtimeMessage = (incoming) => {
+    setMessages((previous) => {
+      const existingById = new Map(previous.map((item) => [item.id, item]));
+      existingById.set(incoming.id, incoming);
+      return Array.from(existingById.values()).sort((a, b) =>
+        String(a.createdAt || '').localeCompare(String(b.createdAt || '')),
+      );
+    });
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   useEffect(() => {
+    console.log('[lifecycle] AttorneyMessages mounted', { userId: profile?.id || null })
+    return () => {
+      console.log('[lifecycle] AttorneyMessages unmounted', { userId: profile?.id || null })
+    }
+  }, [profile?.id])
+
+  useEffect(() => {
+    setAppointments([])
+    setMessages([])
+    setActiveAppointmentId('')
+    setIsClosed(false)
+    setLoadError('')
+    setSignedUrlsByMessageId({})
+  }, [profile?.id])
+
+  useEffect(() => {
     let isMounted = true;
 
-    const loadAppointments = async () => {
+    const loadAppointments = async (options = {}) => {
       if (!profile?.id) return;
       try {
-        const rows = await fetchAttorneyUpcomingAppointments(profile.id);
+        const rows = await fetchAttorneyUpcomingAppointments(profile.id, options);
         if (!isMounted) return;
 
-        setAppointments(rows);
-        if (!activeAppointmentId && rows.length > 0) {
-          setActiveAppointmentId(rows[0].id);
+        const activeRows = rows.filter((row) => isConsultationChatActiveStatus(row.status));
+        setAppointments(activeRows);
+        setActiveAppointmentId((prev) => {
+          if (!activeRows.length) return ''
+          if (initialAppointmentId && activeRows.some((row) => String(row.id) === String(initialAppointmentId))) {
+            return String(initialAppointmentId)
+          }
+          if (prev && activeRows.some((row) => String(row.id) === String(prev))) return prev
+          return String(activeRows[0].id)
+        })
+
+        if (!activeRows.length) {
+          setLoadError('Consultation chat will be available once an appointment is marked as started/active.');
+        } else {
+          setLoadError('');
         }
-        setLoadError('');
       } catch (error) {
         if (!isMounted) return;
         setAppointments([]);
@@ -84,30 +139,93 @@ export default function AttorneyMessages({ onNavigate, profile }) {
       }
     };
 
-    loadAppointments();
+    loadAppointments({ force: true });
+
+    const unsubscribe = subscribeToAttorneyAppointments(profile?.id, () => {
+      loadAppointments({ force: true });
+    });
 
     return () => {
       isMounted = false;
+      unsubscribe();
     };
-  }, [profile, activeAppointmentId]);
+  }, [profile?.id, initialAppointmentId]);
 
   useEffect(() => {
-    if (!activeAppointmentId) {
+    if (!initialAppointmentId || !appointments.length) return;
+    if (appointments.some((item) => String(item.id) === String(initialAppointmentId))) {
+      setActiveAppointmentId(String(initialAppointmentId));
+    }
+  }, [initialAppointmentId, appointments]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const messagesToResolve = messages.filter(
+      (item) =>
+        (item.messageType === 'image' || item.messageType === 'file') &&
+        item.fileBucket &&
+        item.filePath &&
+        !Object.prototype.hasOwnProperty.call(signedUrlsByMessageId, item.id),
+    );
+
+    if (!messagesToResolve.length) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    messagesToResolve.forEach((item) => {
+      getSignedUrlForAppointmentMessage({
+        fileBucket: item.fileBucket,
+        filePath: item.filePath,
+      })
+        .then((signedUrl) => {
+          if (cancelled) return;
+          setSignedUrlsByMessageId((previous) => ({
+            ...previous,
+            [item.id]: signedUrl || '',
+          }));
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setSignedUrlsByMessageId((previous) => ({
+            ...previous,
+            [item.id]: '',
+          }));
+        });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [messages, signedUrlsByMessageId]);
+
+  useEffect(() => {
+    if (!profile?.id || !activeAppointmentId) {
       setMessages([]);
       setIsClosed(false);
       return undefined;
     }
 
     let isMounted = true;
+    const currentAppointmentId = activeAppointmentId;
     const loadMessages = async () => {
       try {
-        const { messages: rows, isClosed: closed } = await fetchAppointmentMessages(activeAppointmentId);
+        const { messages: rows, isClosed: closed } = await fetchAppointmentMessages(currentAppointmentId);
         if (!isMounted) return;
         const mapped = rows.map((item) => ({
           id: item.id,
           sender: item.isMine ? 'attorney' : 'client',
           text: item.text,
           time: item.time,
+          createdAt: item.createdAt,
+          messageType: item.messageType || 'text',
+          fileBucket: item.fileBucket || null,
+          filePath: item.filePath || null,
+          fileName: item.fileName || null,
+          mimeType: item.mimeType || null,
+          fileSizeBytes: item.fileSizeBytes || null,
           date: item.createdAt
             ? new Date(item.createdAt).toLocaleDateString('en-PH', {
                 month: 'short',
@@ -126,18 +244,140 @@ export default function AttorneyMessages({ onNavigate, profile }) {
     };
 
     loadMessages();
-    const intervalId = setInterval(loadMessages, 2000);
 
     return () => {
       isMounted = false;
-      clearInterval(intervalId);
+    };
+  }, [profile?.id, activeAppointmentId]);
+
+  useEffect(() => {
+    if (!activeAppointmentId) return undefined;
+
+    let cancelled = false;
+    let unsubscribe = () => {};
+
+    (async () => {
+      try {
+        const stop = await subscribeToAppointmentMessages(activeAppointmentId, (item) => {
+          const mapped = {
+            id: item.id,
+            sender: item.isMine ? 'attorney' : 'client',
+            text: item.text,
+            time: item.time,
+            createdAt: item.createdAt,
+            messageType: item.messageType || 'text',
+            fileBucket: item.fileBucket || null,
+            filePath: item.filePath || null,
+            fileName: item.fileName || null,
+            mimeType: item.mimeType || null,
+            fileSizeBytes: item.fileSizeBytes || null,
+            date: item.createdAt
+              ? new Date(item.createdAt).toLocaleDateString('en-PH', {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                })
+              : 'Today',
+          };
+
+          mergeRealtimeMessage(mapped);
+          setIsClosed(Boolean(item.isClosed));
+        });
+
+        if (!cancelled) {
+          unsubscribe = stop;
+        } else {
+          stop();
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setLoadError(error.message || 'Unable to subscribe to live messages.');
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [activeAppointmentId]);
+
+  useEffect(() => {
+    if (!activeAppointmentId) return undefined;
+
+    let cancelled = false;
+
+    const refreshMessages = async () => {
+      try {
+        const { messages: rows, isClosed: closed } = await fetchAppointmentMessages(activeAppointmentId);
+        if (cancelled) return;
+
+        const mapped = rows.map((item) => ({
+          id: item.id,
+          sender: item.isMine ? 'attorney' : 'client',
+          text: item.text,
+          time: item.time,
+          createdAt: item.createdAt,
+          messageType: item.messageType || 'text',
+          fileBucket: item.fileBucket || null,
+          filePath: item.filePath || null,
+          fileName: item.fileName || null,
+          mimeType: item.mimeType || null,
+          fileSizeBytes: item.fileSizeBytes || null,
+          date: item.createdAt
+            ? new Date(item.createdAt).toLocaleDateString('en-PH', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+              })
+            : 'Today',
+        }));
+
+        setMessages((previous) => {
+          const existingById = new Map(previous.map((entry) => [entry.id, entry]));
+          mapped.forEach((entry) => {
+            existingById.set(entry.id, entry);
+          });
+          return Array.from(existingById.values()).sort((a, b) =>
+            String(a.createdAt || '').localeCompare(String(b.createdAt || '')),
+          );
+        });
+        setIsClosed(Boolean(closed));
+      } catch {
+        // Preserve current state when background refresh fails.
+      }
+    };
+
+    const pollId = window.setInterval(() => {
+      refreshMessages();
+    }, 3000);
+
+    const handleWindowFocus = () => {
+      refreshMessages();
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        refreshMessages();
+      }
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(pollId);
+      window.removeEventListener('focus', handleWindowFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [activeAppointmentId]);
 
   const handleSend = async () => {
-    if (!input.trim() || !activeAppointmentId || isClosed) return;
+    if (!input.trim() || !activeAppointmentId || isClosed || sending) return;
 
     try {
+      setSending(true);
       await sendAppointmentMessage(activeAppointmentId, input.trim());
       setInput('');
       const { messages: rows, isClosed: closed } = await fetchAppointmentMessages(activeAppointmentId);
@@ -146,6 +386,13 @@ export default function AttorneyMessages({ onNavigate, profile }) {
         sender: item.isMine ? 'attorney' : 'client',
         text: item.text,
         time: item.time,
+        createdAt: item.createdAt,
+        messageType: item.messageType || 'text',
+        fileBucket: item.fileBucket || null,
+        filePath: item.filePath || null,
+        fileName: item.fileName || null,
+        mimeType: item.mimeType || null,
+        fileSizeBytes: item.fileSizeBytes || null,
         date: item.createdAt
           ? new Date(item.createdAt).toLocaleDateString('en-PH', {
               month: 'short',
@@ -159,7 +406,139 @@ export default function AttorneyMessages({ onNavigate, profile }) {
       setLoadError('');
     } catch (error) {
       setLoadError(error.message || 'Failed to send message.');
+    } finally {
+      setSending(false);
     }
+  };
+
+  const handleAttachmentUpload = async (event) => {
+    const selectedFile = event.target.files?.[0];
+    event.target.value = '';
+
+    if (!selectedFile || !activeAppointmentId || isClosed || sending) return;
+
+    try {
+      setSending(true);
+      const sent = await sendAppointmentAttachment(activeAppointmentId, selectedFile, input);
+      const mapped = {
+        id: sent.id,
+        sender: sent.isMine ? 'attorney' : 'client',
+        text: sent.text,
+        time: sent.time,
+        createdAt: sent.createdAt,
+        messageType: sent.messageType || 'text',
+        fileBucket: sent.fileBucket || null,
+        filePath: sent.filePath || null,
+        fileName: sent.fileName || null,
+        mimeType: sent.mimeType || null,
+        fileSizeBytes: sent.fileSizeBytes || null,
+        date: sent.createdAt
+          ? new Date(sent.createdAt).toLocaleDateString('en-PH', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+            })
+          : 'Today',
+      };
+
+      mergeRealtimeMessage(mapped);
+      setInput('');
+      setLoadError('');
+    } catch (error) {
+      setLoadError(error.message || 'Failed to upload attachment.');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleDeleteMessage = async (messageId) => {
+    if (!activeAppointmentId || !messageId || deletingMessageId) return;
+    const shouldDelete = window.confirm('Delete this message/photo?');
+    if (!shouldDelete) return;
+
+    try {
+      setDeletingMessageId(String(messageId));
+      await deleteAppointmentMessage({ appointmentId: activeAppointmentId, messageId });
+      setMessages((previous) => previous.filter((item) => String(item.id) !== String(messageId)));
+      setSignedUrlsByMessageId((previous) => {
+        const next = { ...previous };
+        delete next[messageId];
+        delete next[String(messageId)];
+        return next;
+      });
+      setLoadError('');
+    } catch (error) {
+      setLoadError(error.message || 'Failed to delete message.');
+    } finally {
+      setDeletingMessageId('');
+    }
+  };
+
+  const handleEndSession = async () => {
+    if (!activeAppointmentId || isClosed || endingSession) return;
+    const shouldEnd = window.confirm('End this consultation session now? This will close chat for both sides.');
+    if (!shouldEnd) return;
+
+    try {
+      setEndingSession(true);
+      await endConsultationSession(activeAppointmentId);
+      setIsClosed(true);
+      setLoadError('');
+      onNavigate('attorney-logs', { appointmentId: activeAppointmentId });
+    } catch (error) {
+      setLoadError(error.message || 'Failed to end consultation session.');
+    } finally {
+      setEndingSession(false);
+    }
+  };
+
+  const renderMessageBody = (msg, isAttorney) => {
+    const hasResolvedUrl = Object.prototype.hasOwnProperty.call(signedUrlsByMessageId, msg.id);
+    const signedUrl = signedUrlsByMessageId[msg.id];
+
+    if (msg.messageType === 'image') {
+      return (
+        <>
+          {!hasResolvedUrl ? (
+            <p className="am-bubble__attachment-error">Loading image...</p>
+          ) : signedUrl ? (
+            <img
+              src={signedUrl}
+              alt={msg.fileName || 'Shared image'}
+              className="am-bubble__image"
+              loading="lazy"
+            />
+          ) : (
+            <p className="am-bubble__attachment-error">Unable to load image.</p>
+          )}
+          {msg.text && msg.text !== 'Photo' ? <p className="am-bubble__text">{msg.text}</p> : null}
+        </>
+      );
+    }
+
+    if (msg.messageType === 'file') {
+      return (
+        <>
+          {!hasResolvedUrl ? (
+            <p className="am-bubble__attachment-error">Loading file...</p>
+          ) : signedUrl ? (
+            <a
+              className={`am-bubble__file-link ${isAttorney ? 'am-bubble__file-link--attorney' : ''}`}
+              href={signedUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {msg.fileName ? `📎 ${msg.fileName}` : '📎 Open file'}
+            </a>
+          ) : (
+            <p className="am-bubble__attachment-error">Unable to open file.</p>
+          )}
+          {msg.text && msg.text !== 'Attachment' ? <p className="am-bubble__text">{msg.text}</p> : null}
+        </>
+      );
+    }
+
+    return <p className="am-bubble__text">{msg.text}</p>;
   };
 
   const handleKeyDown = (e) => {
@@ -172,12 +551,12 @@ export default function AttorneyMessages({ onNavigate, profile }) {
   const sidebarItems = [
     { label: 'Dashboard',    icon: <DashboardIcon />,    nav: 'attorney-home' },
     { label: 'Consultation Management', icon: <ScheduleIcon />, nav: 'upcoming-appointments' },
-    { label: 'Messages',     icon: <MessagesIcon />,     nav: null },
+    { label: 'Logs',         icon: <LogsIcon />,         nav: 'attorney-logs' },
     { label: 'Announcement', icon: <AnnouncementIcon />, nav: 'attorney-announcements' },
     { label: 'Profile',      icon: <ProfileIcon />,      nav: 'attorney-profile' },
   ];
 
-  const activeAppointment = appointments.find((item) => item.id === activeAppointmentId) || null;
+  const activeAppointment = appointments.find((item) => String(item.id) === String(activeAppointmentId)) || null;
   const chatName = activeAppointment?.name || 'Client';
   const chatInitials = chatName
     .split(' ')
@@ -248,15 +627,25 @@ export default function AttorneyMessages({ onNavigate, profile }) {
           {appointments.length > 0 ? (
             <select
               value={activeAppointmentId}
-              onChange={(e) => setActiveAppointmentId(e.target.value)}
+              onChange={(e) => setActiveAppointmentId(String(e.target.value))}
               style={{ marginLeft: 'auto' }}
             >
               {appointments.map((item) => (
-                <option key={item.id} value={item.id}>
+                <option key={item.id} value={String(item.id)}>
                   {item.name} - {item.area}
                 </option>
               ))}
             </select>
+          ) : null}
+          {activeAppointmentId && !isClosed ? (
+            <button
+              type="button"
+              className="am-end-session-btn"
+              onClick={handleEndSession}
+              disabled={endingSession}
+            >
+              {endingSession ? 'Ending...' : 'End Session'}
+            </button>
           ) : null}
         </div>
 
@@ -278,8 +667,29 @@ export default function AttorneyMessages({ onNavigate, profile }) {
                     <div className="am-bubble-avatar am-bubble-avatar--admin">{chatInitials || 'CL'}</div>
                   )}
                   <div className={`am-bubble ${msg.sender === 'attorney' ? 'am-bubble--attorney' : 'am-bubble--admin'}`}>
-                    <p className="am-bubble__text">{msg.text}</p>
-                    <span className="am-bubble__time">{msg.time}</span>
+                    {renderMessageBody(msg, msg.sender === 'attorney')}
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <span className="am-bubble__time">{msg.time}</span>
+                      {msg.sender === 'attorney' ? (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteMessage(msg.id)}
+                          disabled={deletingMessageId === String(msg.id)}
+                          style={{
+                            border: '1px solid rgba(239, 68, 68, 0.5)',
+                            background: 'rgba(239, 68, 68, 0.12)',
+                            color: '#ef4444',
+                            cursor: 'pointer',
+                            fontSize: 12,
+                            fontWeight: 700,
+                            borderRadius: 8,
+                            padding: '2px 8px',
+                          }}
+                        >
+                          {deletingMessageId === String(msg.id) ? 'Deleting...' : 'Delete'}
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -290,6 +700,38 @@ export default function AttorneyMessages({ onNavigate, profile }) {
 
         {/* Input */}
         <div className="am-input-bar">
+          <div className="am-attach-actions">
+            <button
+              type="button"
+              className="am-attach-btn"
+              onClick={() => imagePickerRef.current?.click()}
+              disabled={isClosed || !activeAppointmentId || sending}
+            >
+              Photo
+            </button>
+            <button
+              type="button"
+              className="am-attach-btn"
+              onClick={() => filePickerRef.current?.click()}
+              disabled={isClosed || !activeAppointmentId || sending}
+            >
+              File
+            </button>
+            <input
+              ref={imagePickerRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              className="am-hidden-file-input"
+              onChange={handleAttachmentUpload}
+            />
+            <input
+              ref={filePickerRef}
+              type="file"
+              accept="application/pdf,.doc,.docx,text/plain,.txt"
+              className="am-hidden-file-input"
+              onChange={handleAttachmentUpload}
+            />
+          </div>
           <textarea
             className="am-input-bar__textarea"
             rows="1"
@@ -297,12 +739,12 @@ export default function AttorneyMessages({ onNavigate, profile }) {
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            disabled={isClosed || !activeAppointmentId}
+            disabled={isClosed || !activeAppointmentId || sending}
           />
           <button
             className="am-input-bar__send"
             onClick={handleSend}
-            disabled={!input.trim() || isClosed || !activeAppointmentId}
+            disabled={!input.trim() || isClosed || !activeAppointmentId || sending}
           >
             <SendIcon />
           </button>

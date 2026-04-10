@@ -420,7 +420,7 @@
   color: #9ca3af;
   padding: 0 24px 14px;
   margin: 0;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: none;
 }
 .hp-view-all {
   background: none;

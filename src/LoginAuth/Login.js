@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import './Login.css';
-import { checkEmailLockout, signInWithEmail } from '../lib/authApi';
-import { getCurrentSessionProfile, normalizeRole, pageFromRole } from '../lib/userApi';
+import { signInWithEmail } from '../lib/authApi';
+import { normalizeRole, pageFromRole } from '../lib/userApi';
 import { isValidEmail, VALID_EMAIL_MESSAGE } from '../lib/validators';
 
 const MailIcon = () => (
@@ -55,24 +55,6 @@ function Login({ onNavigate, onAuthSuccess }) {
     return `${min}:${sec < 10 ? '0' : ''}${sec}`;
   };
 
-  const handleEmailBlur = async () => {
-    const email = form.email.trim();
-    if (!email || !isValidEmail(email)) return;
-
-    try {
-      const timeRemaining = await checkEmailLockout(email);
-      if (timeRemaining > 0) {
-        setLockoutSeconds(Math.ceil(timeRemaining));
-        setLockedEmail(email.toLowerCase());
-      } else if (lockedEmail === email.toLowerCase()) {
-        setLockoutSeconds(0);
-        setLockedEmail('');
-      }
-    } catch {
-      // Ignore lockout probe errors to keep login responsive.
-    }
-  };
-
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
   const handleSubmit = async (e) => {
@@ -88,11 +70,6 @@ function Login({ onNavigate, onAuthSuccess }) {
       return;
     }
 
-    if (lockoutSeconds > 0 && form.email.trim().toLowerCase() === lockedEmail) {
-      setErrorText(`Account temporarily locked. Try again in ${formatLockout(lockoutSeconds)}.`);
-      return;
-    }
-
     setIsSubmitting(true);
     setErrorText('');
 
@@ -103,25 +80,24 @@ function Login({ onNavigate, onAuthSuccess }) {
       });
 
       const user = data.user;
-      const sessionProfile = await getCurrentSessionProfile();
-      const profile = sessionProfile?.profile;
+      const role = normalizeRole(user?.role || user?.user_metadata?.role || 'Client');
 
-      const role = normalizeRole(profile?.role || user?.role || user?.user_metadata?.role || 'Client');
-      const hydratedProfile = {
-        id: profile?.id || user?.id,
-        full_name: profile?.full_name || user?.name || user?.user_metadata?.full_name || '',
-        email: profile?.email || user?.email || form.email.trim(),
-        phone: profile?.phone || user?.phone || '',
-        address: profile?.address || user?.address || '',
+      // Fast path: navigate immediately after auth succeeds.
+      const optimisticProfile = {
+        id: user?.id,
+        full_name: user?.name || user?.user_metadata?.full_name || '',
+        email: user?.email || form.email.trim(),
+        phone: user?.phone || '',
+        address: user?.address || '',
         role,
-        age: profile?.age ?? null,
-        guardian_name: profile?.guardian_name || '',
-        guardian_contact: profile?.guardian_contact || '',
-        guardian_details: profile?.guardian_details || '',
+        age: null,
+        guardian_name: '',
+        guardian_contact: '',
+        guardian_details: '',
         updated_at: new Date().toISOString(),
       };
 
-      if (onAuthSuccess) onAuthSuccess(hydratedProfile);
+      if (onAuthSuccess) onAuthSuccess(optimisticProfile);
       onNavigate(pageFromRole(role));
     } catch (error) {
       if (String(error?.message || '').startsWith('LOCKOUT:')) {
@@ -191,7 +167,6 @@ function Login({ onNavigate, onAuthSuccess }) {
                   placeholder="name@domain.com"
                   value={form.email}
                   onChange={handleChange}
-                  onBlur={handleEmailBlur}
                 />
               </div>
             </div>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import './AdminProfile.css';
 
 const BackIcon = () => (
@@ -7,7 +7,7 @@ const BackIcon = () => (
   </svg>
 );
 
-function AdminProfile({ onNavigate }) {
+function AdminProfile({ onNavigate, onSignOut }) {
   const [profile, setProfile] = useState({
     fullName: 'System Administrator',
     email: 'admin@batasmo.com',
@@ -23,11 +23,28 @@ function AdminProfile({ onNavigate }) {
 
   const [profileMessage, setProfileMessage] = useState('');
   const [securityMessage, setSecurityMessage] = useState('');
+  const pendingTimeoutsRef = useRef([]);
+
+  useEffect(() => {
+    return () => {
+      pendingTimeoutsRef.current.forEach((timeoutId) => clearTimeout(timeoutId));
+      pendingTimeoutsRef.current = [];
+      console.log('[lifecycle] AdminProfile unmounted');
+    };
+  }, []);
+
+  const scheduleAfter = (callback, delayMs) => {
+    const timeoutId = setTimeout(() => {
+      pendingTimeoutsRef.current = pendingTimeoutsRef.current.filter((id) => id !== timeoutId);
+      callback();
+    }, delayMs);
+    pendingTimeoutsRef.current.push(timeoutId);
+  };
 
   const handleProfileSave = (e) => {
     e.preventDefault();
     setProfileMessage('Profile details updated successfully.');
-    setTimeout(() => setProfileMessage(''), 2500);
+    scheduleAfter(() => setProfileMessage(''), 2500);
   };
 
   const handleSecuritySave = (e) => {
@@ -43,11 +60,20 @@ function AdminProfile({ onNavigate }) {
 
     setSecurity({ currentPassword: '', newPassword: '', confirmPassword: '' });
     setSecurityMessage('Security information updated successfully.');
-    setTimeout(() => setSecurityMessage(''), 2500);
+    scheduleAfter(() => setSecurityMessage(''), 2500);
   };
 
-  const handleSignOut = () => {
-    onNavigate('login');
+  const handleSignOut = async () => {
+    try {
+      if (typeof onSignOut === 'function') {
+        await onSignOut();
+        return;
+      }
+      onNavigate('login');
+    } catch (error) {
+      console.error('[auth] admin sign out failed', error);
+      onNavigate('login');
+    }
   };
 
   return (

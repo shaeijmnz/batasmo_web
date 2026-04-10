@@ -4,9 +4,11 @@ import { signUpWithEmail } from '../lib/authApi';
 import {
   isValidEmail,
   isValidPhoneNumber,
+  isStrongPassword,
   sanitizePhoneInput,
   VALID_EMAIL_MESSAGE,
   VALID_PHONE_MESSAGE,
+  VALID_PASSWORD_MESSAGE,
 } from '../lib/validators';
 
 const PersonIcon = () => (
@@ -57,70 +59,82 @@ function SignUp({ onNavigate, onEmailChange }) {
     guardianContact: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errorText, setErrorText] = useState('');
+  const [errors, setErrors] = useState({});
+
+  const validateForm = (values) => {
+    const nextErrors = {};
+
+    if (!values.fullName.trim()) {
+      nextErrors.fullName = 'Full name is required.';
+    }
+
+    if (!values.email.trim()) {
+      nextErrors.email = 'Email is required.';
+    } else if (!isValidEmail(values.email)) {
+      nextErrors.email = VALID_EMAIL_MESSAGE;
+    }
+
+    if (!isValidPhoneNumber(values.contact)) {
+      nextErrors.contact = VALID_PHONE_MESSAGE;
+    }
+
+    if (!values.password) {
+      nextErrors.password = 'Password is required.';
+    } else if (!isStrongPassword(values.password)) {
+      nextErrors.password = VALID_PASSWORD_MESSAGE;
+    }
+
+    if (!values.confirmPassword) {
+      nextErrors.confirmPassword = 'Please confirm your password.';
+    } else if (values.password !== values.confirmPassword) {
+      nextErrors.confirmPassword = 'Passwords do not match.';
+    }
+
+    if (!values.age.trim() || Number(values.age) < 1) {
+      nextErrors.age = 'Please enter a valid age.';
+    }
+
+    if (!values.address.trim()) {
+      nextErrors.address = 'Address is required.';
+    }
+
+    const parsedAge = Number(values.age);
+    if (parsedAge > 0 && parsedAge < 18) {
+      if (!values.guardianName.trim()) {
+        nextErrors.guardianName = 'Guardian name is required for minors.';
+      }
+      if (!isValidPhoneNumber(values.guardianContact)) {
+        nextErrors.guardianContact = 'Please enter a valid guardian contact number.';
+      }
+    }
+
+    return nextErrors;
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     if (name === 'contact' || name === 'guardianContact') {
       setForm({ ...form, [name]: sanitizePhoneInput(value) });
+      setErrors((prev) => ({ ...prev, [name]: '' }));
       return;
     }
     setForm({ ...form, [name]: value });
+    setErrors((prev) => ({ ...prev, [name]: '' }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!form.fullName.trim() || !form.email.trim() || !form.password) {
-      setErrorText('Please fill in all required fields.');
-      return;
-    }
-
-    if (!isValidEmail(form.email)) {
-      setErrorText(VALID_EMAIL_MESSAGE);
-      return;
-    }
-
-    if (!isValidPhoneNumber(form.contact)) {
-      setErrorText(VALID_PHONE_MESSAGE);
-      return;
-    }
-
-    if (form.password !== form.confirmPassword) {
-      setErrorText('Passwords do not match.');
-      return;
-    }
-
-    if (form.password.length < 6) {
-      setErrorText('Minimum 6 characters for password.');
-      return;
-    }
-
-    if (!form.age.trim() || Number(form.age) < 1) {
-      setErrorText('Please enter a valid age.');
-      return;
-    }
-
-    if (!form.address.trim()) {
-      setErrorText('Address is required.');
+    const validationErrors = validateForm(form);
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
       return;
     }
 
     const parsedAge = Number(form.age);
-    if (parsedAge < 18) {
-      if (!form.guardianName.trim()) {
-        setErrorText('Guardian name is required for minors.');
-        return;
-      }
-
-      if (!isValidPhoneNumber(form.guardianContact)) {
-        setErrorText('Please enter a valid guardian contact number.');
-        return;
-      }
-    }
 
     setIsSubmitting(true);
-    setErrorText('');
+    setErrors({});
 
     try {
       await signUpWithEmail({
@@ -144,7 +158,7 @@ function SignUp({ onNavigate, onEmailChange }) {
 
       onNavigate('otp');
     } catch (error) {
-      setErrorText(getErrorMessage(error, 'Failed to create account.'));
+      setErrors({ form: getErrorMessage(error, 'Failed to create account.') });
     } finally {
       setIsSubmitting(false);
     }
@@ -191,11 +205,12 @@ function SignUp({ onNavigate, onEmailChange }) {
                 <input
                   type="text"
                   name="fullName"
-                  placeholder="Juan Dela Cruz"
+                  placeholder=""
                   value={form.fullName}
                   onChange={handleChange}
                 />
               </div>
+              {errors.fullName ? <p className="su-error-text">{errors.fullName}</p> : null}
             </div>
 
             <div className="su-input-group su-grid-2">
@@ -206,11 +221,12 @@ function SignUp({ onNavigate, onEmailChange }) {
                   <input
                     type="email"
                     name="email"
-                    placeholder="name@domain.com"
+                    placeholder=""
                     value={form.email}
                     onChange={handleChange}
                   />
                 </div>
+                {errors.email ? <p className="su-error-text">{errors.email}</p> : null}
               </div>
 
               <div>
@@ -220,11 +236,12 @@ function SignUp({ onNavigate, onEmailChange }) {
                   <input
                     type="tel"
                     name="contact"
-                    placeholder="09123456789"
+                    placeholder=""
                     value={form.contact}
                     onChange={handleChange}
                   />
                 </div>
+                {errors.contact ? <p className="su-error-text">{errors.contact}</p> : null}
               </div>
             </div>
 
@@ -236,12 +253,13 @@ function SignUp({ onNavigate, onEmailChange }) {
                   <input
                     type="number"
                     name="age"
-                    placeholder="21"
+                    placeholder=""
                     min="1"
                     value={form.age}
                     onChange={handleChange}
                   />
                 </div>
+                {errors.age ? <p className="su-error-text">{errors.age}</p> : null}
               </div>
 
               <div>
@@ -251,11 +269,12 @@ function SignUp({ onNavigate, onEmailChange }) {
                   <input
                     type="text"
                     name="address"
-                    placeholder="123 Legal St., Manila"
+                    placeholder=""
                     value={form.address}
                     onChange={handleChange}
                   />
                 </div>
+                {errors.address ? <p className="su-error-text">{errors.address}</p> : null}
               </div>
             </div>
 
@@ -268,11 +287,12 @@ function SignUp({ onNavigate, onEmailChange }) {
                     <input
                       type="text"
                       name="guardianName"
-                      placeholder="Guardian Name"
+                      placeholder=""
                       value={form.guardianName}
                       onChange={handleChange}
                     />
                   </div>
+                  {errors.guardianName ? <p className="su-error-text">{errors.guardianName}</p> : null}
                 </div>
 
                 <div>
@@ -282,11 +302,12 @@ function SignUp({ onNavigate, onEmailChange }) {
                     <input
                       type="tel"
                       name="guardianContact"
-                      placeholder="09123456789"
+                      placeholder=""
                       value={form.guardianContact}
                       onChange={handleChange}
                     />
                   </div>
+                  {errors.guardianContact ? <p className="su-error-text">{errors.guardianContact}</p> : null}
                 </div>
               </div>
             ) : null}
@@ -299,11 +320,12 @@ function SignUp({ onNavigate, onEmailChange }) {
                   <input
                     type="password"
                     name="password"
-                    placeholder="At least 6 characters"
+                    placeholder=""
                     value={form.password}
                     onChange={handleChange}
                   />
                 </div>
+                {errors.password ? <p className="su-error-text">{errors.password}</p> : null}
               </div>
 
               <div>
@@ -313,15 +335,16 @@ function SignUp({ onNavigate, onEmailChange }) {
                   <input
                     type="password"
                     name="confirmPassword"
-                    placeholder="Re-enter password"
+                    placeholder=""
                     value={form.confirmPassword}
                     onChange={handleChange}
                   />
                 </div>
+                {errors.confirmPassword ? <p className="su-error-text">{errors.confirmPassword}</p> : null}
               </div>
             </div>
 
-            {errorText ? <p className="su-error-text">{errorText}</p> : null}
+            {errors.form ? <p className="su-error-text">{errors.form}</p> : null}
 
             <button type="submit" className="su-primary-btn" disabled={isSubmitting}>
               {isSubmitting ? 'Creating Account...' : 'CREATE ACCOUNT'}

@@ -81,7 +81,7 @@ function AdminAddUser({ onNavigate }) {
           specialties: specialtyArray,
           years_experience: Number.isFinite(parsedYears) ? parsedYears : 0,
           bio: biography.trim() || null,
-          consultation_fee: Number.isFinite(parsedFee) ? parsedFee : 0,
+          consultation_fee: Number.isFinite(parsedFee) ? parsedFee : 2000,
           is_verified: false,
           updated_at: new Date().toISOString(),
         },

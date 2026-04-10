@@ -1,263 +1,708 @@
-import { useState, useRef, useEffect } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import './ChatRoom.css';
+import {
+  deleteAppointmentMessage,
+  fetchAppointmentMessages,
+  fetchConsultationFeedback,
+  fetchClientChatEligibleAppointments,
+  getSignedUrlForAppointmentMessage,
+  isConsultationChatActiveStatus,
+  sendAppointmentAttachment,
+  sendAppointmentMessage,
+  submitConsultationFeedback,
+  subscribeToAppointmentStatus,
+  subscribeToAppointmentMessages,
+  subscribeToConsultationRoomStatus,
+} from '../lib/userApi';
 
-const ScalesIcon = ({ size = 24, color = '#f5a623' }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="12" y1="3" x2="12" y2="21" />
-    <path d="M5 21h14" />
-    <path d="M3 6l9-3 9 3" />
-    <path d="M3 6l3 9H0L3 6z" />
-    <path d="M21 6l3 9h-6l3-9z" />
-  </svg>
-);
+const ATTORNEY_AVATAR_BG = 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)';
 
-function ChatRoom({ onNavigate }) {
-  const [messages, setMessages] = useState([
-    {
-      id: 1,
-      from: 'system',
-      text: 'You are now connected with the BatasMo Admin. Feel free to raise any concerns, questions, or requests.',
-      time: formatTime(new Date()),
-    },
-    {
-      id: 2,
-      from: 'admin',
-      text: 'Hello! Welcome to BatasMo Support. I\'m the Admin. How can I assist you today?',
-      time: formatTime(new Date()),
-    },
-  ]);
+const messageDateLabel = (value) => {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return 'Today';
+  return parsed.toLocaleDateString('en-PH', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+};
+
+const mapMessage = (item) => ({
+  id: item.id,
+  from: item.isMine ? 'client' : 'attorney',
+  text: String(item.text || ''),
+  time: item.time || 'Now',
+  createdAt: item.createdAt || new Date().toISOString(),
+  date: messageDateLabel(item.createdAt),
+  senderName: item.senderName || 'Attorney',
+  messageType: item.messageType || 'text',
+  fileBucket: item.fileBucket || null,
+  filePath: item.filePath || null,
+  fileName: item.fileName || null,
+  mimeType: item.mimeType || null,
+  fileSizeBytes: item.fileSizeBytes || null,
+});
+
+const mergeMessage = (existing, incoming) => {
+  const byId = new Map(existing.map((item) => [item.id, item]));
+  byId.set(incoming.id, incoming);
+  return Array.from(byId.values()).sort((a, b) =>
+    String(a.createdAt || '').localeCompare(String(b.createdAt || '')),
+  );
+};
+
+function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
+  const [threads, setThreads] = useState([]);
+  const [activeAppointmentId, setActiveAppointmentId] = useState('');
+  const [messages, setMessages] = useState([]);
   const [inputMsg, setInputMsg] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const [showEndModal, setShowEndModal] = useState(false);
-  const [sessionEnded, setSessionEnded] = useState(false);
+  const [deletingMessageId, setDeletingMessageId] = useState('');
+  const [sending, setSending] = useState(false);
+  const [isClosed, setIsClosed] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [signedUrlsByMessageId, setSignedUrlsByMessageId] = useState({});
+  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
+  const [feedbackRating, setFeedbackRating] = useState(0);
+  const [feedbackComment, setFeedbackComment] = useState('');
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+  const [feedbackError, setFeedbackError] = useState('');
   const messagesEndRef = useRef(null);
-  const inputRef = useRef(null);
+  const imagePickerRef = useRef(null);
+  const filePickerRef = useRef(null);
 
-  function formatTime(date) {
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-  }
+  const syncClosedSessionFeedbackState = async (appointmentId, options = {}) => {
+    const openModalWhileLoading = options.openModalWhileLoading !== false;
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (openModalWhileLoading) {
+      setFeedbackSubmitted(false);
+      setFeedbackModalOpen(true);
+      setFeedbackError('');
+    }
+
+    try {
+      const feedbackState = await fetchConsultationFeedback(appointmentId);
+      if (feedbackState.submitted) {
+        setFeedbackRating(Number(feedbackState.rating || 0));
+        setFeedbackComment(String(feedbackState.comment || ''));
+        setFeedbackSubmitted(true);
+        setFeedbackModalOpen(true);
+        setFeedbackError('');
+      } else {
+        setFeedbackSubmitted(false);
+        setFeedbackModalOpen(true);
+        setFeedbackError('');
+      }
+    } catch (error) {
+      // Keep the feedback modal open so the client can still rate and submit.
+      setFeedbackSubmitted(false);
+      setFeedbackModalOpen(true);
+      setFeedbackError('Please submit your feedback to finish this consultation.');
+      setLoadError(error.message || 'Unable to load feedback status.');
+    }
   };
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, isTyping]);
+  const activeThread = useMemo(
+    () => threads.find((item) => String(item.id) === String(activeAppointmentId)) || null,
+    [activeAppointmentId, threads],
+  );
 
   useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, sending]);
 
-  const adminResponses = [
-    'Thank you for reaching out! I\'ll look into that for you right away.',
-    'I understand your concern. Let me check the details and get back to you shortly.',
-    'Sure! I can assist you with that. Could you please provide more information so I can process your request?',
-    'Got it! I\'ll coordinate with the attorney regarding your request and update you as soon as possible.',
-    'Thank you for informing us. I will escalate this to the appropriate team member and follow up with you.',
-    'I\'ve noted your concern. Please allow us some time to review and we\'ll reach out to you with an update.',
-    'Of course! For appointment-related concerns, you can also visit the My Appointments page for quick updates.',
-    'Thank you for your patience. We\'re here to help — please don\'t hesitate to ask if you have further questions.',
-  ];
+  useEffect(() => {
+    let isMounted = true;
 
-  const handleSend = (e) => {
-    e.preventDefault();
-    if (!inputMsg.trim() || sessionEnded) return;
+    const loadThreads = async () => {
+      if (!profile?.id) return;
 
-    const userMessage = {
-      id: messages.length + 1,
-      from: 'client',
-      text: inputMsg.trim(),
-      time: formatTime(new Date()),
+      try {
+        const rows = await fetchClientChatEligibleAppointments(profile.id);
+        if (!isMounted) return;
+
+        setThreads(rows);
+        setActiveAppointmentId((previous) => {
+          if (!rows.length) return '';
+          if (initialAppointmentId && rows.some((item) => String(item.id) === String(initialAppointmentId))) {
+            return String(initialAppointmentId);
+          }
+          if (previous && rows.some((item) => String(item.id) === String(previous))) return previous;
+          return String(rows[0].id);
+        });
+
+        if (!rows.length) {
+          setLoadError('Consultation chat becomes available when your schedule is marked as started/active.');
+        } else {
+          setLoadError('');
+        }
+      } catch (error) {
+        if (!isMounted) return;
+        setThreads([]);
+        setActiveAppointmentId('');
+        setLoadError(error.message || 'Unable to load consultation threads.');
+      }
     };
 
-    setMessages(prev => [...prev, userMessage]);
-    setInputMsg('');
+    loadThreads();
 
-    // Simulate admin typing
-    setIsTyping(true);
-    setTimeout(() => {
-      setIsTyping(false);
-      const response = adminResponses[Math.floor(Math.random() * adminResponses.length)];
-      setMessages(prev => [
-        ...prev,
-        {
-          id: prev.length + 1,
-          from: 'admin',
-          text: response,
-          time: formatTime(new Date()),
-        },
-      ]);
-    }, 1500 + Math.random() * 1500);
+    return () => {
+      isMounted = false;
+    };
+  }, [profile?.id, initialAppointmentId]);
+
+  useEffect(() => {
+    if (!initialAppointmentId || !threads.length) return;
+    if (threads.some((item) => String(item.id) === String(initialAppointmentId))) {
+      setActiveAppointmentId(String(initialAppointmentId));
+    }
+  }, [initialAppointmentId, threads]);
+
+  useEffect(() => {
+    if (!activeAppointmentId) {
+      setMessages([]);
+      setIsClosed(false);
+      setSignedUrlsByMessageId({});
+      setFeedbackModalOpen(false);
+      setFeedbackRating(0);
+      setFeedbackComment('');
+      setFeedbackSubmitted(false);
+      setFeedbackError('');
+      return undefined;
+    }
+
+    let isMounted = true;
+
+    const loadMessages = async () => {
+      try {
+        const response = await fetchAppointmentMessages(activeAppointmentId);
+        if (!isMounted) return;
+
+        setMessages((response.messages || []).map(mapMessage));
+        setIsClosed(Boolean(response.isClosed));
+
+        if (response.isClosed) {
+          await syncClosedSessionFeedbackState(activeAppointmentId);
+          if (!isMounted) return;
+        }
+      } catch (error) {
+        if (!isMounted) return;
+        setMessages([]);
+        setIsClosed(false);
+        setLoadError(error.message || 'Unable to load consultation chat messages.');
+      }
+    };
+
+    loadMessages();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeAppointmentId]);
+
+  useEffect(() => {
+    if (!activeAppointmentId || !isClosed) return;
+    syncClosedSessionFeedbackState(activeAppointmentId);
+  }, [activeAppointmentId, isClosed]);
+
+  useEffect(() => {
+    if (!activeAppointmentId) return undefined;
+
+    const unsubscribe = subscribeToConsultationRoomStatus(activeAppointmentId, async (closed) => {
+      setIsClosed(Boolean(closed));
+      if (!closed) return;
+
+      await syncClosedSessionFeedbackState(activeAppointmentId);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [activeAppointmentId]);
+
+  useEffect(() => {
+    if (!activeAppointmentId) return undefined;
+
+    const unsubscribe = subscribeToAppointmentStatus(activeAppointmentId, async (status) => {
+      if (isConsultationChatActiveStatus(status)) return;
+
+      setIsClosed(true);
+
+      await syncClosedSessionFeedbackState(activeAppointmentId);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [activeAppointmentId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const messagesToResolve = messages.filter(
+      (item) =>
+        (item.messageType === 'image' || item.messageType === 'file') &&
+        item.fileBucket &&
+        item.filePath &&
+        !Object.prototype.hasOwnProperty.call(signedUrlsByMessageId, item.id),
+    );
+
+    if (!messagesToResolve.length) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    messagesToResolve.forEach((item) => {
+      getSignedUrlForAppointmentMessage({
+        fileBucket: item.fileBucket,
+        filePath: item.filePath,
+      })
+        .then((signedUrl) => {
+          if (cancelled) return;
+          setSignedUrlsByMessageId((previous) => ({
+            ...previous,
+            [item.id]: signedUrl || '',
+          }));
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setSignedUrlsByMessageId((previous) => ({
+            ...previous,
+            [item.id]: '',
+          }));
+        });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [messages, signedUrlsByMessageId]);
+
+  useEffect(() => {
+    if (!activeAppointmentId) return undefined;
+
+    let cancelled = false;
+    let unsubscribe = () => {};
+
+    (async () => {
+      try {
+        const stop = await subscribeToAppointmentMessages(activeAppointmentId, (item) => {
+          const normalized = mapMessage(item);
+          setMessages((previous) => mergeMessage(previous, normalized));
+          setIsClosed(Boolean(item.isClosed));
+        });
+
+        if (!cancelled) {
+          unsubscribe = stop;
+        } else {
+          stop();
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setLoadError(error.message || 'Unable to connect to realtime chat updates.');
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+      console.log('[lifecycle] ChatRoom realtime unsubscribed', { appointmentId: activeAppointmentId });
+    };
+  }, [activeAppointmentId]);
+
+  useEffect(() => {
+    if (!activeAppointmentId) return undefined;
+
+    let cancelled = false;
+
+    const refreshMessages = async () => {
+      try {
+        const response = await fetchAppointmentMessages(activeAppointmentId);
+        if (cancelled) return;
+
+        const incoming = (response.messages || []).map(mapMessage);
+        setMessages((previous) => incoming.reduce(mergeMessage, previous));
+        setIsClosed(Boolean(response.isClosed));
+      } catch {
+        // Keep current UI state if background refresh fails.
+      }
+    };
+
+    const pollId = window.setInterval(() => {
+      refreshMessages();
+    }, 3000);
+
+    const handleWindowFocus = () => {
+      refreshMessages();
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        refreshMessages();
+      }
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(pollId);
+      window.removeEventListener('focus', handleWindowFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [activeAppointmentId]);
+
+  const handleSend = async (event) => {
+    event.preventDefault();
+    const body = String(inputMsg || '').trim();
+    if (!body || sending || isClosed || !activeAppointmentId) return;
+
+    try {
+      setSending(true);
+      const sent = await sendAppointmentMessage(activeAppointmentId, body);
+      setMessages((previous) => mergeMessage(previous, mapMessage(sent)));
+      setInputMsg('');
+      setLoadError('');
+    } catch (error) {
+      setLoadError(error.message || 'Unable to send message.');
+    } finally {
+      setSending(false);
+    }
   };
 
-  const handleEndSession = () => {
-    setShowEndModal(false);
-    setSessionEnded(true);
-    setMessages(prev => [
-      ...prev,
-      {
-        id: prev.length + 1,
-        from: 'system',
-        text: 'Chat session has ended. Thank you for contacting BatasMo Support. Have a great day!',
-        time: formatTime(new Date()),
-      },
-    ]);
+  const handleAttachmentUpload = async (event) => {
+    const selectedFile = event.target.files?.[0];
+    event.target.value = '';
+
+    if (!selectedFile || sending || isClosed || !activeAppointmentId) return;
+
+    try {
+      setSending(true);
+      const sent = await sendAppointmentAttachment(activeAppointmentId, selectedFile, inputMsg);
+      setMessages((previous) => mergeMessage(previous, mapMessage(sent)));
+      setInputMsg('');
+      setLoadError('');
+    } catch (error) {
+      setLoadError(error.message || 'Unable to upload attachment.');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleDeleteMessage = async (messageId) => {
+    if (!activeAppointmentId || !messageId || deletingMessageId) return;
+    const shouldDelete = window.confirm('Delete this message/photo?');
+    if (!shouldDelete) return;
+
+    try {
+      setDeletingMessageId(String(messageId));
+      await deleteAppointmentMessage({ appointmentId: activeAppointmentId, messageId });
+      setMessages((previous) => previous.filter((item) => String(item.id) !== String(messageId)));
+      setSignedUrlsByMessageId((previous) => {
+        const next = { ...previous };
+        delete next[messageId];
+        delete next[String(messageId)];
+        return next;
+      });
+      setLoadError('');
+    } catch (error) {
+      setLoadError(error.message || 'Unable to delete message.');
+    } finally {
+      setDeletingMessageId('');
+    }
+  };
+
+  const handleFeedbackSubmit = async () => {
+    if (!activeAppointmentId || feedbackSubmitting) return;
+    if (feedbackRating < 1 || feedbackRating > 5) {
+      setFeedbackError('Please select a star rating before submitting feedback.');
+      return;
+    }
+
+    try {
+      setFeedbackSubmitting(true);
+      setFeedbackError('');
+      await submitConsultationFeedback({
+        appointmentId: activeAppointmentId,
+        rating: feedbackRating,
+        comment: feedbackComment,
+      });
+      setFeedbackSubmitted(true);
+      setFeedbackModalOpen(false);
+      setLoadError('');
+      onNavigate('client-logs', { appointmentId: activeAppointmentId });
+    } catch (error) {
+      const message = error.message || 'Unable to submit feedback.';
+      setLoadError(message);
+      setFeedbackError(message);
+    } finally {
+      setFeedbackSubmitting(false);
+    }
+  };
+
+  const renderMessageBody = (msg, isClient) => {
+    const hasResolvedUrl = Object.prototype.hasOwnProperty.call(signedUrlsByMessageId, msg.id);
+    const signedUrl = signedUrlsByMessageId[msg.id];
+
+    if (msg.messageType === 'image') {
+      return (
+        <>
+          {!hasResolvedUrl ? (
+            <p className="cr-msg__attachment-error">Loading image...</p>
+          ) : signedUrl ? (
+            <img
+              src={signedUrl}
+              alt={msg.fileName || 'Shared image'}
+              className="cr-msg__image"
+              loading="lazy"
+            />
+          ) : (
+            <p className="cr-msg__attachment-error">Unable to load image.</p>
+          )}
+          {msg.text && msg.text !== 'Photo' ? <p>{msg.text}</p> : null}
+        </>
+      );
+    }
+
+    if (msg.messageType === 'file') {
+      return (
+        <>
+          {!hasResolvedUrl ? (
+            <p className="cr-msg__attachment-error">Loading file...</p>
+          ) : signedUrl ? (
+            <a
+              className={`cr-msg__file-link ${isClient ? 'cr-msg__file-link--client' : ''}`}
+              href={signedUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {msg.fileName ? `📎 ${msg.fileName}` : '📎 Open file'}
+            </a>
+          ) : (
+            <p className="cr-msg__attachment-error">Unable to open file.</p>
+          )}
+          {msg.text && msg.text !== 'Attachment' ? <p>{msg.text}</p> : null}
+        </>
+      );
+    }
+
+    return <p>{msg.text}</p>;
   };
 
   return (
     <div className="cr-page">
-      {/* Header */}
-      <header className="cr-header">
-        <div className="cr-header__left">
-          <button className="cr-back-btn" onClick={() => onNavigate('home-logged')}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="15 18 9 12 15 6" />
-            </svg>
-          </button>
-          <div className="cr-header__logo">
-            <ScalesIcon size={22} color="#f5a623" />
-            <span>BatasMo</span>
-          </div>
-        </div>
-        <div className="cr-header__info">
-          <div className="cr-header__attorney">
-            <div className="cr-header__avatar cr-header__avatar--admin">AD</div>
-            <div className="cr-header__details">
-              <span className="cr-header__name">Admin</span>
-              <span className="cr-header__area">Support &amp; Inquiries</span>
-            </div>
-          </div>
-          <div className="cr-header__status">
-            {!sessionEnded && <span className="cr-online-dot" />}
-            <span>{sessionEnded ? 'Session Ended' : 'Online'}</span>
-          </div>
-        </div>
-        <div className="cr-header__right">
-          {!sessionEnded && (
-            <button className="cr-end-btn" onClick={() => setShowEndModal(true)}>
-              End Session
-            </button>
-          )}
-        </div>
-      </header>
-
-      {/* Chat Area */}
       <div className="cr-chat-area">
-        {/* Session Info Bar */}
         <div className="cr-session-bar">
           <div className="cr-session-bar__info">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
-            </svg>
-            <span>This is a secure channel. Chat directly with our Admin for any concerns.</span>
+            <span className="cr-session-label">Consultation Room</span>
+            {activeThread ? (
+              <span className="cr-session-meta">
+                {activeThread.name} • {activeThread.title}
+              </span>
+            ) : (
+              <span className="cr-session-meta">No active consultation threads</span>
+            )}
           </div>
-          <span className="cr-session-bar__date">
-            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-          </span>
+
+          {threads.length > 0 ? (
+            <select
+              value={activeAppointmentId}
+              onChange={(e) => setActiveAppointmentId(e.target.value)}
+              className="cr-thread-select"
+            >
+              {threads.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name} • {item.scheduleLabel}
+                </option>
+              ))}
+            </select>
+          ) : null}
         </div>
 
-        {/* Messages */}
         <div className="cr-messages">
-          {messages.map((msg) => (
-            <div key={msg.id} className={`cr-msg cr-msg--${msg.from}`}>
-              {msg.from === 'admin' && (
-                <div className="cr-msg__avatar cr-msg__avatar--admin">AD</div>
-              )}
-              <div className="cr-msg__content">
-                {msg.from === 'system' ? (
-                  <div className="cr-msg__system">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
-                    </svg>
-                    <span>{msg.text}</span>
-                  </div>
-                ) : (
-                  <>
-                    <div className="cr-msg__bubble">
-                      {msg.from === 'admin' && <span className="cr-msg__sender">Admin</span>}
-                      <p>{msg.text}</p>
-                    </div>
-                    <span className="cr-msg__time">{msg.time}</span>
-                  </>
-                )}
+          {loadError ? (
+            <div className="cr-msg cr-msg--system">
+              <div className="cr-msg__system">{loadError}</div>
+            </div>
+          ) : null}
+
+          {!activeAppointmentId ? (
+            <div className="cr-msg cr-msg--system">
+              <div className="cr-msg__system">
+                Start a consultation first. Chat is only accessible when the appointment status is started/active.
               </div>
             </div>
-          ))}
+          ) : null}
 
-          {/* Typing indicator */}
-          {isTyping && (
-            <div className="cr-msg cr-msg--admin">
-              <div className="cr-msg__avatar cr-msg__avatar--admin">AD</div>
-              <div className="cr-msg__content">
-                <div className="cr-msg__bubble cr-typing">
-                  <div className="cr-typing__dots">
-                    <span /><span /><span />
+          {messages.map((msg) => {
+            const isClient = msg.from === 'client';
+            return (
+              <div key={msg.id} className={`cr-msg cr-msg--${isClient ? 'client' : 'admin'}`}>
+                {!isClient ? (
+                  <div className="cr-msg__avatar" style={{ background: ATTORNEY_AVATAR_BG }}>
+                    {msg.senderName
+                      .split(' ')
+                      .filter(Boolean)
+                      .map((part) => part[0])
+                      .slice(0, 2)
+                      .join('')
+                      .toUpperCase() || 'AT'}
+                  </div>
+                ) : null}
+
+                <div className="cr-msg__content">
+                  <div className="cr-msg__bubble">
+                    {!isClient ? <span className="cr-msg__sender">{msg.senderName || 'Attorney'}</span> : null}
+                    {renderMessageBody(msg, isClient)}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <span className="cr-msg__time">{msg.time}</span>
+                    {isClient ? (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteMessage(msg.id)}
+                        disabled={deletingMessageId === String(msg.id)}
+                        style={{
+                          border: '1px solid rgba(239, 68, 68, 0.5)',
+                          background: 'rgba(239, 68, 68, 0.12)',
+                          color: '#ef4444',
+                          cursor: 'pointer',
+                          fontSize: 12,
+                          fontWeight: 700,
+                          borderRadius: 8,
+                          padding: '2px 8px',
+                        }}
+                      >
+                        {deletingMessageId === String(msg.id) ? 'Deleting...' : 'Delete'}
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })}
 
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input Area */}
         <form className="cr-input-bar" onSubmit={handleSend}>
-          {sessionEnded ? (
+          {isClosed ? (
             <div className="cr-ended-bar">
-              <p>This consultation has ended.</p>
-              <button type="button" className="cr-return-btn" onClick={() => onNavigate('home-logged')}>
-                Return to Dashboard
+              <p>This consultation room is closed.</p>
+              <button type="button" className="cr-return-btn" onClick={() => onNavigate('my-appointments')}>
+                Back to My Appointments
               </button>
             </div>
           ) : (
             <>
-              <div className="cr-input-wrapper">
+              <div className="cr-attach-actions">
+                <button
+                  type="button"
+                  className="cr-attach-btn"
+                  onClick={() => imagePickerRef.current?.click()}
+                  disabled={!activeAppointmentId || sending}
+                >
+                  Photo
+                </button>
+                <button
+                  type="button"
+                  className="cr-attach-btn"
+                  onClick={() => filePickerRef.current?.click()}
+                  disabled={!activeAppointmentId || sending}
+                >
+                  File
+                </button>
                 <input
-                  ref={inputRef}
-                  type="text"
-                  placeholder="Type your message..."
-                  value={inputMsg}
-                  onChange={(e) => setInputMsg(e.target.value)}
-                  disabled={sessionEnded}
+                  ref={imagePickerRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="cr-hidden-file-input"
+                  onChange={handleAttachmentUpload}
+                />
+                <input
+                  ref={filePickerRef}
+                  type="file"
+                  accept="application/pdf,.doc,.docx,text/plain,.txt"
+                  className="cr-hidden-file-input"
+                  onChange={handleAttachmentUpload}
                 />
               </div>
-              <button type="submit" className="cr-send-btn" disabled={!inputMsg.trim()}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="22" y1="2" x2="11" y2="13" />
-                  <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                </svg>
+              <div className="cr-input-wrapper">
+                <input
+                  type="text"
+                  value={inputMsg}
+                  onChange={(e) => setInputMsg(e.target.value)}
+                  placeholder={activeAppointmentId ? 'Type your message...' : 'No active consultation'}
+                  disabled={!activeAppointmentId || sending}
+                />
+              </div>
+              <button type="submit" className="cr-send-btn" disabled={!inputMsg.trim() || !activeAppointmentId || sending}>
+                {sending ? '...' : 'Send'}
               </button>
             </>
           )}
         </form>
       </div>
 
-      {/* End Session Modal */}
-      {showEndModal && (
-        <div className="cr-modal-overlay" onClick={() => setShowEndModal(false)}>
-          <div className="cr-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="cr-modal__icon">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="15" y1="9" x2="9" y2="15" />
-                <line x1="9" y1="9" x2="15" y2="15" />
-              </svg>
-            </div>
-            <h3>Close Chat?</h3>
-            <p>Are you sure you want to end your chat with Admin? You can always start a new conversation.</p>
-            <div className="cr-modal__actions">
-              <button className="cr-modal__cancel" onClick={() => setShowEndModal(false)}>
-                Continue Chat
-              </button>
-              <button className="cr-modal__confirm" onClick={handleEndSession}>
-                Close Chat
-              </button>
-            </div>
+      {feedbackModalOpen ? (
+        <div className="cr-feedback-overlay">
+          <div className="cr-feedback-modal" role="dialog" aria-modal="true">
+            {!feedbackSubmitted ? (
+              <>
+                <h2>Consultation Ended</h2>
+                <p className="cr-feedback-subtitle">Please rate your attorney consultation experience.</p>
+                <div className="cr-feedback-stars" aria-label="Rate attorney">
+                  {[1, 2, 3, 4, 5].map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={`cr-feedback-star ${feedbackRating >= value ? 'cr-feedback-star--active' : ''}`}
+                      onClick={() => setFeedbackRating(value)}
+                    >
+                      ★
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  className="cr-feedback-input"
+                  rows="4"
+                  placeholder="Share your feedback (optional)"
+                  value={feedbackComment}
+                  onChange={(event) => setFeedbackComment(event.target.value)}
+                />
+                {feedbackError ? <p className="cr-feedback-error">{feedbackError}</p> : null}
+                <div className="cr-feedback-actions">
+                  <button
+                    type="button"
+                    className="cr-feedback-submit"
+                    onClick={handleFeedbackSubmit}
+                    disabled={feedbackSubmitting || feedbackRating < 1}
+                  >
+                    {feedbackSubmitting ? 'Submitting...' : 'Submit Feedback'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2>Thank You</h2>
+                <p className="cr-feedback-subtitle">Your feedback has been submitted successfully.</p>
+                <div className="cr-feedback-actions">
+                  <button
+                    type="button"
+                    className="cr-feedback-return"
+                    onClick={() => onNavigate('home-logged')}
+                  >
+                    Return to Dashboard
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

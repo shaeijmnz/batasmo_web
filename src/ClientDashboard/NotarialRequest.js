@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import './NotarialRequest.css';
 import { createNotarialRequest } from '../lib/userApi';
 
@@ -12,6 +12,11 @@ const BellIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
     <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+  </svg>
+);
+const MessageIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
   </svg>
 );
 const ScalesIcon = ({ size = 24, color = '#f5a623' }) => (
@@ -70,6 +75,17 @@ function NotarialRequest({ onNavigate, profile }) {
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [showError, setShowError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const pendingTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (pendingTimeoutRef.current) {
+        clearTimeout(pendingTimeoutRef.current);
+        pendingTimeoutRef.current = null;
+      }
+      console.log('[lifecycle] NotarialRequest unmounted');
+    };
+  }, []);
 
   const handleServiceToggle = (serviceId) => {
     setSelectedService(selectedService === serviceId ? null : serviceId);
@@ -111,12 +127,13 @@ function NotarialRequest({ onNavigate, profile }) {
 
   const closeConfirmation = () => {
     setShowConfirmation(false);
-    setTimeout(() => {
+    pendingTimeoutRef.current = setTimeout(() => {
       setSelectedService(null);
       setPreferredDate('');
       setUploadedFile(null);
       setNotes('');
       onNavigate('home-logged');
+      pendingTimeoutRef.current = null;
     }, 300);
   };
 
@@ -162,11 +179,14 @@ function NotarialRequest({ onNavigate, profile }) {
           </div>
         </div>
         <div className="nr-topbar__right">
-          <button className="nr-icon-btn nr-bell">
+          <button className="nr-icon-btn" onClick={() => onNavigate('chat-room')} title="Message Admin">
+            <MessageIcon />
+          </button>
+          <button className="nr-icon-btn nr-bell" onClick={() => onNavigate('announcements')} title="Announcements">
             <BellIcon />
             <span className="nr-bell__dot" />
           </button>
-          <div className="nr-profile">
+          <div className="nr-profile" onClick={() => onNavigate('profile')} style={{ cursor: 'pointer' }}>
             <div className="nr-profile__info">
               <span className="nr-profile__name">{profile?.full_name || 'Client'}</span>
             </div>

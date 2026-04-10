@@ -83,6 +83,23 @@
   display: inline-block;
 }
 
+.am-end-session-btn {
+  margin-left: 10px;
+  border: 1px solid rgba(220, 38, 38, 0.35);
+  background: rgba(220, 38, 38, 0.12);
+  color: #b91c1c;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.am-end-session-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* Messages Area */
 .am-messages {
   flex: 1;
@@ -149,6 +166,35 @@
   font-size: 0.9rem;
   word-wrap: break-word;
 }
+
+.am-bubble__image {
+  display: block;
+  width: min(240px, 100%);
+  max-height: 240px;
+  object-fit: cover;
+  border-radius: 10px;
+  margin-bottom: 8px;
+  background: #e2e8f0;
+}
+
+.am-bubble__file-link {
+  display: inline-block;
+  margin-bottom: 6px;
+  color: #2563eb;
+  text-decoration: underline;
+  font-size: 0.84rem;
+}
+
+.am-bubble__file-link--attorney {
+  color: #dbeafe;
+}
+
+.am-bubble__attachment-error {
+  margin: 0 0 6px;
+  font-size: 0.78rem;
+  font-style: italic;
+  opacity: 0.86;
+}
 .am-bubble__time {
   display: block;
   font-size: 0.68rem;
@@ -164,6 +210,32 @@
   border-top: 1px solid #e5e7eb;
   background: #fff;
   flex-shrink: 0;
+}
+
+.am-attach-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.am-attach-btn {
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 9px 10px;
+  cursor: pointer;
+}
+
+.am-attach-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.am-hidden-file-input {
+  display: none;
 }
 .am-input-bar__textarea {
   flex: 1;
@@ -219,5 +291,10 @@
   }
   .am-input-bar {
     padding: 12px 12px;
+    flex-wrap: wrap;
+  }
+
+  .am-attach-actions {
+    width: 100%;
   }
 }

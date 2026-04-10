@@ -211,6 +211,12 @@
   margin-top: 4px;
 }
 .ba-btn:hover { opacity: .88; transform: translateY(-1px); }
+.ba-btn:disabled,
+.ba-btn:disabled:hover {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
 .ba-btn--dark  { background: #1c1f2e; color: #fff; }
 .ba-btn--ghost { background: transparent; color: #374151; border: 1px solid #e5e7eb; }
 .ba-btn--ghost:hover { background: #f9fafb; }
@@ -587,8 +593,15 @@
   border: 2px solid #e5e7eb;
   border-radius: 10px;
   font-size: 0.95rem;
+  color: #1a1a2e;
+  background: #ffffff;
   font-family: inherit;
   transition: all .2s;
+}
+
+.ba-form-input option {
+  color: #111827;
+  background: #f8fafc;
 }
 
 .ba-form-input:focus,

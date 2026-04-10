@@ -1,5 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import './ForgotPassword.css';
+import { supabase } from '../lib/supabaseClient';
+import { updatePasswordForCurrentUser } from '../lib/authApi';
+import { isStrongPassword, VALID_PASSWORD_MESSAGE } from '../lib/validators';
+
+const RECOVERY_ACTIVE_KEY = 'batasmo_recovery_active';
+const RECOVERY_EMAIL_KEY = 'batasmo_recovery_email';
+const RECOVERY_VERIFIED_KEY = 'batasmo_recovery_verified';
 
 const ScalesIcon = ({ size = 24, color = '#f5a623' }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -43,22 +50,77 @@ const CheckIcon = () => (
   </svg>
 );
 
+const getErrorMessage = (error, fallback) => {
+  if (!error) return fallback;
+  if (typeof error === 'string') return error;
+  if (typeof error.message === 'string') return error.message;
+  return fallback;
+};
+
 function ResetPassword({ onNavigate }) {
   const [form, setForm] = useState({ password: '', confirm: '' });
   const [showPass, setShowPass] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorText, setErrorText] = useState('');
+  const [successText, setSuccessText] = useState('');
+
+  useEffect(() => {
+    const isRecoveryActive = localStorage.getItem(RECOVERY_ACTIVE_KEY) === 'true';
+    const isRecoveryVerified = localStorage.getItem(RECOVERY_VERIFIED_KEY) === 'true';
+    const recoveryEmail = String(localStorage.getItem(RECOVERY_EMAIL_KEY) || '').trim();
+
+    if (!isRecoveryActive || !isRecoveryVerified || !recoveryEmail) {
+      onNavigate('forgot-password');
+    }
+  }, [onNavigate]);
 
   const rules = {
     length:   form.password.length >= 8,
     upper:    /[A-Z]/.test(form.password),
+    lower:    /[a-z]/.test(form.password),
     number:   /[0-9]/.test(form.password),
+    symbol:   /[^A-Za-z0-9]/.test(form.password),
     match:    form.password && form.password === form.confirm,
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (rules.length && rules.upper && rules.number && rules.match) {
+    if (isSubmitting) return;
+
+    if (!isStrongPassword(form.password)) {
+      setErrorText(VALID_PASSWORD_MESSAGE);
+      return;
+    }
+
+    if (!rules.match) {
+      setErrorText('Password confirmation does not match.');
+      return;
+    }
+
+    setErrorText('');
+    setSuccessText('');
+    setIsSubmitting(true);
+
+    try {
+      await updatePasswordForCurrentUser({ newPassword: form.password });
+      localStorage.removeItem(RECOVERY_ACTIVE_KEY);
+      localStorage.removeItem(RECOVERY_VERIFIED_KEY);
+      localStorage.removeItem(RECOVERY_EMAIL_KEY);
+
+      // Do not block UI/navigation on sign-out network latency.
+      supabase.auth.signOut().catch(() => {
+        // Ignore: user can still proceed to login since password has been updated.
+      });
+
+      setSuccessText('Password reset complete. Please log in with your new password.');
+      setIsSubmitting(false);
       onNavigate('login');
+      return;
+    } catch (error) {
+      setErrorText(getErrorMessage(error, 'Unable to reset password right now. Please try again.'));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -102,7 +164,7 @@ function ResetPassword({ onNavigate }) {
                 <LockInputIcon />
                 <input
                   type={showPass ? 'text' : 'password'}
-                  placeholder="Enter new password"
+                  placeholder=""
                   value={form.password}
                   onChange={e => setForm({ ...form, password: e.target.value })}
                   required
@@ -119,7 +181,7 @@ function ResetPassword({ onNavigate }) {
                 <LockInputIcon />
                 <input
                   type={showConfirm ? 'text' : 'password'}
-                  placeholder="Confirm new password"
+                  placeholder=""
                   value={form.confirm}
                   onChange={e => setForm({ ...form, confirm: e.target.value })}
                   required
@@ -140,9 +202,17 @@ function ResetPassword({ onNavigate }) {
                 {rules.upper ? <CheckIcon /> : <span className="fp-rule__dot" />}
                 One uppercase letter
               </div>
+              <div className={`fp-rule ${rules.lower ? 'fp-rule--ok' : ''}`}>
+                {rules.lower ? <CheckIcon /> : <span className="fp-rule__dot" />}
+                One lowercase letter
+              </div>
               <div className={`fp-rule ${rules.number ? 'fp-rule--ok' : ''}`}>
                 {rules.number ? <CheckIcon /> : <span className="fp-rule__dot" />}
                 One number
+              </div>
+              <div className={`fp-rule ${rules.symbol ? 'fp-rule--ok' : ''}`}>
+                {rules.symbol ? <CheckIcon /> : <span className="fp-rule__dot" />}
+                One symbol
               </div>
               <div className={`fp-rule ${rules.match ? 'fp-rule--ok' : ''}`}>
                 {rules.match ? <CheckIcon /> : <span className="fp-rule__dot" />}
@@ -150,9 +220,11 @@ function ResetPassword({ onNavigate }) {
               </div>
             </div>
 
-            <button type="submit" className="fp-btn fp-btn--primary fp-btn--full">
-              Reset Password
+            <button type="submit" className="fp-btn fp-btn--primary fp-btn--full" disabled={isSubmitting}>
+              {isSubmitting ? 'Resetting Password...' : 'Reset Password'}
             </button>
+            {errorText ? <p>{errorText}</p> : null}
+            {successText ? <p>{successText}</p> : null}
           </form>
 
           <button className="fp-back" onClick={() => onNavigate('forgot-password')}>

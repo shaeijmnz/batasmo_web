@@ -368,7 +368,7 @@ export async function fetchCmsAttorneyDirectory() {
       name: cms?.display_name || item.profiles?.full_name || 'Attorney',
       email: item.profiles?.email || '',
       prcId: item.prc_id || '',
-      consultationFee: Number(item.consultation_fee || 0),
+      consultationFee: Number(item.consultation_fee || 2000),
       yearsExperience: Number(item.years_experience || 0),
       specialties: normalizeStringArray(item.specialties),
       expertiseFields: normalizeStringArray(cms?.expertise_fields || item.specialties),

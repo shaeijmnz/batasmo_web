@@ -220,7 +220,7 @@ BEGIN
       v_prc_id,
       v_specialties,
       0,
-      0,
+      2000,
       v_bio,
       true,
       now()

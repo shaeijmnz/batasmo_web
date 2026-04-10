@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import './ProfilePage.css';
 import { signOutUser, upsertProfile } from '../lib/userApi';
 import {
@@ -23,6 +23,11 @@ const MenuIcon = () => (
 const BellIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
+  </svg>
+);
+const MessageIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
   </svg>
 );
 const UserIcon = () => (
@@ -118,6 +123,7 @@ function ProfilePage({ onNavigate, profile, onSignOut, onProfileUpdated }) {
   const [info, setInfo] = useState({ fullName: '', email: '', contact: '', address: '' });
   const [passwords, setPasswords] = useState({ current: '', newPass: '', confirm: '' });
   const [show, setShow] = useState({ current: false, newPass: false, confirm: false });
+  const pendingTimeoutsRef = useRef([]);
 
   useEffect(() => {
     if (!profile) return;
@@ -128,6 +134,22 @@ function ProfilePage({ onNavigate, profile, onSignOut, onProfileUpdated }) {
       address: profile.address || '',
     });
   }, [profile]);
+
+  useEffect(() => {
+    return () => {
+      pendingTimeoutsRef.current.forEach((timeoutId) => clearTimeout(timeoutId));
+      pendingTimeoutsRef.current = [];
+      console.log('[lifecycle] ProfilePage unmounted');
+    };
+  }, []);
+
+  const scheduleAfter = (callback, delayMs) => {
+    const timeoutId = setTimeout(() => {
+      pendingTimeoutsRef.current = pendingTimeoutsRef.current.filter((id) => id !== timeoutId);
+      callback();
+    }, delayMs);
+    pendingTimeoutsRef.current.push(timeoutId);
+  };
 
   const handleSaveInfo = async (e) => {
     e.preventDefault();
@@ -162,14 +184,29 @@ function ProfilePage({ onNavigate, profile, onSignOut, onProfileUpdated }) {
     }
 
     setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+    scheduleAfter(() => setSaved(false), 3000);
   };
 
   const handleSavePassword = (e) => {
     e.preventDefault();
     setPwSaved(true);
     setPasswords({ current: '', newPass: '', confirm: '' });
-    setTimeout(() => setPwSaved(false), 3000);
+    scheduleAfter(() => setPwSaved(false), 3000);
+  };
+
+  const handleSignOutClick = async () => {
+    try {
+      if (typeof onSignOut === 'function') {
+        await onSignOut();
+        return;
+      }
+
+      await signOutUser();
+      onNavigate('login');
+    } catch (error) {
+      console.error('[auth] client profile sign out failed', error);
+      onNavigate('login');
+    }
   };
 
   return (
@@ -215,7 +252,10 @@ function ProfilePage({ onNavigate, profile, onSignOut, onProfileUpdated }) {
           </div>
         </div>
         <div className="pp-topbar__right">
-          <button className="pp-icon-btn pp-bell">
+          <button className="pp-icon-btn" onClick={() => onNavigate('chat-room')} title="Message Admin">
+            <MessageIcon />
+          </button>
+          <button className="pp-icon-btn pp-bell" onClick={() => onNavigate('announcements')} title="Announcements">
             <BellIcon />
             <span className="pp-bell__dot" />
           </button>
@@ -223,7 +263,7 @@ function ProfilePage({ onNavigate, profile, onSignOut, onProfileUpdated }) {
             <span className="pp-profile__name">{profile?.full_name || 'Client'}</span>
             <div className="pp-avatar">{(profile?.full_name || 'C').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()}</div>
           </div>
-          <button className="pp-signout-btn" onClick={async () => { if (onSignOut) return onSignOut(); await signOutUser(); onNavigate('home'); }} title="Sign Out">
+          <button className="pp-signout-btn" onClick={handleSignOutClick} title="Sign Out">
             <SignOutIcon />
             <span>Sign Out</span>
           </button>
@@ -250,7 +290,7 @@ function ProfilePage({ onNavigate, profile, onSignOut, onProfileUpdated }) {
             <button className={`pp-tab-side ${activeTab === 'password' ? 'pp-tab-side--active' : ''}`} onClick={() => setActiveTab('password')}>
               <LockIcon color={activeTab === 'password' ? '#fff' : '#1e3a8a'} /> Change Password
             </button>
-            <button className="pp-tab-side pp-tab-side--signout" onClick={async () => { if (onSignOut) return onSignOut(); await signOutUser(); onNavigate('home'); }}>
+            <button className="pp-tab-side pp-tab-side--signout" onClick={handleSignOutClick}>
               <SignOutIcon /> Sign Out
             </button>
           </div>

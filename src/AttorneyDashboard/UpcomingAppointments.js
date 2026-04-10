@@ -1,6 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './UpcomingAppointments.css';
-import { fetchAttorneyUpcomingAppointments, rescheduleAttorneyAppointment } from '../lib/userApi';
+import {
+  fetchAttorneyUpcomingAppointments,
+  rescheduleAttorneyAppointment,
+  subscribeToAttorneyAppointments,
+} from '../lib/userApi';
 
 /* ── Icons ── */
 const MenuIcon = () => (
@@ -42,6 +46,11 @@ const ScheduleIcon = () => (
 const MessagesIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+  </svg>
+);
+const LogsIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><polyline points="14 2 14 8 20 8"/>
   </svg>
 );
 const SideAnnouncementIcon = () => (
@@ -97,27 +106,71 @@ function UpcomingAppointments({ onNavigate, profile }) {
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications] = useState(DEFAULT_NOTIFICATIONS);
   const [loadError, setLoadError] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
-    let isMounted = true;
-    const load = async () => {
-      if (!profile?.id) return;
-      try {
-        const rows = await fetchAttorneyUpcomingAppointments(profile.id);
-        if (!isMounted) return;
-        setAppointments(rows);
-        setLoadError('');
-      } catch (error) {
-        if (!isMounted) return;
-        setAppointments([]);
-        setLoadError(error.message || 'Unable to load appointments.');
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const loadAppointments = useCallback(async (options = {}) => {
+    if (!profile?.id) return;
+
+    const silent = Boolean(options?.silent);
+    if (!silent) setIsRefreshing(true);
+
+    try {
+      const rows = await fetchAttorneyUpcomingAppointments(profile.id, options);
+      if (!mountedRef.current) return;
+      setAppointments(rows);
+      setLoadError('');
+      setLastUpdatedAt(new Date());
+    } catch (error) {
+      if (!mountedRef.current) return;
+      setAppointments([]);
+      setLoadError(error.message || 'Unable to load appointments.');
+    } finally {
+      if (!silent && mountedRef.current) {
+        setIsRefreshing(false);
+      }
+    }
+  }, [profile?.id]);
+
+  useEffect(() => {
+    loadAppointments({ force: true });
+
+    const unsubscribe = subscribeToAttorneyAppointments(profile?.id, () => {
+      loadAppointments({ force: true, silent: true });
+    });
+
+    const pollId = window.setInterval(() => {
+      loadAppointments({ force: true, silent: true });
+    }, 10000);
+
+    const handleWindowFocus = () => {
+      loadAppointments({ force: true, silent: true });
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        loadAppointments({ force: true, silent: true });
       }
     };
-    load();
+
+    window.addEventListener('focus', handleWindowFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
+
     return () => {
-      isMounted = false;
+      window.clearInterval(pollId);
+      window.removeEventListener('focus', handleWindowFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      unsubscribe();
     };
-  }, [profile?.id]);
+  }, [loadAppointments, profile?.id]);
 
   const now = new Date();
   const todayDate = now.toDateString();
@@ -156,6 +209,11 @@ function UpcomingAppointments({ onNavigate, profile }) {
       weekAppts: week,
     };
   }, [appointments, currentYear, todayDate, tomorrowDate]);
+
+  const totalUpcoming = todayAppts.length + tomorrowAppts.length + weekAppts.length;
+  const lastUpdatedLabel = lastUpdatedAt
+    ? lastUpdatedAt.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' })
+    : 'Not yet synced';
 
   const attorneyAvatarSrc = useMemo(
     () => `https://ui-avatars.com/api/?name=${encodeURIComponent(attorneyDisplayName)}&background=1c1f2e&color=fff&size=38`,
@@ -202,7 +260,7 @@ function UpcomingAppointments({ onNavigate, profile }) {
           </button>
           <button
             className="ua-btn ua-btn--enter"
-            onClick={() => onNavigate('attorney-messages')}
+            onClick={() => onNavigate('attorney-messages', { appointmentId: appt.id })}
           >
             ENTER CONSULTATION
           </button>
@@ -218,7 +276,16 @@ function UpcomingAppointments({ onNavigate, profile }) {
         <span className="ua-section__count">{items.length}</span>
       </div>
       <div className="ua-section__grid">
-        {items.map(renderCard)}
+        {items.length ? (
+          items.map(renderCard)
+        ) : (
+          <div className="ua-empty-state" role="status" aria-live="polite">
+            <p className="ua-empty-state__title">No appointments yet</p>
+            <p className="ua-empty-state__text">
+              New bookings for you will appear here automatically.
+            </p>
+          </div>
+        )}
       </div>
     </section>
   );
@@ -238,7 +305,7 @@ function UpcomingAppointments({ onNavigate, profile }) {
           {[
             { label: 'Dashboard',     icon: <DashboardIcon />,          nav: 'attorney-home' },
             { label: 'Consultation Management',   icon: <ScheduleIcon />,           nav: 'upcoming-appointments' },
-            { label: 'Messages',      icon: <MessagesIcon />,           nav: 'attorney-messages' },
+            { label: 'Logs',          icon: <LogsIcon />,               nav: 'attorney-logs' },
             { label: 'Announcement',  icon: <SideAnnouncementIcon />,   nav: 'attorney-announcements' },
             { label: 'Profile',       icon: <ProfileIcon />,            nav: 'attorney-profile' },
           ].map(item => (
@@ -300,7 +367,23 @@ function UpcomingAppointments({ onNavigate, profile }) {
 
       {/* Main Content */}
       <main className="ua-main">
-        {loadError ? <p>{loadError}</p> : null}
+        <section className="ua-summary">
+          <div>
+            <p className="ua-summary__label">UPCOMING CONSULTATIONS</p>
+            <h2 className="ua-summary__count">{totalUpcoming}</h2>
+            <p className="ua-summary__meta">Last synced: {lastUpdatedLabel}</p>
+          </div>
+          <button
+            className="ua-summary__refresh"
+            type="button"
+            onClick={() => loadAppointments({ force: true })}
+            disabled={isRefreshing}
+          >
+            {isRefreshing ? 'Refreshing...' : 'Refresh'}
+          </button>
+        </section>
+
+        {loadError ? <p className="ua-load-error">{loadError}</p> : null}
         {renderSection("TODAY'S APPOINTMENTS", todayAppts)}
         {renderSection("TOMORROW'S APPOINTMENTS", tomorrowAppts)}
         {renderSection("UPCOMING THIS WEEK", weekAppts)}

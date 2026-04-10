@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import './AttorneyProfile.css';
-import { fetchAttorneyProfile, saveAttorneyProfile } from '../lib/userApi';
+import { fetchAttorneyProfile, saveAttorneyProfile, signOutUser } from '../lib/userApi';
 import {
   isValidEmail,
   isValidPhoneNumber,
@@ -34,6 +34,11 @@ const ScheduleIcon = () => (
 const MessagesIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+  </svg>
+);
+const LogsIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><polyline points="14 2 14 8 20 8"/>
   </svg>
 );
 const AnnouncementIcon = () => (
@@ -86,7 +91,7 @@ const initialProfile = {
   rating: 'N/A',
 };
 
-export default function AttorneyProfile({ onNavigate, profile: sessionProfile, onProfileUpdated }) {
+export default function AttorneyProfile({ onNavigate, profile: sessionProfile, onSignOut, onProfileUpdated }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [profile, setProfile] = useState(initialProfile);
@@ -182,10 +187,24 @@ export default function AttorneyProfile({ onNavigate, profile: sessionProfile, o
     setEditing(false);
   };
 
+  const handleSignOut = async () => {
+    try {
+      if (typeof onSignOut === 'function') {
+        await onSignOut();
+        return;
+      }
+      await signOutUser();
+      onNavigate('login');
+    } catch (error) {
+      console.error('[auth] attorney sign out failed', error);
+      onNavigate('login');
+    }
+  };
+
   const sidebarItems = [
     { label: 'Dashboard',    icon: <DashboardIcon />,    nav: 'attorney-home' },
     { label: 'Consultation Management', icon: <ScheduleIcon />, nav: 'upcoming-appointments' },
-    { label: 'Messages',     icon: <MessagesIcon />,     nav: 'attorney-messages' },
+    { label: 'Logs',         icon: <LogsIcon />,         nav: 'attorney-logs' },
     { label: 'Announcement', icon: <AnnouncementIcon />, nav: 'attorney-announcements' },
     { label: 'Profile',      icon: <ProfileIcon />,      nav: null },
   ];
@@ -252,7 +271,7 @@ export default function AttorneyProfile({ onNavigate, profile: sessionProfile, o
                 <button className="ap-edit-btn" onClick={() => setEditing(true)}>
                   <EditIcon /> Edit Profile
                 </button>
-                <button className="ap-signout-btn" onClick={() => onNavigate('home')}>
+                <button className="ap-signout-btn" onClick={handleSignOut}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
                     <polyline points="16 17 21 12 16 7"/>

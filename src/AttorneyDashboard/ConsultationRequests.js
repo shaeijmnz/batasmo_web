@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
 import './ConsultationRequests.css';
-import { fetchAttorneyConsultationRequests, updateAttorneyConsultationRequestStatus } from '../lib/userApi';
+import {
+  fetchAttorneyConsultationRequests,
+  subscribeToAttorneyAppointments,
+  updateAttorneyConsultationRequestStatus,
+} from '../lib/userApi';
 
 /* ── Icons ── */
 const BellIcon = () => (
@@ -38,6 +42,11 @@ const ScheduleIcon = () => (
 const MessagesIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+  </svg>
+);
+const LogsIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><polyline points="14 2 14 8 20 8"/>
   </svg>
 );
 const AnnouncementIcon = () => (
@@ -93,11 +102,11 @@ function ConsultationRequests({ onNavigate, profile }) {
   useEffect(() => {
     let isMounted = true;
 
-    const loadRequests = async () => {
+    const loadRequests = async (options = {}) => {
       if (!profile?.id) return;
 
       try {
-        const data = await fetchAttorneyConsultationRequests(profile.id);
+        const data = await fetchAttorneyConsultationRequests(profile.id, options);
         if (!isMounted) return;
         setRequests(data.requests);
         setNotifications(data.notifications);
@@ -109,10 +118,15 @@ function ConsultationRequests({ onNavigate, profile }) {
       }
     };
 
-    loadRequests();
+    loadRequests({ force: true });
+
+    const unsubscribe = subscribeToAttorneyAppointments(profile?.id, () => {
+      loadRequests({ force: true });
+    });
 
     return () => {
       isMounted = false;
+      unsubscribe();
     };
   }, [profile?.id]);
 
@@ -197,7 +211,7 @@ function ConsultationRequests({ onNavigate, profile }) {
           {[
             { label: 'Dashboard',     icon: <DashboardIcon />,     nav: 'attorney-home' },
             { label: 'Consultation Management',   icon: <ScheduleIcon />,      nav: 'upcoming-appointments' },
-            { label: 'Messages',      icon: <MessagesIcon />,      nav: 'attorney-messages' },
+            { label: 'Logs',          icon: <LogsIcon />,          nav: 'attorney-logs' },
             { label: 'Announcement',  icon: <AnnouncementIcon />,  nav: 'attorney-announcements' },
             { label: 'Profile',       icon: <ProfileIcon />,       nav: 'attorney-profile' },
           ].map(item => (
@@ -275,22 +289,9 @@ function ConsultationRequests({ onNavigate, profile }) {
                   </div>
                 </div>
               </div>
-              {req.status === 'Pending' && (
-                <div className="cr-card__actions">
-                  <button className="cr-action-btn cr-action-btn--accept" onClick={() => handleAccept(req.id)}>
-                    <CheckIcon /> Accept
-                  </button>
-                  <button className="cr-action-btn cr-action-btn--resched" onClick={() => handleReschedule(req.id)}>
-                    <CalendarIcon /> Reschedule
-                  </button>
-                  <button className="cr-action-btn cr-action-btn--reject" onClick={() => handleReject(req.id)}>
-                    <XIcon /> Reject
-                  </button>
-                </div>
-              )}
               {req.status === 'Approved' && (
                 <div className="cr-card__actions">
-                  <button className="cr-enter-btn" onClick={() => onNavigate('attorney-messages')}>
+                  <button className="cr-enter-btn" onClick={() => onNavigate('attorney-messages', { appointmentId: req.id })}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                     </svg>
