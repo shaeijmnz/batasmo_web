@@ -1,70 +1,81 @@
-# Getting Started with Create React App
+# BatasMo Web
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+BatasMo web app with integrated client chatbot.
 
-## Available Scripts
+## Prerequisites
 
-In the project directory, you can run:
+- Node.js 18+
+- npm 9+
 
-### `npm start`
+## Environment Setup
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+1. Frontend env:
+   - Copy `.env.example` to `.env`
+   - Ensure this value exists:
+     - `REACT_APP_CHATBOT_API_URL=http://localhost:4000`
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+2. Backend env:
+   - Copy `backend/.env.example` to `backend/.env`
+   - Required values:
+     - `PORT=4000`
+     - `ALLOWED_ORIGIN=http://localhost:3000`
+     - `CHATBOT_PROVIDER_MODE=free` or `auto`
+   - For Gemini mode, set:
+     - `GEMINI_API_KEY=your_real_key`
 
-### `npm test`
+## Install
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+From project root:
 
-### `npm run build`
+```bash
+npm install
+```
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+From backend folder:
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+```bash
+cd backend
+npm install
+```
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+## Run (Recommended)
 
-### `npm run eject`
+From project root:
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+```bash
+npm run start:all
+```
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+This starts:
+- Frontend: `http://localhost:3000`
+- Chatbot backend: `http://localhost:4000`
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+## Alternative Run Commands
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+From project root:
 
-## Learn More
+```bash
+npm run start:frontend
+npm run start:backend
+```
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+## Chatbot Health Check
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+Open:
 
-### Code Splitting
+- `http://localhost:4000/health`
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+Expected response includes:
+- `status: "ok"`
+- `providerMode`
 
-### Analyzing the Bundle Size
+## Database Migration (Optional for chatbot logs)
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+Run SQL file:
 
-### Making a Progressive Web App
+- `database/20260410_chatbot_logs.sql`
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+## Notes for GitHub Push
 
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+- `.env` and `backend/.env` are ignored by git
+- Commit `.env.example` and `backend/.env.example` only

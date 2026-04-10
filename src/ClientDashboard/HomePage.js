@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import './HomePage.css';
 import { fetchClientHomeData } from '../lib/userApi';
+import { initialChatbotMessages, sendChatbotMessage } from '../lib/chatbotService';
 
 const ScalesIcon = ({ size = 24, color = '#f5a623' }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -106,7 +107,8 @@ function HomePage({ onNavigate, profile, onSignOut }) {
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [loadError, setLoadError] = useState('');
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState(initialChatbotMessages);
+  const [chatLoading, setChatLoading] = useState(false);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -206,14 +208,45 @@ function HomePage({ onNavigate, profile, onSignOut }) {
     }
   };
 
-  const sendMessage = (e) => {
+  const sendMessage = async (e) => {
     e.preventDefault();
-    if (!chatMsg.trim()) return;
+    const question = chatMsg.trim();
+    if (!question || chatLoading) return;
+
     setMessages(prev => [
       ...prev,
-      { from: 'user', text: chatMsg }
+      { from: 'user', text: question }
     ]);
     setChatMsg('');
+
+    setChatLoading(true);
+    try {
+      const response = await sendChatbotMessage({
+        message: question,
+        profile,
+        conversation: messages,
+      });
+
+      setMessages(prev => [
+        ...prev,
+        {
+          from: 'ai',
+          text: response.reply,
+          actions: Array.isArray(response.actions) ? response.actions : [],
+        },
+      ]);
+    } catch (error) {
+      setMessages(prev => [
+        ...prev,
+        {
+          from: 'ai',
+          text: 'I hit an issue while processing your message. Please try again.',
+          actions: [{ label: 'Open booking', page: 'book-appointment' }],
+        },
+      ]);
+    } finally {
+      setChatLoading(false);
+    }
   };
 
   return (
@@ -440,8 +473,27 @@ function HomePage({ onNavigate, profile, onSignOut }) {
             {messages.map((m, i) => (
               <div key={i} className={`hp-msg hp-msg--${m.from}`}>
                 <p>{m.text}</p>
+                {m.from === 'ai' && Array.isArray(m.actions) && m.actions.length > 0 ? (
+                  <div className="hp-msg__actions">
+                    {m.actions.map((action, actionIndex) => (
+                      <button
+                        key={`${action.label}-${actionIndex}`}
+                        type="button"
+                        className="hp-msg__action-btn"
+                        onClick={() => onNavigate(action.page, action.params || {})}
+                      >
+                        {action.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             ))}
+            {chatLoading ? (
+              <div className="hp-msg hp-msg--ai hp-msg--typing">
+                <p>Typing...</p>
+              </div>
+            ) : null}
           </div>
           <form className="hp-chat-window__input" onSubmit={sendMessage}>
             <input
@@ -449,8 +501,9 @@ function HomePage({ onNavigate, profile, onSignOut }) {
               placeholder="Ask me anything..."
               value={chatMsg}
               onChange={e => setChatMsg(e.target.value)}
+              disabled={chatLoading}
             />
-            <button type="submit">➤</button>
+            <button type="submit" disabled={chatLoading || !chatMsg.trim()}>➤</button>
           </form>
         </div>
       )}
