@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import './ManageAvailability.css';
+import './AttorneyTheme.css';
 import { fetchAttorneyAvailabilitySlots, saveAttorneyAvailabilitySlots } from '../lib/userApi';
 
 /* ── Icons ── */
@@ -201,7 +202,7 @@ export default function ManageAvailability({ onNavigate, profile }) {
   ];
 
   return (
-    <div className="ma-page">
+    <div className="ma-page atty-page-wrapper">
       {sidebarOpen && <div className="ma-sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
 
       <aside className={`ma-sidebar ${sidebarOpen ? 'ma-sidebar--open' : ''}`}>
@@ -213,7 +214,7 @@ export default function ManageAvailability({ onNavigate, profile }) {
           {sidebarItems.map((item) => (
             <button
               key={item.label}
-              className="ma-sidebar__item"
+              className={`ma-sidebar__item sidebar-item ${item.label === 'Consultation Management' ? 'ma-sidebar__item--active' : ''}`}
               onClick={() => {
                 setSidebarOpen(false);
                 if (item.nav) onNavigate(item.nav);
@@ -231,10 +232,6 @@ export default function ManageAvailability({ onNavigate, profile }) {
           <button className="ma-menu-btn" onClick={() => setSidebarOpen(!sidebarOpen)}>
             <MenuIcon />
           </button>
-          <div className="ma-topbar__logo">
-            <ScalesIcon size={26} color="#f5a623" />
-            <span>BatasMo</span>
-          </div>
         </div>
         <div className="ma-topbar__right">
           <span className="ma-topbar__user-name">{profile?.full_name || 'Attorney'}</span>
@@ -244,8 +241,9 @@ export default function ManageAvailability({ onNavigate, profile }) {
 
       <main className="ma-main">
         <div className="ma-header">
-          <div>
-            <h1>Manage Availability</h1>
+          <div className="ma-header-group ap-header-group">
+            <span className="ma-kicker ap-kicker">Attorney Workspace</span>
+            <h1 className="ma-main-title ap-main-title">Manage Availability</h1>
             <p>Set your date and time slots so clients can book consultations automatically.</p>
           </div>
           <button className="ma-save-btn" onClick={handleSave}>

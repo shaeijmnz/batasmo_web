@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import './NotarialRequestsAtty.css';
+import './AttorneyTheme.css';
 import { fetchAttorneyNotarialRequests, updateAttorneyNotarialRequestStatus } from '../lib/userApi';
 
 /* ── Icons ── */
@@ -179,7 +180,7 @@ function NotarialRequestsAtty({ onNavigate, profile }) {
           ].map(item => (
             <button
               key={item.label}
-              className="nra-sidebar__item"
+              className={`nra-sidebar__item ${item.label === 'Consultation Management' ? 'nra-sidebar__item--active' : ''}`}
               onClick={() => {
                 setSidebarOpen(false);
                 if (item.nav) onNavigate(item.nav);

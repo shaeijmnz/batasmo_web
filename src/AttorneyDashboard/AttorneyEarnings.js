@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import './AttorneyEarnings.css';
+import './AttorneyTheme.css';
 import { fetchAttorneyEarningsData } from '../lib/userApi';
 
 /* ── Icons ── */
@@ -117,7 +118,7 @@ export default function AttorneyEarnings({ onNavigate, profile }) {
           {sidebarItems.map(item => (
             <button
               key={item.label}
-              className="ae-sidebar__item"
+              className={`ae-sidebar__item ${item.label === 'Consultation Management' ? 'ae-sidebar__item--active' : ''}`}
               onClick={() => { setSidebarOpen(false); if (item.nav) onNavigate(item.nav); }}
             >
               <span className="ae-sidebar__item-icon">{item.icon}</span>

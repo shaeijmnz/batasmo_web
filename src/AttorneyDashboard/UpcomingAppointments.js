@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './UpcomingAppointments.css';
+import './AttorneyTheme.css';
 import {
   fetchAttorneyUpcomingAppointments,
   rescheduleAttorneyAppointment,
@@ -330,8 +331,12 @@ function UpcomingAppointments({ onNavigate, profile }) {
           <button className="ua-menu-btn" onClick={() => setDrawerOpen(v => !v)}>
             <MenuIcon />
           </button>
-          <div className="ua-topbar__title">
-            <h1>My Appointments</h1>
+          <div className="ua-topbar__logo">
+            <img src="/logo/logo.jpg" alt="BatasMo" className="ua-topbar__brand-logo" />
+            <div>
+              <p className="ua-topbar__eyebrow">Attorney Workspace</p>
+              <span>My Appointments</span>
+            </div>
           </div>
         </div>
         <div className="ua-topbar__right" style={{ position: 'relative' }}>

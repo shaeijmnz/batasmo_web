@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import './AttorneyLogs.css';
+import './AttorneyTheme.css';
 import {
   fetchAttorneyConsultationLogs,
   fetchConsultationTranscriptForAppointment,
@@ -195,8 +196,7 @@ export default function AttorneyLogs({ onNavigate, profile }) {
             <MenuIcon />
           </button>
           <div className="al-topbar__logo">
-            <ScalesIcon size={26} color="#f5a623" />
-            <span>BatasMo</span>
+            <span>Logs</span>
           </div>
         </div>
         <div className="al-topbar__right">

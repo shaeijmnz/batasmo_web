@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import './AttorneyAnnouncements.css';
+import './AttorneyTheme.css';
 import { fetchAttorneyAnnouncementsData } from '../lib/userApi';
 
 /* ── Icons ── */
@@ -132,8 +133,7 @@ export default function AttorneyAnnouncements({ onNavigate, profile }) {
             <MenuIcon />
           </button>
           <div className="aa-topbar__logo">
-            <ScalesIcon size={26} color="#f5a623" />
-            <span>BatasMo</span>
+            <span>Announcement</span>
           </div>
         </div>
         <div className="aa-topbar__right">

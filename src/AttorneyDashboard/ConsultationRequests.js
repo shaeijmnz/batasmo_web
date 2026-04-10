@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import './ConsultationRequests.css';
+import './AttorneyTheme.css';
 import {
   fetchAttorneyConsultationRequests,
   subscribeToAttorneyAppointments,
@@ -197,7 +198,7 @@ function ConsultationRequests({ onNavigate, profile }) {
   const getReq = () => requests.find(r => r.id === modal.requestId);
 
   return (
-    <div className="cr-page">
+    <div className="cr-page atty-page-wrapper">
       {/* Sidebar overlay */}
       {sidebarOpen && <div className="cr-sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
 
@@ -217,7 +218,7 @@ function ConsultationRequests({ onNavigate, profile }) {
           ].map(item => (
             <button
               key={item.label}
-              className="cr-sidebar__item"
+              className={`cr-sidebar__item sidebar-item ${item.label === 'Consultation Management' ? 'cr-sidebar__item--active' : ''}`}
               onClick={() => {
                 setSidebarOpen(false);
                 if (item.nav) onNavigate(item.nav);
@@ -237,7 +238,7 @@ function ConsultationRequests({ onNavigate, profile }) {
             <MenuIcon />
           </button>
           <div className="cr-topbar__title">
-            <h1>Consultation Requests</h1>
+            <span className="cr-topbar__title-text">Consultation Management</span>
           </div>
         </div>
         <div className="cr-topbar__right" style={{ position: 'relative' }}>
@@ -271,9 +272,13 @@ function ConsultationRequests({ onNavigate, profile }) {
 
       {/* Request Cards */}
       <main className="cr-main">
+        <div className="cr-header-group ap-header-group">
+          <span className="cr-kicker ap-kicker">Attorney Workspace</span>
+          <h1 className="cr-main-title ap-main-title">Consultation Requests</h1>
+        </div>
         {loadError ? <p>{loadError}</p> : null}
         {requests.map(req => (
-          <div className="cr-card" key={req.id}>
+          <div className="cr-card glass-card" key={req.id}>
             <div className="cr-card__top">
               <div className="cr-card__left">
                 <div className="cr-card__avatar">{req.initials}</div>

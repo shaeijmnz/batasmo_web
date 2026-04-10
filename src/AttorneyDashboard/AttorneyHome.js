@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import './AttorneyTheme.css';
 import './AttorneyHome.css';
 import { fetchAttorneyHomeData, subscribeToAttorneyAppointments } from '../lib/userApi';
 
@@ -54,11 +55,6 @@ const MyApptIcon = () => (
 const ProfileIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-  </svg>
-);
-const MessagesIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
   </svg>
 );
 const LogsIcon = () => (
@@ -118,9 +114,21 @@ function AttorneyHome({ onNavigate, profile }) {
   }, [profile?.id]);
 
   const stats = [
-    { label: 'My Appointments',  value: String(statsData.myAppointmentCount),  icon: <CalendarCheckIcon />, bg: '#eff6ff', border: '#3b82f6', nav: 'upcoming-appointments' },
-    { label: 'Earnings (Monthly)',     value: `₱${statsData.monthlyEarnings.toLocaleString()}`, icon: <EarningsIcon />, bg: '#ecfdf5', border: '#10b981', nav: 'attorney-earnings' },
+    { label: 'Pending Consultations', value: String(statsData.pendingCount), icon: <CalendarCheckIcon />, bg: '#eef4ff', border: '#4a8eff', nav: 'consultation-requests' },
+    { label: 'My Appointments', value: String(statsData.myAppointmentCount), icon: <CalendarCheckIcon />, bg: '#eff6ff', border: '#3b82f6', nav: 'upcoming-appointments' },
+    { label: 'Notarial Requests', value: String(statsData.notarialCount), icon: <ScalesIcon size={20} color="#d9b14b" />, bg: '#fff7e8', border: '#d4af37', nav: 'notarial-requests-atty' },
+    { label: 'Earnings (Monthly)', value: `₱${statsData.monthlyEarnings.toLocaleString()}`, icon: <EarningsIcon />, bg: '#ecfdf5', border: '#10b981', nav: 'attorney-earnings' },
   ];
+
+  const sortedConsultations = [...consultations].sort((a, b) => new Date(a.date) - new Date(b.date));
+  const upcomingCount = sortedConsultations.length;
+  const unreadCount = notifications.filter((n) => n.unread).length;
+  const nextConsultation = sortedConsultations[0] || null;
+
+  const formatShortDate = (dateStr) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
 
   return (
     <div className="att-page">
@@ -130,8 +138,11 @@ function AttorneyHome({ onNavigate, profile }) {
       {/* Sidebar */}
       <aside className={`att-sidebar ${sidebarOpen ? 'att-sidebar--open' : ''}`}>
         <div className="att-sidebar__logo">
-          <ScalesIcon size={26} color="#f5a623" />
-          <span>BatasMo</span>
+          <img src="/logo/logo.jpg" alt="BatasMo logo" className="att-brand-logo" />
+          <div className="att-brand-text-wrap">
+            <span className="att-brand-title">BatasMo</span>
+            <span className="att-brand-sub">Attorney Console</span>
+          </div>
         </div>
         <nav className="att-sidebar__nav">
           {[
@@ -162,8 +173,11 @@ function AttorneyHome({ onNavigate, profile }) {
         <div className="att-topbar__left">
           <button className="att-icon-btn" onClick={() => setSidebarOpen(!sidebarOpen)}><MenuIcon /></button>
           <div className="att-topbar__logo">
-            <ScalesIcon size={26} color="#f5a623" />
-            <span>Attorney Dashboard</span>
+            <img src="/logo/logo.jpg" alt="BatasMo" className="att-topbar__brand-logo" />
+            <div>
+              <p className="att-topbar__eyebrow">Attorney Workspace</p>
+              <span>Attorney Dashboard</span>
+            </div>
           </div>
         </div>
         <div className="att-topbar__right" style={{ position: 'relative' }}>
@@ -196,17 +210,40 @@ function AttorneyHome({ onNavigate, profile }) {
 
       {/* Content */}
       <main className="att-main">
-        {/* Welcome */}
-        <div className="att-welcome">
-          <div className="att-welcome__text">
-            <h1>Welcome back, {profile?.full_name || 'Attorney'}</h1>
-            <p>Here's what's happening with your practice today.</p>
+        <section className="att-hero-grid">
+          <div className="att-welcome">
+            <div className="att-welcome__text">
+              <p className="att-kicker">LEGAL OPERATIONS OVERVIEW</p>
+              <h1>Welcome back, {profile?.full_name || 'Attorney'}</h1>
+              <p>Monitor consultations, respond faster, and keep your schedule aligned in one focused dashboard.</p>
+            </div>
+            <div className="att-hero-chips">
+              <span className="att-hero-chip">{upcomingCount} upcoming consultations</span>
+              <span className="att-hero-chip">{unreadCount} unread notifications</span>
+            </div>
+            <button className="att-manage-btn" onClick={() => onNavigate('manage-availability')}>
+              <CalendarIcon size={16} color="#fff" />
+              Manage Availability
+            </button>
           </div>
-          <button className="att-manage-btn" onClick={() => onNavigate('manage-availability')}>
-            <CalendarIcon size={16} color="#fff" />
-            Manage Availability
-          </button>
-        </div>
+
+          <aside className="att-spotlight-card">
+            <div className="att-spotlight-head">
+              <h3>Next Consultation</h3>
+              <ScalesIcon size={18} color="#d4af37" />
+            </div>
+            {nextConsultation ? (
+              <>
+                <p className="att-spotlight-name">{nextConsultation.name}</p>
+                <p className="att-spotlight-meta">{nextConsultation.area}</p>
+                <p className="att-spotlight-meta">{formatShortDate(nextConsultation.date)} at {new Date(nextConsultation.time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</p>
+              </>
+            ) : (
+              <p className="att-spotlight-empty">No scheduled consultation yet.</p>
+            )}
+          </aside>
+        </section>
+
         {loadError ? <p>{loadError}</p> : null}
 
         {/* Stats */}
@@ -231,12 +268,11 @@ function AttorneyHome({ onNavigate, profile }) {
         <div className="att-queue-card">
           <div className="att-queue-card__header">
             <h2>Consultation Queue</h2>
-            <button className="att-view-all">View All</button>
+            <button className="att-view-all" onClick={() => onNavigate('upcoming-appointments')}>View All</button>
           </div>
           <p className="att-queue-subtitle">Upcoming client consultations sorted by date</p>
           <div className="att-queue-list">
-            {[...consultations]
-              .sort((a, b) => new Date(a.date) - new Date(b.date))
+            {sortedConsultations
               .map((c, i) => {
                 const today = new Date();
                 const apptDate = new Date(c.date);
@@ -288,6 +324,9 @@ function AttorneyHome({ onNavigate, profile }) {
                   </div>
                 );
               })}
+            {!sortedConsultations.length ? (
+              <div className="att-queue-empty">No consultations in queue yet.</div>
+            ) : null}
           </div>
         </div>
       </main>

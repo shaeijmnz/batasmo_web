@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import './AttorneyMessages.css';
+import './AttorneyTheme.css';
 import {
   deleteAppointmentMessage,
   endConsultationSession,
@@ -581,7 +582,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
           {sidebarItems.map(item => (
             <button
               key={item.label}
-              className={`am-sidebar__item ${item.label === 'Messages' ? 'am-sidebar__item--active' : ''}`}
+              className={`am-sidebar__item ${item.label === 'Consultation Management' ? 'am-sidebar__item--active' : ''}`}
               onClick={() => { setSidebarOpen(false); if (item.nav) onNavigate(item.nav); }}
             >
               <span className="am-sidebar__item-icon">{item.icon}</span>
