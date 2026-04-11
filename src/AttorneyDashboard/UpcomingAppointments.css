@@ -389,67 +389,114 @@
 /* ── Reschedule Modal ── */
 .ua-modal-overlay {
   position: fixed; inset: 0;
-  background: rgba(0,0,0,.45);
+  background: rgba(2, 8, 20, 0.62);
+  backdrop-filter: blur(3px);
   display: flex; align-items: center; justify-content: center;
   z-index: 500;
+  padding: 16px;
 }
 .ua-modal {
-  background: #fff;
-  border-radius: 16px;
-  padding: 32px;
-  width: 420px;
-  max-width: 92vw;
-  box-shadow: 0 20px 60px rgba(0,0,0,.2);
+  border-radius: 18px;
+  padding: 26px;
+  width: min(92vw, 560px);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  background: linear-gradient(165deg, #f8fbff 0%, #edf3fc 100%);
+  box-shadow: 0 28px 70px rgba(2, 8, 20, 0.38);
 }
 .ua-modal h2 {
-  margin: 0 0 4px; font-size: 1.15rem; font-weight: 800; color: #1f2937;
+  margin: 0 0 4px; font-size: 1.55rem; font-weight: 800; color: #1f2937;
 }
 .ua-modal__sub {
-  font-size: 0.88rem; color: #6b7280; margin: 0 0 20px;
+  font-size: 1.04rem; color: #6a84aa; margin: 0 0 18px;
 }
 .ua-modal__label {
-  display: block; font-size: 0.8rem; font-weight: 700;
-  color: #374151; margin-bottom: 6px; margin-top: 14px;
+  display: block; font-size: 1.04rem; font-weight: 800;
+  color: #7e9fc8; margin-bottom: 8px; margin-top: 14px;
 }
 .ua-modal__input {
-  width: 100%; padding: 10px 12px;
-  border: 1.5px solid #d1d5db; border-radius: 8px;
-  font-size: 0.88rem; color: #1f2937;
+  width: 100%; padding: 12px 14px;
+  border: 1.5px solid #b7c0cc; border-radius: 11px;
+  font-size: 1rem; color: #1f2937;
   box-sizing: border-box;
 }
 .ua-modal__input:focus {
-  outline: none; border-color: #3b82f6;
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
 }
 .ua-modal__textarea {
-  width: 100%; padding: 10px 12px;
-  border: 1.5px solid #d1d5db; border-radius: 8px;
-  font-size: 0.88rem; color: #1f2937; resize: vertical;
+  width: 100%; padding: 12px 14px;
+  border: 1.5px solid #b7c0cc; border-radius: 11px;
+  font-size: 0.98rem; color: #1f2937; resize: vertical;
   font-family: inherit;
   box-sizing: border-box;
+  min-height: 96px;
 }
 .ua-modal__textarea:focus {
-  outline: none; border-color: #3b82f6;
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+
+.ua-modal__hint {
+  margin: 0 0 4px;
+  font-size: 0.87rem;
+  color: #64748b;
+}
+
+.ua-modal__error {
+  margin: 0 0 4px;
+  font-size: 0.86rem;
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.ua-modal__slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ua-modal__slot {
+  border: 1px solid rgba(37, 99, 235, 0.3);
+  background: #ffffff;
+  color: #1e3a8a;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ua-modal__slot:hover {
+  background: #dbeafe;
+}
+
+.ua-modal__slot--active {
+  background: #2563eb;
+  color: #ffffff;
+  border-color: #2563eb;
 }
 .ua-modal__actions {
   display: flex; gap: 10px; margin-top: 22px; justify-content: flex-end;
 }
 .ua-modal__btn {
-  padding: 10px 22px; border-radius: 10px;
-  font-size: 0.85rem; font-weight: 700;
+  padding: 11px 22px; border-radius: 12px;
+  font-size: 0.84rem; font-weight: 800;
   cursor: pointer; border: none;
   transition: all .2s;
 }
 .ua-modal__btn--cancel {
-  background: #f3f4f6; color: #6b7280;
+  background: #e5e7eb; color: #64748b;
 }
 .ua-modal__btn--cancel:hover {
-  background: #e5e7eb;
+  background: #d1d5db;
 }
 .ua-modal__btn--confirm {
-  background: #1c1f2e; color: #fff;
+  background: #1f2937; color: #fff;
 }
 .ua-modal__btn--confirm:hover {
-  background: #2d3148;
+  background: #111827;
 }
 .ua-modal__btn--confirm:disabled {
   opacity: .5; cursor: not-allowed;

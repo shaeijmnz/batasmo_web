@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import './MyAppointments.css';
 import { fetchClientAppointmentsData, payForAppointment } from '../lib/userApi';
 import { isValidPhoneNumber, VALID_PHONE_MESSAGE } from '../lib/validators';
@@ -95,7 +95,6 @@ const FeesIcon = () => (
 function MyAppointments({ onNavigate, profile }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [appointments, setAppointments] = useState([]);
-  const [filterStatus, setFilterStatus] = useState('All');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedAppointmentForPayment, setSelectedAppointmentForPayment] = useState(null);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('');
@@ -107,72 +106,157 @@ function MyAppointments({ onNavigate, profile }) {
   const [showTranscriptModal, setShowTranscriptModal] = useState(false);
   const [selectedAppointmentForTranscript, setSelectedAppointmentForTranscript] = useState(null);
   const [loadError, setLoadError] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
 
-  useEffect(() => {
-    let isMounted = true;
+  const loadAppointments = useCallback(async (options = {}) => {
+    if (!profile?.id) return;
+    if (!options.silent) setIsRefreshing(true);
 
-    const loadAppointments = async () => {
-      if (!profile?.id) return;
-
-      try {
-        const rows = await fetchClientAppointmentsData(profile.id);
-        if (!isMounted) return;
-        setAppointments(rows);
-        setLoadError('');
-      } catch (error) {
-        if (isMounted) {
-          setLoadError(error.message || 'Unable to load appointments.');
-        }
-      }
-    };
-
-    loadAppointments();
-
-    return () => {
-      isMounted = false;
-    };
+    try {
+      const rows = await fetchClientAppointmentsData(profile.id);
+      setAppointments(rows);
+      setLoadError('');
+      setLastUpdatedAt(new Date());
+    } catch (error) {
+      setLoadError(error.message || 'Unable to load appointments.');
+    } finally {
+      if (!options.silent) setIsRefreshing(false);
+    }
   }, [profile?.id]);
 
-  const statusCounts = useMemo(() => ({
-    Pending: appointments.filter(a => a.status === 'PENDING').length,
-    Approved: appointments.filter(a => a.status === 'APPROVED').length,
-    Completed: appointments.filter(a => a.status === 'COMPLETED').length,
-    Rejected: appointments.filter(a => a.status === 'REJECTED').length,
-  }), [appointments]);
+  useEffect(() => {
+    loadAppointments();
+  }, [loadAppointments]);
 
-  const filteredAppointments = useMemo(() => (
-    filterStatus === 'All'
-      ? appointments
-      : appointments.filter(a => a.status === filterStatus.toUpperCase())
-  ), [appointments, filterStatus]);
+  const upcomingAppointments = useMemo(
+    () => appointments.filter((item) => ['PENDING', 'APPROVED'].includes(String(item.status || '').toUpperCase())),
+    [appointments],
+  );
 
-  const getStatusBadgeColor = (status) => {
-    switch(status) {
-      case 'PENDING': return '#fef08a';
-      case 'APPROVED': return '#d1fae5';
-      case 'COMPLETED': return '#d1d5db';
-      case 'REJECTED': return '#fee2e2';
-      default: return '#e5e7eb';
-    }
+  const groupedAppointments = useMemo(() => {
+    const today = [];
+    const tomorrow = [];
+    const week = [];
+
+    const now = new Date();
+    const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrowMidnight = new Date(todayMidnight);
+    tomorrowMidnight.setDate(todayMidnight.getDate() + 1);
+    const weekLimit = new Date(todayMidnight);
+    weekLimit.setDate(todayMidnight.getDate() + 7);
+
+    upcomingAppointments.forEach((appointment) => {
+      const timestamp = Number(appointment.scheduledAtTs || 0);
+      if (!timestamp) {
+        week.push(appointment);
+        return;
+      }
+
+      const parsed = new Date(timestamp);
+
+      const dayOnly = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+      if (dayOnly.getTime() === todayMidnight.getTime()) {
+        today.push(appointment);
+      } else if (dayOnly.getTime() === tomorrowMidnight.getTime()) {
+        tomorrow.push(appointment);
+      } else if (dayOnly > tomorrowMidnight && dayOnly <= weekLimit) {
+        week.push(appointment);
+      } else {
+        week.push(appointment);
+      }
+    });
+
+    const sortByTime = (rows) =>
+      rows.slice().sort((a, b) => Number(a.scheduledAtTs || 0) - Number(b.scheduledAtTs || 0));
+
+    return {
+      today: sortByTime(today),
+      tomorrow: sortByTime(tomorrow),
+      week: sortByTime(week),
+    };
+  }, [upcomingAppointments]);
+
+  const totalUpcoming = groupedAppointments.today.length + groupedAppointments.tomorrow.length + groupedAppointments.week.length;
+  const lastUpdatedLabel = lastUpdatedAt
+    ? lastUpdatedAt.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' })
+    : 'Not yet synced';
+
+  const formatAttorneyName = (name) =>
+    String(name || 'Attorney')
+      .replace(/^\s*(atty\.?\s*)+/i, '')
+      .trim();
+
+  const getInitials = (name) =>
+    String(name || 'AT')
+      .split(' ')
+      .filter(Boolean)
+      .map((part) => part[0])
+      .slice(0, 2)
+      .join('')
+      .toUpperCase();
+
+  const renderAppointmentCard = (appointment) => {
+    const canPay = appointment.status === 'APPROVED' && appointment.payment === 'UNPAID';
+    const canEnterChat = appointment.chatAccessible && appointment.payment === 'PAID' && appointment.status !== 'COMPLETED';
+    const attorneyName = formatAttorneyName(appointment.attorney);
+    const areaLabel = String(appointment.specialty || 'Consultation').toUpperCase();
+
+    return (
+      <div key={appointment.id} className="ma-appointment-card ma-appointment-card--queue">
+        <div className="ma-queue-card__top">
+          <div className="ma-queue-card__avatar">{getInitials(attorneyName)}</div>
+          <div className="ma-queue-card__info">
+            <h3 className="ma-attorney-name">{attorneyName}</h3>
+            <p className="ma-queue-card__area">CONSULTATION - {areaLabel}</p>
+          </div>
+        </div>
+
+        <div className="ma-queue-card__bottom">
+          <div className="ma-queue-card__schedule">
+            <CalendarIcon />
+            <span>{appointment.date} • {appointment.time}</span>
+          </div>
+
+          <div className="ma-queue-card__btns">
+            <button
+              className="ma-btn ma-btn--queue-secondary"
+              disabled={!canPay}
+              onClick={() => canPay && openPaymentModal(appointment)}
+            >
+              PROCEED TO PAYMENT
+            </button>
+            <button
+              className="ma-btn ma-btn--queue-primary"
+              disabled={!canEnterChat}
+              onClick={() => canEnterChat && onNavigate('chat-room', { appointmentId: appointment.id })}
+            >
+              ENTER CONSULTATION
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   };
 
-  const getStatusTextColor = (status) => {
-    switch(status) {
-      case 'PENDING': return '#b45309';
-      case 'APPROVED': return '#065f46';
-      case 'COMPLETED': return '#374151';
-      case 'REJECTED': return '#991b1b';
-      default: return '#4b5563';
-    }
-  };
-
-  const getPaymentBadgeColor = (payment) => {
-    return payment === 'PAID' ? '#dcfce7' : '#fef3c7';
-  };
-
-  const getPaymentTextColor = (payment) => {
-    return payment === 'PAID' ? '#166534' : '#b45309';
-  };
+  const renderSection = (title, sectionAppointments) => (
+    <section className="ma-queue-section" key={title}>
+      <div className="ma-queue-section__header">
+        <h2>{title}</h2>
+        <span>{sectionAppointments.length}</span>
+      </div>
+      <div className="ma-appointments-list">
+        {sectionAppointments.length > 0 ? (
+          sectionAppointments.map(renderAppointmentCard)
+        ) : (
+          <div className="ma-empty-state">
+            <p className="ma-empty-state__title">No appointments yet</p>
+            <p className="ma-empty-state__text">New bookings for you will appear here automatically.</p>
+          </div>
+        )}
+      </div>
+    </section>
+  );
 
 
   const openPaymentModal = (appointment) => {
@@ -316,134 +400,33 @@ function MyAppointments({ onNavigate, profile }) {
       {/* Main */}
       <main className="ma-main">
           {loadError ? <p>{loadError}</p> : null}
-        <div className="ma-header">
-          <h1>My Appointments</h1>
-          <p>Manage and track all your appointments</p>
-        </div>
-
         <div className="ma-container">
-          {/* Status Filters */}
-          <div className="ma-filters">
-            <button 
-              className={`ma-filter-btn ${filterStatus === 'All' ? 'ma-filter-btn--active' : ''}`}
-              onClick={() => setFilterStatus('All')}
+          <section className="ma-summary">
+            <div>
+              <p className="ma-summary__label">UPCOMING CONSULTATIONS</p>
+              <h2 className="ma-summary__count">{totalUpcoming}</h2>
+              <p className="ma-summary__meta">Last synced: {lastUpdatedLabel}</p>
+            </div>
+            <button
+              className="ma-summary__refresh"
+              type="button"
+              onClick={() => loadAppointments()}
+              disabled={isRefreshing}
             >
-              All ({appointments.length})
+              {isRefreshing ? 'Refreshing...' : 'Refresh'}
             </button>
-            <button 
-              className={`ma-filter-btn ${filterStatus === 'Pending' ? 'ma-filter-btn--active' : ''}`}
-              onClick={() => setFilterStatus('Pending')}
-            >
-              Pending: {statusCounts.Pending}
-            </button>
-            <button 
-              className={`ma-filter-btn ${filterStatus === 'Approved' ? 'ma-filter-btn--active' : ''}`}
-              onClick={() => setFilterStatus('Approved')}
-            >
-              Approved: {statusCounts.Approved}
-            </button>
-            <button 
-              className={`ma-filter-btn ${filterStatus === 'Completed' ? 'ma-filter-btn--active' : ''}`}
-              onClick={() => setFilterStatus('Completed')}
-            >
-              Completed: {statusCounts.Completed}
-            </button>
-            <button 
-              className={`ma-filter-btn ${filterStatus === 'Rejected' ? 'ma-filter-btn--active' : ''}`}
-              onClick={() => setFilterStatus('Rejected')}
-            >
-              Rejected: {statusCounts.Rejected}
-            </button>
-          </div>
+          </section>
 
-          {/* Appointments List */}
-          <div className="ma-appointments-list">
-            {filteredAppointments.length > 0 ? (
-              filteredAppointments.map(appointment => (
-                <div key={appointment.id} className="ma-appointment-card">
-                  <div className="ma-card-header">
-                    <div className="ma-attorney-info">
-                      <h3 className="ma-attorney-name">
-                        Atty. {appointment.attorney}
-                      </h3>
-                      <p className="ma-specialty">{appointment.specialty}</p>
-                    </div>
-                    <div className="ma-badges">
-                      <span 
-                        className="ma-badge ma-badge--status"
-                        style={{
-                          backgroundColor: getStatusBadgeColor(appointment.status),
-                          color: getStatusTextColor(appointment.status)
-                        }}
-                      >
-                        {appointment.status}
-                      </span>
-                      <span 
-                        className="ma-badge ma-badge--payment"
-                        style={{
-                          backgroundColor: getPaymentBadgeColor(appointment.payment),
-                          color: getPaymentTextColor(appointment.payment)
-                        }}
-                      >
-                        {appointment.payment}
-                      </span>
-                    </div>
-                  </div>
+          <section className="ma-reschedule-note" aria-label="Reschedule notice">
+            <p className="ma-reschedule-note__title">Need to reschedule?</p>
+            <p className="ma-reschedule-note__text">
+              Please contact your attorney directly by email or SMS to request schedule changes.
+            </p>
+          </section>
 
-                  <div className="ma-appointment-details">
-                    <div className="ma-detail">
-                      <CalendarIcon />
-                      <span>{appointment.date}</span>
-                    </div>
-                    <div className="ma-detail">
-                      <ClockIcon />
-                      <span>{appointment.time}</span>
-                    </div>
-                    <div className="ma-detail">
-                      <LocationIcon />
-                      <span>{appointment.type}</span>
-                    </div>
-                    <div className="ma-detail">
-                      <FeesIcon />
-                      <span className="ma-fee">{appointment.fee}</span>
-                    </div>
-                  </div>
-
-                  <div className="ma-status-message">
-                    <div className="ma-message-icon">⚠</div>
-                    <div className="ma-message-content">
-                      <strong>{appointment.message}</strong>
-                      <p>{appointment.description}</p>
-                    </div>
-                  </div>
-
-                  <div className="ma-card-actions">
-                    <button 
-                      className="ma-btn ma-btn--primary" 
-                      disabled={appointment.status === 'PENDING' || appointment.payment === 'PAID'}
-                      onClick={() => openPaymentModal(appointment)}
-                      title={appointment.status === 'PENDING' ? 'Payment available after attorney approval' : appointment.payment === 'PAID' ? 'Payment already completed' : 'Proceed with payment'}
-                    >
-                      Proceed to Payment
-                    </button>
-                    {appointment.status === 'COMPLETED' && (
-                      <button 
-                        className="ma-btn ma-btn--tertiary"
-                        onClick={() => openTranscriptModal(appointment)}
-                        title="View consultation transcript and summary"
-                      >
-                        View Transcript
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="ma-empty-state">
-                <p>No appointments found for this status.</p>
-              </div>
-            )}
-          </div>
+          {renderSection("TODAY'S APPOINTMENTS", groupedAppointments.today)}
+          {renderSection("TOMORROW'S APPOINTMENTS", groupedAppointments.tomorrow)}
+          {renderSection('UPCOMING THIS WEEK', groupedAppointments.week)}
         </div>
       </main>
 
@@ -462,7 +445,7 @@ function MyAppointments({ onNavigate, profile }) {
                 <h4>Payment Summary</h4>
                 <div className="ma-payment-summary-row">
                   <span>Attorney:</span>
-                  <span>Atty. {selectedAppointmentForPayment.attorney}</span>
+                  <span>Atty. {formatAttorneyName(selectedAppointmentForPayment.attorney)}</span>
                 </div>
                 <div className="ma-payment-summary-row">
                   <span>Consultation Date:</span>
@@ -603,7 +586,7 @@ function MyAppointments({ onNavigate, profile }) {
                 </div>
                 <div className="ma-receipt-row">
                   <span>Attorney:</span>
-                  <span>Atty. {selectedAppointmentForPayment.attorney}</span>
+                  <span>Atty. {formatAttorneyName(selectedAppointmentForPayment.attorney)}</span>
                 </div>
                 <div className="ma-receipt-row">
                   <span>Consultation:</span>
@@ -626,7 +609,7 @@ function MyAppointments({ onNavigate, profile }) {
               <div className="ma-confirm-what-next ma-confirm-what-next--green">
                 <h4>Your Appointment is Confirmed!</h4>
                 <ul>
-                  <li>Your consultation with Atty. {selectedAppointmentForPayment.attorney} is now fully confirmed</li>
+                  <li>Your consultation with Atty. {formatAttorneyName(selectedAppointmentForPayment.attorney)} is now fully confirmed</li>
                   <li>You will receive a reminder notification before your appointment</li>
                   <li>A payment receipt has been sent to your registered email</li>
                 </ul>
@@ -652,7 +635,7 @@ function MyAppointments({ onNavigate, profile }) {
               <div className="ma-transcript-info">
                 <div className="ma-transcript-info-row">
                   <span className="ma-transcript-label">Attorney:</span>
-                  <span className="ma-transcript-value">Atty. {selectedAppointmentForTranscript.attorney}</span>
+                  <span className="ma-transcript-value">Atty. {formatAttorneyName(selectedAppointmentForTranscript.attorney)}</span>
                 </div>
                 <div className="ma-transcript-info-row">
                   <span className="ma-transcript-label">Specialty:</span>
@@ -673,7 +656,7 @@ function MyAppointments({ onNavigate, profile }) {
                 <h3>Consultation Summary</h3>
                 <div className="ma-transcript-summary-box">
                   <p>
-                    You had a consultation session with {selectedAppointmentForTranscript.attorney} regarding {selectedAppointmentForTranscript.specialty.toLowerCase()}.
+                    You had a consultation session with {formatAttorneyName(selectedAppointmentForTranscript.attorney)} regarding {selectedAppointmentForTranscript.specialty.toLowerCase()}.
                     The session covered important legal matters and provided comprehensive guidance on the next steps to address your concerns.
                   </p>
                   <p>

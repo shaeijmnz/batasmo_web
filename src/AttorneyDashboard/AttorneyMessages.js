@@ -7,12 +7,22 @@ import {
   fetchAppointmentMessages,
   fetchAttorneyUpcomingAppointments,
   getSignedUrlForAppointmentMessage,
-  isConsultationChatActiveStatus,
+  isConsultationChatWindowOpen,
+  notifyClientConsultationTimeWarning,
   sendAppointmentAttachment,
   sendAppointmentMessage,
   subscribeToAttorneyAppointments,
   subscribeToAppointmentMessages,
 } from '../lib/userApi';
+
+const CONSULTATION_TIMER_TOTAL_SECONDS = 60 * 60;
+
+const formatTimerLabel = (totalSeconds) => {
+  const safeSeconds = Math.max(0, Number(totalSeconds || 0));
+  const minutes = Math.floor(safeSeconds / 60);
+  const seconds = safeSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+};
 
 /* ── Icons ── */
 const ScalesIcon = ({ size = 24, color = '#f5a623' }) => (
@@ -72,11 +82,15 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
   const [loadError, setLoadError] = useState('');
   const [sending, setSending] = useState(false);
   const [endingSession, setEndingSession] = useState(false);
+  const [endSessionConfirmOpen, setEndSessionConfirmOpen] = useState(false);
   const [deletingMessageId, setDeletingMessageId] = useState('');
   const [signedUrlsByMessageId, setSignedUrlsByMessageId] = useState({});
+  const [remainingSeconds, setRemainingSeconds] = useState(CONSULTATION_TIMER_TOTAL_SECONDS);
   const messagesEndRef = useRef(null);
   const imagePickerRef = useRef(null);
   const filePickerRef = useRef(null);
+  const timerStartedAtByAppointmentRef = useRef({});
+  const tenMinuteReminderSentByAppointmentRef = useRef({});
 
   const mergeRealtimeMessage = (incoming) => {
     setMessages((previous) => {
@@ -117,7 +131,14 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
         const rows = await fetchAttorneyUpcomingAppointments(profile.id, options);
         if (!isMounted) return;
 
-        const activeRows = rows.filter((row) => isConsultationChatActiveStatus(row.status));
+        const activeRows = rows.filter((row) =>
+          isConsultationChatWindowOpen({
+            status: row.status,
+            scheduledAt: row.scheduledAt,
+            slotDate: row.slotDate,
+            slotTime: row.slotTime,
+          }),
+        );
         setAppointments(activeRows);
         setActiveAppointmentId((prev) => {
           if (!activeRows.length) return ''
@@ -129,7 +150,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
         })
 
         if (!activeRows.length) {
-          setLoadError('Consultation chat will be available once an appointment is marked as started/active.');
+          setLoadError('Consultation chat opens at the scheduled appointment time.');
         } else {
           setLoadError('');
         }
@@ -146,9 +167,14 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
       loadAppointments({ force: true });
     });
 
+    const refreshId = window.setInterval(() => {
+      loadAppointments({ force: true });
+    }, 30000);
+
     return () => {
       isMounted = false;
       unsubscribe();
+      window.clearInterval(refreshId);
     };
   }, [profile?.id, initialAppointmentId]);
 
@@ -302,6 +328,50 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
       unsubscribe();
     };
   }, [activeAppointmentId]);
+
+  useEffect(() => {
+    if (!activeAppointmentId || isClosed) {
+      setRemainingSeconds(CONSULTATION_TIMER_TOTAL_SECONDS);
+      return undefined;
+    }
+
+    const appointmentKey = String(activeAppointmentId);
+    if (!timerStartedAtByAppointmentRef.current[appointmentKey]) {
+      timerStartedAtByAppointmentRef.current[appointmentKey] = Date.now();
+    }
+
+    let timerCancelled = false;
+
+    const notifyTenMinuteWarning = async () => {
+      try {
+        await notifyClientConsultationTimeWarning(appointmentKey);
+      } catch (error) {
+        if (!timerCancelled) {
+          console.warn('[chat-timer] failed to send client ten-minute warning', error);
+        }
+      }
+    };
+
+    const tick = () => {
+      const startedAt = timerStartedAtByAppointmentRef.current[appointmentKey] || Date.now();
+      const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
+      const nextRemaining = Math.max(0, CONSULTATION_TIMER_TOTAL_SECONDS - elapsedSeconds);
+      setRemainingSeconds(nextRemaining);
+
+      if (nextRemaining <= 10 * 60 && !tenMinuteReminderSentByAppointmentRef.current[appointmentKey]) {
+        tenMinuteReminderSentByAppointmentRef.current[appointmentKey] = true;
+        notifyTenMinuteWarning();
+      }
+    };
+
+    tick();
+    const intervalId = window.setInterval(tick, 1000);
+
+    return () => {
+      timerCancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [activeAppointmentId, isClosed]);
 
   useEffect(() => {
     if (!activeAppointmentId) return undefined;
@@ -477,11 +547,10 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
 
   const handleEndSession = async () => {
     if (!activeAppointmentId || isClosed || endingSession) return;
-    const shouldEnd = window.confirm('End this consultation session now? This will close chat for both sides.');
-    if (!shouldEnd) return;
 
     try {
       setEndingSession(true);
+      setEndSessionConfirmOpen(false);
       await endConsultationSession(activeAppointmentId);
       setIsClosed(true);
       setLoadError('');
@@ -491,6 +560,11 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
     } finally {
       setEndingSession(false);
     }
+  };
+
+  const openEndSessionConfirm = () => {
+    if (!activeAppointmentId || isClosed || endingSession) return;
+    setEndSessionConfirmOpen(true);
   };
 
   const renderMessageBody = (msg, isAttorney) => {
@@ -566,6 +640,8 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
     .slice(0, 2)
     .join('')
     .toUpperCase();
+  const timerLabel = formatTimerLabel(remainingSeconds);
+  const isTenMinuteWindow = remainingSeconds <= 10 * 60;
 
   return (
     <div className="am-page">
@@ -625,30 +701,26 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
               {isClosed ? 'Consultation Closed' : 'Online'}
             </span>
           </div>
-          {appointments.length > 0 ? (
-            <select
-              value={activeAppointmentId}
-              onChange={(e) => setActiveAppointmentId(String(e.target.value))}
-              style={{ marginLeft: 'auto' }}
-            >
-              {appointments.map((item) => (
-                <option key={item.id} value={String(item.id)}>
-                  {item.name} - {item.area}
-                </option>
-              ))}
-            </select>
-          ) : null}
           {activeAppointmentId && !isClosed ? (
+            <div className={`am-timer-chip ${isTenMinuteWindow ? 'am-timer-chip--warning' : ''}`}>
+              <span className="am-timer-chip__label">Session Timer</span>
+              <span className="am-timer-chip__value">{timerLabel}</span>
+            </div>
+          ) : null}
+        </div>
+
+        {activeAppointmentId && !isClosed ? (
+          <div className="am-chat-actions">
             <button
               type="button"
-              className="am-end-session-btn"
-              onClick={handleEndSession}
+              className="am-end-session-btn am-end-session-btn--top"
+              onClick={openEndSessionConfirm}
               disabled={endingSession}
             >
               {endingSession ? 'Ending...' : 'End Session'}
             </button>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
 
         {/* Messages */}
         <div className="am-messages">
@@ -751,6 +823,33 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
           </button>
         </div>
       </div>
+
+      {endSessionConfirmOpen ? (
+        <div className="am-confirm-overlay" onClick={() => setEndSessionConfirmOpen(false)}>
+          <div className="am-confirm-modal" onClick={(event) => event.stopPropagation()}>
+            <h3>End Consultation Session?</h3>
+            <p>This will close chat for both attorney and client.</p>
+            <div className="am-confirm-actions">
+              <button
+                type="button"
+                className="am-confirm-btn am-confirm-btn--ghost"
+                onClick={() => setEndSessionConfirmOpen(false)}
+                disabled={endingSession}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="am-confirm-btn am-confirm-btn--danger"
+                onClick={handleEndSession}
+                disabled={endingSession}
+              >
+                {endingSession ? 'Ending...' : 'Yes, End Session'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

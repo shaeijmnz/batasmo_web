@@ -71,7 +71,14 @@ const normalizeDateTimeForUi = (value) => {
 const mapAppointmentRow = (row) => {
   const client = Array.isArray(row?.client) ? row.client[0] : row?.client
   const attorney = Array.isArray(row?.attorney) ? row.attorney[0] : row?.attorney
-  const schedule = row?.scheduled_at || row?.preferred_date || row?.updated_at || row?.created_at || null
+  const slotDateTime = row?.slot_date && row?.slot_time ? parseSlotDateTime(row.slot_date, row.slot_time) : null
+  const schedule =
+    (slotDateTime ? slotDateTime.toISOString() : null) ||
+    row?.scheduled_at ||
+    row?.preferred_date ||
+    row?.updated_at ||
+    row?.created_at ||
+    null
   const datetime = normalizeDateTimeForUi(schedule)
   return {
     ...row,
@@ -82,6 +89,61 @@ const mapAppointmentRow = (row) => {
     time_label: datetime.time,
     parsed_scheduled_at: datetime.parsed,
   }
+}
+
+const formatNotificationTimestamp = (value) => {
+  if (!value) return 'Now'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return 'Now'
+  return parsed.toLocaleString()
+}
+
+const buildDerivedAttorneyNotifications = ({ appointments = [], paidTransactions = [] }) => {
+  const appointmentById = new Map(
+    (appointments || []).map((item) => [item.id, item]),
+  )
+
+  const bookingEvents = (appointments || [])
+    .filter((item) => {
+      const status = String(item?.status || '').toLowerCase()
+      return status !== 'cancelled' && status !== 'rejected'
+    })
+    .map((item) => {
+      const createdAt = item?.created_at || item?.updated_at || null
+      if (!createdAt) return null
+      return {
+        id: `derived-booking-${item.id}`,
+        text: `${item.client_name || 'A client'} booked ${item.title || 'a consultation'} on ${item.date_label} at ${item.time_label}.`,
+        time: formatNotificationTimestamp(createdAt),
+        unread: true,
+        sortAt: new Date(createdAt).getTime() || 0,
+      }
+    })
+    .filter(Boolean)
+
+  const paymentEvents = (paidTransactions || [])
+    .map((tx) => {
+      const createdAt = tx?.created_at || null
+      if (!createdAt) return null
+      const appointment = tx?.appointment_id ? appointmentById.get(tx.appointment_id) : null
+      const clientName = appointment?.client_name || 'A client'
+      const title = appointment?.title || 'a consultation'
+      const amount = Number(tx?.amount || 0)
+
+      return {
+        id: `derived-paid-${tx.id || `${tx.appointment_id || 'appt'}-${createdAt}`}`,
+        text: `${clientName} paid ${amount > 0 ? `PHP ${amount.toLocaleString()}` : 'for'} ${title}.`,
+        time: formatNotificationTimestamp(createdAt),
+        unread: true,
+        sortAt: new Date(createdAt).getTime() || 0,
+      }
+    })
+    .filter(Boolean)
+
+  return [...bookingEvents, ...paymentEvents]
+    .sort((a, b) => b.sortAt - a.sortAt)
+    .slice(0, 20)
+    .map(({ sortAt, ...notification }) => notification)
 }
 
 const invalidateAttorneyAppointmentsCache = (userId) => {
@@ -307,7 +369,7 @@ export async function fetchClientHomeData(userId) {
   const [appointmentsRes, notificationsRes, transactionsRes] = await Promise.all([
     supabase
       .from('appointments')
-      .select('id, title, scheduled_at, status, attorney:attorney_id(full_name), amount')
+      .select('id, title, scheduled_at, slot_date, slot_time, status, attorney:attorney_id(full_name), amount')
       .eq('client_id', userId)
       .order('scheduled_at', { ascending: true }),
     supabase
@@ -349,8 +411,17 @@ export async function fetchClientHomeData(userId) {
       area: item.title || 'Consultation',
       date: item.scheduled_at,
       time: item.scheduled_at,
+      scheduledAt: item.scheduled_at || null,
+      slotDate: item.slot_date || null,
+      slotTime: item.slot_time || null,
       status: item.status || 'pending',
       payment: paymentByAppointment.get(item.id) === 'paid' ? 'Paid' : 'Unpaid',
+      chatAccessible: isConsultationChatWindowOpen({
+        status: item.status,
+        scheduledAt: item.scheduled_at,
+        slotDate: item.slot_date,
+        slotTime: item.slot_time,
+      }),
     }))
 
   const notifications = (notificationsRes.data || []).map((n) => ({
@@ -363,6 +434,94 @@ export async function fetchClientHomeData(userId) {
   }))
 
   return { appointments, notifications }
+}
+
+export async function fetchClientNotifications(userId, options = {}) {
+  if (!userId) return []
+
+  const limit = Number(options?.limit || 20)
+  const [notificationsRes, appointmentsRes] = await Promise.all([
+    supabase
+      .from('notifications')
+      .select('id, title, body, type, is_read, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(Number.isFinite(limit) ? limit : 20),
+    supabase
+      .from('appointments')
+      .select('id, title, scheduled_at, status, updated_at, attorney:attorney_id(full_name)')
+      .eq('client_id', userId)
+      .eq('status', 'rescheduled')
+      .order('updated_at', { ascending: false })
+      .limit(Number.isFinite(limit) ? limit : 20),
+  ])
+
+  if (notificationsRes.error) throw notificationsRes.error
+  if (appointmentsRes.error) throw appointmentsRes.error
+
+  const storedNotifications = (notificationsRes.data || []).map((item) => ({
+    id: item.id,
+    type: item.type || 'general',
+    title: item.title || 'Notification',
+    desc: item.body || '',
+    time: formatNotificationTimestamp(item.created_at),
+    read: Boolean(item.is_read),
+    createdAt: item.created_at || null,
+  }))
+
+  const derivedRescheduleNotifications = (appointmentsRes.data || []).map((appointment) => {
+    const scheduled = normalizeDateTimeForUi(appointment.scheduled_at)
+    const createdAt = appointment.updated_at || appointment.scheduled_at || null
+    return {
+      id: `derived-reschedule-${appointment.id}-${createdAt || 'now'}`,
+      type: 'reschedule',
+      title: 'Appointment Rescheduled',
+      desc: `${appointment.attorney?.full_name || 'Your attorney'} moved ${appointment.title || 'your consultation'} to ${scheduled.date} at ${scheduled.time}.`,
+      time: formatNotificationTimestamp(createdAt),
+      read: false,
+      createdAt,
+    }
+  })
+
+  return [...storedNotifications, ...derivedRescheduleNotifications]
+    .reduce((acc, item) => {
+      if (!acc.some((existing) => existing.id === item.id)) {
+        acc.push(item)
+      }
+      return acc
+    }, [])
+    .sort((a, b) => {
+      const aTime = new Date(a.createdAt || 0).getTime() || 0
+      const bTime = new Date(b.createdAt || 0).getTime() || 0
+      return bTime - aTime
+    })
+    .slice(0, Number.isFinite(limit) ? limit : 20)
+}
+
+export function subscribeToClientNotifications(userId, onChange) {
+  if (!userId) return () => {}
+
+  const channel = supabase
+    .channel(`client-notifications:${userId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'notifications',
+        filter: `user_id=eq.${userId}`,
+      },
+      () => {
+        if (typeof onChange === 'function') {
+          onChange()
+        }
+      },
+    )
+    .subscribe()
+
+  return () => {
+    supabase.removeChannel(channel)
+  }
 }
 
 export async function fetchAttorneyHomeData(userId) {
@@ -383,7 +542,7 @@ export async function fetchAttorneyHomeData(userId) {
       .eq('attorney_id', userId),
     supabase
       .from('transactions')
-      .select('amount, payment_status, created_at')
+      .select('id, amount, payment_status, created_at, appointment_id, client_id')
       .eq('attorney_id', userId)
       .eq('payment_status', 'paid')
       .gte('created_at', monthStart),
@@ -421,17 +580,32 @@ export async function fetchAttorneyHomeData(userId) {
     area: a.title || 'Consultation',
     date: a.scheduled_value,
     time: a.scheduled_value,
+    scheduledAt: a.scheduled_value,
+    slotDate: a.slot_date || null,
+    slotTime: a.slot_time || null,
     status: a.status || 'pending',
   }))
 
-  const notifications = (notificationsRes.data || []).map((n) => ({
+  const storedNotifications = (notificationsRes.data || []).map((n) => ({
     id: n.id,
     text: `${n.title}: ${n.body}`,
-    time: n.created_at ? new Date(n.created_at).toLocaleString() : 'Now',
+    time: formatNotificationTimestamp(n.created_at),
     unread: !n.is_read,
   }))
 
-  const monthlyEarnings = (transactionsRes.data || []).reduce((sum, tx) => sum + Number(tx.amount || 0), 0)
+  const derivedNotifications = buildDerivedAttorneyNotifications({
+    appointments,
+    paidTransactions: transactionsRes.data || [],
+  })
+
+  const notifications = [...storedNotifications, ...derivedNotifications]
+    .reduce((acc, item) => {
+      if (!acc.some((existing) => existing.id === item.id)) {
+        acc.push(item)
+      }
+      return acc
+    }, [])
+    .slice(0, 20)
 
   return {
     consultations,
@@ -440,8 +614,52 @@ export async function fetchAttorneyHomeData(userId) {
       pendingCount,
       myAppointmentCount,
       notarialCount: (notarialRes.data || []).length,
-      monthlyEarnings,
     },
+  }
+}
+
+const normalizeConsultationTypeLabel = (title) => {
+  const raw = String(title || '').trim()
+  if (!raw) return 'General Consultation'
+
+  return raw
+    .replace(/consultation/gi, '')
+    .replace(/legal/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/[\-:]+$/g, '')
+    .trim() || 'General Consultation'
+}
+
+export async function fetchAttorneyConsultationAnalyticsData(userId) {
+  const { data, error } = await supabase
+    .from('appointments')
+    .select('id, title, status, scheduled_at')
+    .eq('attorney_id', userId)
+
+  if (error) throw error
+
+  const excludedStatuses = new Set(['rejected', 'cancelled'])
+  const countsByType = new Map()
+
+  ;(data || []).forEach((row) => {
+    const status = String(row?.status || '').toLowerCase()
+    if (excludedStatuses.has(status)) return
+
+    const typeLabel = normalizeConsultationTypeLabel(row?.title)
+    countsByType.set(typeLabel, Number(countsByType.get(typeLabel) || 0) + 1)
+  })
+
+  const rows = Array.from(countsByType.entries())
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count)
+
+  const total = rows.reduce((sum, item) => sum + Number(item.count || 0), 0)
+  const maxCount = rows.length ? rows[0].count : 0
+
+  return {
+    rows,
+    total,
+    maxCount,
   }
 }
 
@@ -779,6 +997,43 @@ export async function saveAttorneyAvailabilitySlots({ attorneyId, slots }) {
     return map
   }, new Map())
 
+  const targetDates = new Set(groupedByDate.keys())
+
+  const { data: existingRows, error: existingRowsError } = await supabase
+    .from('availability_slots')
+    .select('date')
+    .eq('attorney_id', attorneyId)
+    .eq('is_booked', false)
+    .gte('date', todayDate)
+
+  if (existingRowsError && !isMissingColumnError(existingRowsError, 'date')) {
+    throw existingRowsError
+  }
+
+  const existingDates = new Set(
+    (existingRows || [])
+      .map((row) => row.date)
+      .filter(Boolean),
+  )
+
+  for (const existingDate of existingDates) {
+    if (targetDates.has(existingDate)) continue
+
+    const { error: removeStaleDateError } = await supabase
+      .from('availability_slots')
+      .delete()
+      .eq('attorney_id', attorneyId)
+      .eq('date', existingDate)
+      .eq('is_booked', false)
+
+    if (removeStaleDateError) {
+      if (!isMissingColumnError(removeStaleDateError, 'date')) {
+        throw removeStaleDateError
+      }
+      break
+    }
+  }
+
   let lastDateError = null
 
   for (const [date, dateSlots] of groupedByDate.entries()) {
@@ -890,6 +1145,32 @@ const CHAT_ACTIVE_APPOINTMENT_STATUSES = new Set([
 const CHAT_ACCESS_BLOCKED_MESSAGE =
   'Consultation chat is unavailable until the appointment status is marked as started/active.'
 
+const parseChatScheduleDate = ({ scheduledAt, slotDate, slotTime } = {}) => {
+  if (slotDate && slotTime) {
+    const fromSlot = parseSlotDateTime(slotDate, slotTime)
+    if (fromSlot && !Number.isNaN(fromSlot.getTime())) return fromSlot
+  }
+
+  const raw = String(scheduledAt || '').trim()
+  if (!raw) return null
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw) && slotTime) {
+    const fromDateAndTime = parseSlotDateTime(raw, slotTime)
+    if (fromDateAndTime && !Number.isNaN(fromDateAndTime.getTime())) return fromDateAndTime
+  }
+
+  return normalizeDateTimeForUi(raw).parsed
+}
+
+const buildChatScheduleBlockedMessage = ({ scheduledAt, slotDate, slotTime } = {}) => {
+  const parsed = parseChatScheduleDate({ scheduledAt, slotDate, slotTime })
+  if (!parsed) return CHAT_ACCESS_BLOCKED_MESSAGE
+
+  const date = parsed.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
+  const time = parsed.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' })
+  return `Consultation chat opens at ${date} ${time} (PH time).`
+}
+
 const CHAT_LIMITS = {
   imageMaxBytes: 10 * 1024 * 1024,
   fileMaxBytes: 25 * 1024 * 1024,
@@ -964,11 +1245,23 @@ const validateChatAttachment = (sizeBytes, mime) => {
 export const isConsultationChatActiveStatus = (status) =>
   CHAT_ACTIVE_APPOINTMENT_STATUSES.has(String(status || '').toLowerCase())
 
+export const isConsultationChatWindowOpen = ({ status, scheduledAt, slotDate, slotTime, nowValue } = {}) => {
+  if (!isConsultationChatActiveStatus(status)) return false
+
+  const scheduled = parseChatScheduleDate({ scheduledAt, slotDate, slotTime })
+  if (!scheduled) return true
+
+  const now = nowValue instanceof Date ? nowValue : new Date(nowValue || Date.now())
+  if (Number.isNaN(now.getTime())) return false
+
+  return now.getTime() >= scheduled.getTime()
+}
+
 export async function fetchClientAppointmentsData(userId) {
   const [appointmentsRes, transactionsRes] = await Promise.all([
     supabase
       .from('appointments')
-      .select('id, title, notes, scheduled_at, status, amount, attorney_id, attorney:attorney_id(full_name)')
+      .select('id, title, notes, scheduled_at, slot_date, slot_time, status, amount, attorney_id, attorney:attorney_id(full_name)')
       .eq('client_id', userId)
       .order('scheduled_at', { ascending: false }),
     supabase
@@ -986,6 +1279,8 @@ export async function fetchClientAppointmentsData(userId) {
 
   return (appointmentsRes.data || []).map((item) => {
     const datetime = formatDateTime(item.scheduled_at)
+    const parsedSchedule = new Date(item.scheduled_at)
+    const scheduledAtTs = Number.isNaN(parsedSchedule.getTime()) ? 0 : parsedSchedule.getTime()
     const rawStatus = String(item.status || '').toLowerCase()
     const status = normalizeAppointmentStatus(item.status)
     const paymentStatus = (paymentByAppointment.get(item.id) || 'unpaid').toLowerCase()
@@ -1000,8 +1295,15 @@ export async function fetchClientAppointmentsData(userId) {
       type: 'Online Consultation',
       fee: `PHP ${Number(item.amount || 0).toFixed(2)}`,
       amount: Number(item.amount || 0),
+      scheduledAt: item.scheduled_at || null,
+      scheduledAtTs,
       rawStatus,
-      chatAccessible: isConsultationChatActiveStatus(rawStatus),
+      chatAccessible: isConsultationChatWindowOpen({
+        status: rawStatus,
+        scheduledAt: item.scheduled_at,
+        slotDate: item.slot_date,
+        slotTime: item.slot_time,
+      }),
       status,
       payment: paymentStatus === 'paid' ? 'PAID' : 'UNPAID',
       message:
@@ -1028,14 +1330,21 @@ export async function fetchClientAppointmentsData(userId) {
 export async function fetchClientChatEligibleAppointments(userId) {
   const { data, error } = await supabase
     .from('appointments')
-    .select('id, title, scheduled_at, status, attorney:attorney_id(full_name)')
+    .select('id, title, scheduled_at, slot_date, slot_time, status, attorney:attorney_id(full_name)')
     .eq('client_id', userId)
     .order('scheduled_at', { ascending: true })
 
   if (error) throw error
 
   return (data || [])
-    .filter((item) => isConsultationChatActiveStatus(item.status))
+    .filter((item) =>
+      isConsultationChatWindowOpen({
+        status: item.status,
+        scheduledAt: item.scheduled_at,
+        slotDate: item.slot_date,
+        slotTime: item.slot_time,
+      }),
+    )
     .map((item) => ({
       id: item.id,
       name: item.attorney?.full_name || 'Attorney',
@@ -1146,6 +1455,34 @@ export async function payForAppointment({ appointmentId, clientId, attorneyId, a
     .eq('id', appointmentId)
 
   if (appointmentError) throw appointmentError
+
+  try {
+    const { data: appointmentMeta } = await supabase
+      .from('appointments')
+      .select('title, scheduled_at')
+      .eq('id', appointmentId)
+      .maybeSingle()
+
+    const scheduled = normalizeDateTimeForUi(appointmentMeta?.scheduled_at)
+    const amountValue = Number(amount || 0)
+
+    const { error: clientNotificationError } = await supabase
+      .from('notifications')
+      .insert({
+        user_id: clientId,
+        title: 'Payment Confirmed',
+        body: `Your payment${amountValue > 0 ? ` of PHP ${amountValue.toLocaleString()}` : ''} for ${appointmentMeta?.title || 'your consultation'} has been received${scheduled.date !== 'TBD' ? ` (${scheduled.date} at ${scheduled.time})` : ''}.`,
+        type: 'payment',
+        is_read: false,
+        created_at: now,
+      })
+
+    if (clientNotificationError) {
+      console.warn('[payment] failed to create client payment notification', clientNotificationError)
+    }
+  } catch (clientNotificationFailure) {
+    console.warn('[payment] client payment notification step failed', clientNotificationFailure)
+  }
 }
 
 export async function requestAppointmentReschedule({ appointmentId, scheduledAt, note }) {
@@ -1345,7 +1682,7 @@ export async function fetchClientTransactions(userId) {
 }
 
 export async function fetchAttorneyConsultationRequests(userId, options = {}) {
-  const [appointments, notificationsRes] = await Promise.all([
+  const [appointments, notificationsRes, paidTransactionsRes] = await Promise.all([
     fetchAttorneyAppointments(userId, options),
     supabase
       .from('notifications')
@@ -1353,9 +1690,17 @@ export async function fetchAttorneyConsultationRequests(userId, options = {}) {
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(6),
+    supabase
+      .from('transactions')
+      .select('id, amount, created_at, appointment_id, client_id, payment_status')
+      .eq('attorney_id', userId)
+      .eq('payment_status', 'paid')
+      .order('created_at', { ascending: false })
+      .limit(10),
   ])
 
   if (notificationsRes.error) throw notificationsRes.error
+  if (paidTransactionsRes.error) throw paidTransactionsRes.error
 
   const requests = appointments
     .filter((item) => {
@@ -1395,12 +1740,26 @@ export async function fetchAttorneyConsultationRequests(userId, options = {}) {
     }
     })
 
-  const notifications = (notificationsRes.data || []).map((item) => ({
+  const storedNotifications = (notificationsRes.data || []).map((item) => ({
     id: item.id,
     text: `${item.title}: ${item.body}`,
-    time: item.created_at ? new Date(item.created_at).toLocaleString() : 'Now',
+    time: formatNotificationTimestamp(item.created_at),
     unread: !item.is_read,
   }))
+
+  const derivedNotifications = buildDerivedAttorneyNotifications({
+    appointments,
+    paidTransactions: paidTransactionsRes.data || [],
+  })
+
+  const notifications = [...storedNotifications, ...derivedNotifications]
+    .reduce((acc, item) => {
+      if (!acc.some((existing) => existing.id === item.id)) {
+        acc.push(item)
+      }
+      return acc
+    }, [])
+    .slice(0, 10)
 
   return { requests, notifications }
 }
@@ -1732,6 +2091,15 @@ export async function createAppointmentBooking({
     throw new Error('Missing appointment payload details.')
   }
 
+  const activeBookingCount = await fetchClientAttorneyActiveBookingCount({
+    clientId: resolvedClientId,
+    attorneyId: normalizedPayload.attorney_id,
+  })
+
+  if (activeBookingCount >= 2) {
+    throw new Error('Booking limit reached. You can only keep up to 2 active bookings with the same attorney.')
+  }
+
   normalizedPayload.scheduled_at = scheduledIso
 
   let appointmentId = null
@@ -1900,6 +2268,33 @@ export async function createAppointmentBooking({
       })
 
       if (txError) throw txError
+
+      try {
+        const whenLabel = new Date(normalizedPayload.scheduled_at).toLocaleString('en-PH', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+        })
+
+        const { error: paymentNotificationError } = await supabase
+          .from('notifications')
+          .insert({
+            user_id: resolvedClientId,
+            title: 'Payment Confirmed',
+            body: `Your payment for ${normalizedPayload.title || 'your consultation'} on ${whenLabel} has been received.`,
+            type: 'payment',
+            is_read: false,
+            created_at: nowIso,
+          })
+
+        if (paymentNotificationError) {
+          console.warn('[booking] failed to create client payment notification', paymentNotificationError)
+        }
+      } catch (paymentNotificationFailure) {
+        console.warn('[booking] client payment notification step failed', paymentNotificationFailure)
+      }
     }
   }
 
@@ -1931,8 +2326,23 @@ export async function createAppointmentBooking({
       if (notificationError) {
         console.warn('[booking] failed to create attorney notification', notificationError)
       }
+
+      const { error: clientBookingNotificationError } = await supabase
+        .from('notifications')
+        .insert({
+          user_id: resolvedClientId,
+          title: 'Booking Submitted',
+          body: `Your booking for ${normalizedPayload.title || 'a consultation'} on ${whenLabel} was submitted successfully.`,
+          type: 'consultation',
+          is_read: false,
+          created_at: nowIso,
+        })
+
+      if (clientBookingNotificationError) {
+        console.warn('[booking] failed to create client booking notification', clientBookingNotificationError)
+      }
     } catch (notificationFailure) {
-      console.warn('[booking] attorney notification step failed', notificationFailure)
+      console.warn('[booking] notification step failed', notificationFailure)
     }
   }
 
@@ -1941,10 +2351,35 @@ export async function createAppointmentBooking({
   return { success: true, appointmentId, payload: normalizedPayload }
 }
 
+export async function fetchClientAttorneyActiveBookingCount({ clientId, attorneyId }) {
+  if (!clientId || !attorneyId) return 0
+
+  const ACTIVE_LIMIT_STATUSES = new Set([
+    'pending',
+    'confirmed',
+    'rescheduled',
+    'started',
+    'in_progress',
+    'in-progress',
+    'active',
+    'approved',
+  ])
+
+  const { data, error } = await supabase
+    .from('appointments')
+    .select('id, status')
+    .eq('client_id', clientId)
+    .eq('attorney_id', attorneyId)
+
+  if (error) throw error
+
+  return (data || []).filter((item) => ACTIVE_LIMIT_STATUSES.has(String(item?.status || '').toLowerCase())).length
+}
+
 async function getOrCreateConsultationRoom(appointmentId) {
   const { data: appointment, error: appointmentError } = await supabase
     .from('appointments')
-    .select('status')
+    .select('status, scheduled_at, slot_date, slot_time')
     .eq('id', appointmentId)
     .maybeSingle()
 
@@ -1953,6 +2388,23 @@ async function getOrCreateConsultationRoom(appointmentId) {
   const status = String(appointment?.status || '').toLowerCase()
   if (!isConsultationChatActiveStatus(status)) {
     throw new Error(CHAT_ACCESS_BLOCKED_MESSAGE)
+  }
+
+  if (
+    !isConsultationChatWindowOpen({
+      status,
+      scheduledAt: appointment?.scheduled_at,
+      slotDate: appointment?.slot_date,
+      slotTime: appointment?.slot_time,
+    })
+  ) {
+    throw new Error(
+      buildChatScheduleBlockedMessage({
+        scheduledAt: appointment?.scheduled_at,
+        slotDate: appointment?.slot_date,
+        slotTime: appointment?.slot_time,
+      }),
+    )
   }
 
   const { data: room, error: roomError } = await supabase
@@ -2238,6 +2690,44 @@ export async function endConsultationSession(appointmentId) {
 
   if (appointmentUpdateError) throw new Error(appointmentUpdateError.message)
   invalidateAttorneyAppointmentsCache(appointment.attorney_id)
+  return true
+}
+
+export async function notifyClientConsultationTimeWarning(appointmentId) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) throw new Error('Not authenticated')
+  if (!appointmentId) throw new Error('Appointment is required.')
+
+  const { data: appointment, error: appointmentError } = await supabase
+    .from('appointments')
+    .select('id, attorney_id, client_id, title')
+    .eq('id', appointmentId)
+    .maybeSingle()
+
+  if (appointmentError) throw new Error(appointmentError.message)
+  if (!appointment) throw new Error('Appointment not found.')
+  if (String(appointment.attorney_id) !== String(user.id)) {
+    throw new Error('Only the assigned attorney can send this reminder.')
+  }
+
+  const nowIso = new Date().toISOString()
+  const consultationLabel = appointment.title || 'your consultation'
+
+  const { error: notificationError } = await supabase
+    .from('notifications')
+    .insert({
+      user_id: appointment.client_id,
+      title: 'Consultation Reminder',
+      body: `Only 10 minutes left in ${consultationLabel}. Please prepare your final questions. Ref #${appointment.id}`,
+      type: 'consultation_time_warning',
+      is_read: false,
+      created_at: nowIso,
+    })
+
+  if (notificationError) throw new Error(notificationError.message)
   return true
 }
 
@@ -2628,6 +3118,8 @@ export async function fetchAttorneyUpcomingAppointments(userId, options = {}) {
         date: dateLabel,
         time: timeLabel,
         scheduledAt: item.scheduled_value,
+        slotDate: item.slot_date || null,
+        slotTime: item.slot_time || null,
         status: item.status,
         color: '#6366f1',
         concern: item.notes || '',
@@ -2722,18 +3214,36 @@ export async function fetchConsultationTranscriptForAppointment(appointmentId) {
 }
 
 export async function rescheduleAttorneyAppointment({ appointmentId, scheduledAt, note }) {
+  if (!appointmentId) throw new Error('Appointment is required.')
+  if (!scheduledAt) throw new Error('Scheduled date/time is required.')
+
+  const { data: existingAppointment, error: existingError } = await supabase
+    .from('appointments')
+    .select('id, title, notes, scheduled_at, attorney_id, client_id')
+    .eq('id', appointmentId)
+    .maybeSingle()
+
+  if (existingError) throw existingError
+  if (!existingAppointment) throw new Error('Appointment not found.')
+
   let mergedNote = note || null
   if (note) {
-    const { data: existingAppointment } = await supabase
-      .from('appointments')
-      .select('notes')
-      .eq('id', appointmentId)
-      .maybeSingle()
-
     mergedNote = existingAppointment?.notes
       ? `${existingAppointment.notes}\n\nReschedule reason: ${note}`
       : `Reschedule reason: ${note}`
   }
+
+  const toSlotParts = (value) => {
+    const parsed = new Date(value)
+    if (Number.isNaN(parsed.getTime())) return null
+    return {
+      date: parsed.toISOString().slice(0, 10),
+      time: formatSlotTime(parsed),
+    }
+  }
+
+  const previousSlot = toSlotParts(existingAppointment.scheduled_at)
+  const nextSlot = toSlotParts(scheduledAt)
 
   const { error } = await supabase
     .from('appointments')
@@ -2746,7 +3256,84 @@ export async function rescheduleAttorneyAppointment({ appointmentId, scheduledAt
     .eq('id', appointmentId)
 
   if (error) throw error
-  invalidateAttorneyAppointmentsCache()
+
+  try {
+    if (
+      existingAppointment.attorney_id &&
+      previousSlot &&
+      (!nextSlot || previousSlot.date !== nextSlot.date || previousSlot.time !== nextSlot.time)
+    ) {
+      const { error: releaseError } = await supabase
+        .from('availability_slots')
+        .update({ is_booked: false, updated_at: new Date().toISOString() })
+        .eq('attorney_id', existingAppointment.attorney_id)
+        .eq('date', previousSlot.date)
+        .eq('time', previousSlot.time)
+
+      if (releaseError) {
+        console.warn('[reschedule] failed to release previous availability slot', releaseError)
+      }
+    }
+
+    if (existingAppointment.attorney_id && nextSlot) {
+      const { error: reserveError } = await supabase
+        .from('availability_slots')
+        .update({ is_booked: true, updated_at: new Date().toISOString() })
+        .eq('attorney_id', existingAppointment.attorney_id)
+        .eq('date', nextSlot.date)
+        .eq('time', nextSlot.time)
+        .eq('is_booked', false)
+
+      if (reserveError) {
+        console.warn('[reschedule] failed to reserve selected availability slot', reserveError)
+      }
+    }
+  } catch (slotSyncError) {
+    console.warn('[reschedule] availability sync failed', slotSyncError)
+  }
+
+  try {
+    if (existingAppointment.client_id) {
+      const scheduleLabel = nextSlot
+        ? new Date(scheduledAt).toLocaleString('en-PH', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+          })
+        : 'the updated schedule'
+
+      const detail = note
+        ? ` Your attorney added a note: ${note}`
+        : ''
+
+      const { error: notificationError } = await supabase
+        .from('notifications')
+        .insert({
+          user_id: existingAppointment.client_id,
+          title: 'Appointment Rescheduled',
+          body: `Your ${existingAppointment.title || 'consultation'} has been moved to ${scheduleLabel}.${detail}`,
+          type: 'reschedule',
+          is_read: false,
+          created_at: new Date().toISOString(),
+        })
+
+      if (notificationError) {
+        console.warn('[reschedule] failed to notify client', notificationError)
+      }
+    }
+  } catch (notificationFailure) {
+    console.warn('[reschedule] notification step failed', notificationFailure)
+  }
+
+  invalidateAttorneyAppointmentsCache(existingAppointment.attorney_id || undefined)
+  if (existingAppointment.attorney_id && previousSlot?.date) {
+    invalidateAvailabilityCache(existingAppointment.attorney_id, previousSlot.date)
+  }
+  if (existingAppointment.attorney_id && nextSlot?.date) {
+    invalidateAvailabilityCache(existingAppointment.attorney_id, nextSlot.date)
+  }
 }
 
 // ============================================================================
@@ -2914,64 +3501,3 @@ export async function fetchAttorneyAnnouncementsData(userId) {
   })
 }
 
-export async function fetchAttorneyEarningsData(userId) {
-  let transactionsRes = await supabase
-    .from('transactions')
-    .select('id, amount, payment_status, created_at, client:client_id(full_name), appointment_id, notarial_request_id')
-    .eq('attorney_id', userId)
-    .eq('payment_status', 'paid')
-    .order('created_at', { ascending: false })
-
-  // Some environments were created without notarial_request_id on transactions.
-  if (
-    transactionsRes.error?.code === '42703' &&
-    String(transactionsRes.error?.message || '').toLowerCase().includes('notarial_request_id')
-  ) {
-    transactionsRes = await supabase
-      .from('transactions')
-      .select('id, amount, payment_status, created_at, client:client_id(full_name), appointment_id')
-      .eq('attorney_id', userId)
-      .eq('payment_status', 'paid')
-      .order('created_at', { ascending: false })
-  }
-
-  if (transactionsRes.error) throw transactionsRes.error
-
-  const rows = (transactionsRes.data || []).map((tx) => {
-    const amount = Number(tx.amount || 0)
-    const dt = new Date(tx.created_at)
-    const valid = !Number.isNaN(dt.getTime())
-    const hasNotaryId = Object.prototype.hasOwnProperty.call(tx, 'notarial_request_id')
-      ? Boolean(tx.notarial_request_id)
-      : false
-    const serviceType = tx.appointment_id ? 'Consultation' : hasNotaryId ? 'Notary' : 'Notary'
-
-    return {
-      id: tx.id,
-      client: tx.client?.full_name || 'Client',
-      service: serviceType,
-      date: valid ? dt.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : 'TBD',
-      amount: `PHP ${amount.toFixed(2)}`,
-      rawAmount: amount,
-      rawCreatedAt: tx.created_at,
-    }
-  })
-
-  const totalNet = rows.reduce((sum, row) => sum + row.rawAmount, 0)
-  const monthStart = new Date()
-  monthStart.setDate(1)
-  monthStart.setHours(0, 0, 0, 0)
-  const monthNet = rows
-    .filter((row) => {
-      const parsed = new Date(row.rawCreatedAt)
-      return !Number.isNaN(parsed.getTime()) && parsed >= monthStart
-    })
-    .reduce((sum, row) => sum + row.rawAmount, 0)
-
-  return {
-    rows,
-    totalNet,
-    monthNet,
-    pendingPayout: 0,
-  }
-}

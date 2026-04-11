@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import './BookAppointment.css';
 import {
   createAppointmentBooking,
+  fetchClientAttorneyActiveBookingCount,
   fetchBookableAttorneys,
   getAvailability,
   invalidateAvailabilityCache,
@@ -356,6 +357,25 @@ function BookAppointment({ onNavigate, profile }) {
       const slotDateTime = new Date(scheduledAtIso);
       if (Number.isNaN(slotDateTime.getTime()) || slotDateTime <= new Date()) {
         throw new Error('This selected slot is no longer in the future. Please choose another time.');
+      }
+
+      const activeBookingCount = await fetchClientAttorneyActiveBookingCount({
+        clientId: profile.id,
+        attorneyId: bookingAttorney.id,
+      });
+
+      if (activeBookingCount >= 2) {
+        throw new Error('Booking limit reached. You can only keep up to 2 active bookings with the same attorney.');
+      }
+
+      if (activeBookingCount === 1) {
+        const shouldProceed = window.confirm(
+          'This will be your 2nd active booking with this attorney. Do you want to continue?',
+        );
+        if (!shouldProceed) {
+          setIsPaying(false);
+          return;
+        }
       }
 
       await createAppointmentBooking({

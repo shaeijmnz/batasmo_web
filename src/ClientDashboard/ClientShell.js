@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import './ClientShell.css';
+import { fetchClientNotifications, subscribeToClientNotifications } from '../lib/userApi';
 
 const MENU_ITEMS = [
   { key: 'dashboard', label: 'Dashboard', page: 'home-logged' },
@@ -110,6 +111,15 @@ function MenuToggle({ isOpen, onToggle }) {
   );
 }
 
+function BellIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    </svg>
+  );
+}
+
 function getInitials(name) {
   return String(name || 'Client')
     .split(' ')
@@ -137,12 +147,49 @@ export default function ClientShell({
   onCloseNotaryModal,
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [notifError, setNotifError] = useState('');
   const contentRef = useRef(null);
   const activeMenu = ACTIVE_MENU_BY_PAGE[currentPage] || 'dashboard';
   const subtitle = PAGE_COPY[currentPage] || PAGE_COPY['home-logged'];
 
   const initials = useMemo(() => getInitials(profile?.full_name), [profile?.full_name]);
   const firstName = useMemo(() => getFirstName(profile?.full_name), [profile?.full_name]);
+  const unreadCount = useMemo(() => notifications.filter((item) => !item.read).length, [notifications]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadNotifications = async () => {
+      if (!profile?.id) {
+        setNotifications([]);
+        return;
+      }
+
+      try {
+        const rows = await fetchClientNotifications(profile.id, { limit: 20 });
+        if (!cancelled) {
+          setNotifications(rows);
+          setNotifError('');
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setNotifError(error.message || 'Unable to load notifications.');
+        }
+      }
+    };
+
+    loadNotifications();
+    const unsubscribe = subscribeToClientNotifications(profile?.id, () => {
+      loadNotifications();
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [profile?.id]);
 
   useEffect(() => {
     const container = contentRef.current;
@@ -169,6 +216,14 @@ export default function ClientShell({
     } catch (error) {
       console.error('[auth] client shell sign out failed', error);
     }
+  };
+
+  const markAllNotificationsRead = () => {
+    setNotifications((previous) => previous.map((item) => ({ ...item, read: true })));
+  };
+
+  const markNotificationRead = (id) => {
+    setNotifications((previous) => previous.map((item) => (item.id === id ? { ...item, read: true } : item)));
   };
 
   return (
@@ -229,13 +284,72 @@ export default function ClientShell({
             </div>
           </div>
 
-          <button type="button" className="client-shell-profile-chip" onClick={() => handleNavigate('profile')}>
-            <span>Welcome, {firstName}</span>
-            <span className="client-shell-profile-avatar">{initials}</span>
-          </button>
+          <div className="client-shell-topbar-actions">
+            <div className="client-shell-notif-wrap">
+              <button
+                type="button"
+                className="client-shell-notif-btn"
+                onClick={() => setNotifOpen((previous) => !previous)}
+                aria-label="Open notifications"
+              >
+                <BellIcon />
+                {unreadCount > 0 ? <span className="client-shell-notif-dot">{Math.min(unreadCount, 9)}</span> : null}
+              </button>
+
+              {notifOpen ? (
+                <>
+                  <button
+                    type="button"
+                    className="client-shell-notif-backdrop"
+                    onClick={() => setNotifOpen(false)}
+                    aria-label="Close notifications"
+                  />
+                  <div className="client-shell-notif-panel" role="dialog" aria-label="Client notifications">
+                    <div className="client-shell-notif-panel__header">
+                      <span>Notifications</span>
+                      {unreadCount > 0 ? (
+                        <button type="button" onClick={markAllNotificationsRead}>Mark all read</button>
+                      ) : null}
+                    </div>
+
+                    <div className="client-shell-notif-panel__list">
+                      {notifError ? <p className="client-shell-notif-panel__error">{notifError}</p> : null}
+                      {!notifError && notifications.length === 0 ? (
+                        <p className="client-shell-notif-panel__empty">No notifications yet.</p>
+                      ) : null}
+                      {notifications.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          className={`client-shell-notif-item ${item.read ? '' : 'client-shell-notif-item--unread'}`}
+                          onClick={() => {
+                            markNotificationRead(item.id);
+                            setNotifOpen(false);
+                            handleNavigate('my-appointments');
+                          }}
+                        >
+                          <span className="client-shell-notif-item__title">{item.title}</span>
+                          <span className="client-shell-notif-item__desc">{item.desc}</span>
+                          <span className="client-shell-notif-item__time">{item.time}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              ) : null}
+            </div>
+
+            <button type="button" className="client-shell-profile-chip" onClick={() => handleNavigate('profile')}>
+              <span>Welcome, {firstName}</span>
+              <span className="client-shell-profile-avatar">{initials}</span>
+            </button>
+          </div>
         </header>
 
-        <section className="client-shell-content" ref={contentRef}>
+        <section
+          className={`client-shell-content ${currentPage === 'chat-room' ? 'client-shell-content--chat' : ''}`}
+          ref={contentRef}
+        >
           <div className={`client-shell-body ${currentPage === 'chat-room' ? 'client-shell-body--chat' : ''}`}>
             {children}
           </div>

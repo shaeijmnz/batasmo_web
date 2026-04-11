@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import './AttorneyTheme.css';
 import './AttorneyHome.css';
-import { fetchAttorneyHomeData, subscribeToAttorneyAppointments } from '../lib/userApi';
+import { fetchAttorneyHomeData, isConsultationChatWindowOpen, subscribeToAttorneyAppointments } from '../lib/userApi';
 
 /* ── Icons ── */
 const ScalesIcon = ({ size = 24, color = '#f5a623' }) => (
@@ -31,9 +31,9 @@ const CalendarCheckIcon = () => (
     <line x1="3" y1="10" x2="21" y2="10" /><polyline points="9 16 11 18 15 14" />
   </svg>
 );
-const EarningsIcon = () => (
+const AnalyticsIcon = () => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+    <line x1="4" y1="20" x2="20" y2="20" /><rect x="6" y="11" width="3" height="7" /><rect x="11" y="8" width="3" height="10" /><rect x="16" y="5" width="3" height="13" />
   </svg>
 );
 const CalendarIcon = ({ size = 18, color = '#9ca3af' }) => (
@@ -75,10 +75,7 @@ function AttorneyHome({ onNavigate, profile }) {
   const [consultations, setConsultations] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [statsData, setStatsData] = useState({
-    pendingCount: 0,
     myAppointmentCount: 0,
-    notarialCount: 0,
-    monthlyEarnings: 0,
   });
   const [loadError, setLoadError] = useState('');
 
@@ -114,10 +111,8 @@ function AttorneyHome({ onNavigate, profile }) {
   }, [profile?.id]);
 
   const stats = [
-    { label: 'Pending Consultations', value: String(statsData.pendingCount), icon: <CalendarCheckIcon />, bg: '#eef4ff', border: '#4a8eff', nav: 'consultation-requests' },
     { label: 'My Appointments', value: String(statsData.myAppointmentCount), icon: <CalendarCheckIcon />, bg: '#eff6ff', border: '#3b82f6', nav: 'upcoming-appointments' },
-    { label: 'Notarial Requests', value: String(statsData.notarialCount), icon: <ScalesIcon size={20} color="#d9b14b" />, bg: '#fff7e8', border: '#d4af37', nav: 'notarial-requests-atty' },
-    { label: 'Earnings (Monthly)', value: `₱${statsData.monthlyEarnings.toLocaleString()}`, icon: <EarningsIcon />, bg: '#ecfdf5', border: '#10b981', nav: 'attorney-earnings' },
+    { label: 'Analytics', value: 'View Graph', icon: <AnalyticsIcon />, bg: '#ecfdf5', border: '#10b981', nav: 'attorney-analytics' },
   ];
 
   const sortedConsultations = [...consultations].sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -278,6 +273,12 @@ function AttorneyHome({ onNavigate, profile }) {
                 const apptDate = new Date(c.date);
                 const isToday = today.toDateString() === apptDate.toDateString();
                 const daysUntil = Math.ceil((apptDate - new Date(today.toDateString())) / (1000 * 60 * 60 * 24));
+                const canEnterChatroom = isConsultationChatWindowOpen({
+                  status: c.status,
+                  scheduledAt: c.scheduledAt,
+                  slotDate: c.slotDate,
+                  slotTime: c.slotTime,
+                });
 
                 const formatDate = (dateStr) => {
                   const d = new Date(dateStr);
@@ -308,12 +309,16 @@ function AttorneyHome({ onNavigate, profile }) {
                       {isToday ? (
                         <div className="att-queue-item__today-actions">
                           <span className="att-today-label">🔴 TODAY</span>
-                          <button className="att-enter-room-btn" onClick={() => onNavigate('attorney-messages', { appointmentId: c.id })}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                            </svg>
-                            Enter Chatroom
-                          </button>
+                          {canEnterChatroom ? (
+                            <button className="att-enter-room-btn" onClick={() => onNavigate('attorney-messages', { appointmentId: c.id })}>
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                              </svg>
+                              Enter Chatroom
+                            </button>
+                          ) : (
+                            <span className="att-queue-item__status-text">Waiting for scheduled time</span>
+                          )}
                         </div>
                       ) : (
                         <span className="att-queue-item__status-text">

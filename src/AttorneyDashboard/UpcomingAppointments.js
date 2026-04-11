@@ -3,6 +3,9 @@ import './UpcomingAppointments.css';
 import './AttorneyTheme.css';
 import {
   fetchAttorneyUpcomingAppointments,
+  getAvailability,
+  isConsultationChatWindowOpen,
+  normalizeSlotTimeLabel,
   rescheduleAttorneyAppointment,
   subscribeToAttorneyAppointments,
 } from '../lib/userApi';
@@ -66,10 +69,63 @@ const ProfileIcon = () => (
 );
 
 /* ── Reschedule Modal ── */
-function RescheduleModal({ appointment, onClose, onConfirm }) {
+function RescheduleModal({ appointment, attorneyId, onClose, onConfirm }) {
   const [newDate, setNewDate] = useState('');
   const [newTime, setNewTime] = useState('');
   const [note, setNote] = useState('');
+  const [availableTimes, setAvailableTimes] = useState([]);
+  const [loadingTimes, setLoadingTimes] = useState(false);
+  const [timeLoadError, setTimeLoadError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSlots = async () => {
+      if (!attorneyId || !newDate) {
+        setAvailableTimes([]);
+        setTimeLoadError('');
+        return;
+      }
+
+      try {
+        setLoadingTimes(true);
+        setTimeLoadError('');
+        const slots = await getAvailability(attorneyId, newDate, { force: true });
+        if (cancelled) return;
+
+        const uniqueTimes = Array.from(new Set((slots || []).map((item) => String(item.time || '').trim()).filter(Boolean)));
+        uniqueTimes.sort((a, b) => {
+          const aLabel = normalizeSlotTimeLabel(a);
+          const bLabel = normalizeSlotTimeLabel(b);
+          const [aHour = '0', aMinute = '0'] = aLabel.split(':');
+          const [bHour = '0', bMinute = '0'] = bLabel.split(':');
+          const aValue = Number(aHour) * 60 + Number(aMinute);
+          const bValue = Number(bHour) * 60 + Number(bMinute);
+          return aValue - bValue;
+        });
+
+        setAvailableTimes(uniqueTimes);
+        setNewTime((previous) => (uniqueTimes.includes(previous) ? previous : ''));
+      } catch (error) {
+        if (cancelled) return;
+        setAvailableTimes([]);
+        setTimeLoadError(error.message || 'Unable to load availability for this date.');
+      } finally {
+        if (!cancelled) {
+          setLoadingTimes(false);
+        }
+      }
+    };
+
+    loadSlots();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [attorneyId, newDate]);
+
+  const hasSlots = availableTimes.length > 0;
+  const minDate = new Date().toISOString().slice(0, 10);
 
   return (
     <div className="ua-modal-overlay" onClick={onClose}>
@@ -78,10 +134,48 @@ function RescheduleModal({ appointment, onClose, onConfirm }) {
         <p className="ua-modal__sub">Reschedule consultation with <strong>{appointment.name}</strong></p>
 
         <label className="ua-modal__label">New Date</label>
-        <input type="date" className="ua-modal__input" value={newDate} onChange={e => setNewDate(e.target.value)} />
+        <input
+          type="date"
+          className="ua-modal__input"
+          value={newDate}
+          min={minDate}
+          onChange={e => {
+            setNewDate(e.target.value);
+            setNewTime('');
+          }}
+        />
 
-        <label className="ua-modal__label">New Time</label>
-        <input type="time" className="ua-modal__input" value={newTime} onChange={e => setNewTime(e.target.value)} />
+        <label className="ua-modal__label">Available Time</label>
+        {!newDate ? (
+          <p className="ua-modal__hint">Select a date first to view your available time slots.</p>
+        ) : loadingTimes ? (
+          <p className="ua-modal__hint">Loading available slots...</p>
+        ) : timeLoadError ? (
+          <p className="ua-modal__error">{timeLoadError}</p>
+        ) : hasSlots ? (
+          <div className="ua-modal__slots">
+            {availableTimes.map((slotTime) => (
+              <button
+                key={slotTime}
+                type="button"
+                className={`ua-modal__slot ${newTime === slotTime ? 'ua-modal__slot--active' : ''}`}
+                onClick={() => setNewTime(slotTime)}
+              >
+                {slotTime}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <>
+            <p className="ua-modal__hint">No available slots for this date. You can set a custom time.</p>
+            <input
+              type="time"
+              className="ua-modal__input"
+              value={newTime}
+              onChange={(e) => setNewTime(e.target.value)}
+            />
+          </>
+        )}
 
         <label className="ua-modal__label">Note (optional)</label>
         <textarea className="ua-modal__textarea" rows="3" value={note} onChange={e => setNote(e.target.value)} placeholder="Add a note for the client..." />
@@ -110,6 +204,7 @@ function UpcomingAppointments({ onNavigate, profile }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
   const mountedRef = useRef(true);
+  const fetchInFlightRef = useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -120,6 +215,10 @@ function UpcomingAppointments({ onNavigate, profile }) {
 
   const loadAppointments = useCallback(async (options = {}) => {
     if (!profile?.id) return;
+
+    // Skip duplicate silent refreshes when a request is already in-flight.
+    if (fetchInFlightRef.current && options?.silent) return;
+    fetchInFlightRef.current = true;
 
     const silent = Boolean(options?.silent);
     if (!silent) setIsRefreshing(true);
@@ -135,6 +234,7 @@ function UpcomingAppointments({ onNavigate, profile }) {
       setAppointments([]);
       setLoadError(error.message || 'Unable to load appointments.');
     } finally {
+      fetchInFlightRef.current = false;
       if (!silent && mountedRef.current) {
         setIsRefreshing(false);
       }
@@ -204,10 +304,17 @@ function UpcomingAppointments({ onNavigate, profile }) {
       }
     });
 
+    const sortBySchedule = (rows) =>
+      rows.slice().sort((a, b) => {
+        const aTime = new Date(a.scheduledAt || 0).getTime() || 0;
+        const bTime = new Date(b.scheduledAt || 0).getTime() || 0;
+        return aTime - bTime;
+      });
+
     return {
       todayAppts: today,
-      tomorrowAppts: nextDay,
-      weekAppts: week,
+      tomorrowAppts: sortBySchedule(nextDay),
+      weekAppts: sortBySchedule(week),
     };
   }, [appointments, currentYear, todayDate, tomorrowDate]);
 
@@ -223,14 +330,18 @@ function UpcomingAppointments({ onNavigate, profile }) {
 
   const handleReschedule = async (date, time, note) => {
     try {
+      const normalizedTime = normalizeSlotTimeLabel(time);
+      const rescheduledAt = new Date(`${date}T${normalizedTime}`);
+      if (Number.isNaN(rescheduledAt.getTime())) {
+        throw new Error('Invalid date/time selected.');
+      }
+
       await rescheduleAttorneyAppointment({
         appointmentId: reschedAppt.id,
-        scheduledAt: new Date(`${date}T${time}`).toISOString(),
+        scheduledAt: rescheduledAt.toISOString(),
         note,
       });
-      setAppointments(prev =>
-        prev.map(a => a.id === reschedAppt.id ? { ...a, date, time } : a)
-      );
+      await loadAppointments({ force: true, silent: true });
       setLoadError('');
     } catch (error) {
       setLoadError(error.message || 'Failed to reschedule appointment.');
@@ -238,8 +349,16 @@ function UpcomingAppointments({ onNavigate, profile }) {
     setReschedAppt(null);
   };
 
-  const renderCard = (appt) => (
-    <div className="ua-card" key={appt.id}>
+  const renderCard = (appt) => {
+    const canEnterConsultation = isConsultationChatWindowOpen({
+      status: appt.status,
+      scheduledAt: appt.scheduledAt,
+      slotDate: appt.slotDate,
+      slotTime: appt.slotTime,
+    });
+
+    return (
+      <div className="ua-card" key={appt.id}>
       <div className="ua-card__top">
         <div className="ua-card__avatar" style={{ background: appt.color }}>
           {appt.initials}
@@ -261,6 +380,7 @@ function UpcomingAppointments({ onNavigate, profile }) {
           </button>
           <button
             className="ua-btn ua-btn--enter"
+            disabled={!canEnterConsultation}
             onClick={() => onNavigate('attorney-messages', { appointmentId: appt.id })}
           >
             ENTER CONSULTATION
@@ -268,7 +388,8 @@ function UpcomingAppointments({ onNavigate, profile }) {
         </div>
       </div>
     </div>
-  );
+    );
+  };
 
   const renderSection = (title, items) => (
     <section className="ua-section" key={title}>
@@ -398,6 +519,7 @@ function UpcomingAppointments({ onNavigate, profile }) {
       {reschedAppt && (
         <RescheduleModal
           appointment={reschedAppt}
+          attorneyId={profile?.id}
           onClose={() => setReschedAppt(null)}
           onConfirm={handleReschedule}
         />

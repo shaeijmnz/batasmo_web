@@ -424,7 +424,7 @@ function HomePage({ onNavigate, profile, onSignOut }) {
                         <span className={`hp-badge hp-badge--status hp-badge--${String(a.status).toLowerCase()}`}>{a.status}</span>
                         <span className={`hp-badge hp-badge--pay hp-badge--${a.payment.toLowerCase()}`}>{a.payment}</span>
                       </div>
-                      {isToday && a.payment === 'Paid' ? (
+                      {isToday && a.payment === 'Paid' && a.chatAccessible ? (
                         <div className="hp-queue-item__today-actions">
                           <span className="hp-today-label">🔴 TODAY</span>
                           <button className="hp-enter-room-btn" onClick={() => onNavigate('chat-room', { appointmentId: a.id })}>
@@ -433,6 +433,11 @@ function HomePage({ onNavigate, profile, onSignOut }) {
                             </svg>
                             Enter Room
                           </button>
+                        </div>
+                      ) : isToday && a.payment === 'Paid' && !a.chatAccessible ? (
+                        <div className="hp-queue-item__today-actions">
+                          <span className="hp-today-label">🔴 TODAY</span>
+                          <span className="hp-payment-needed">Available at scheduled time</span>
                         </div>
                       ) : isToday && a.payment !== 'Paid' ? (
                         <div className="hp-queue-item__today-actions">

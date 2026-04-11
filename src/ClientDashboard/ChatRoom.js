@@ -3,12 +3,14 @@ import './ChatRoom.css';
 import {
   deleteAppointmentMessage,
   fetchAppointmentMessages,
+  fetchClientNotifications,
   fetchConsultationFeedback,
   fetchClientChatEligibleAppointments,
   getSignedUrlForAppointmentMessage,
   isConsultationChatActiveStatus,
   sendAppointmentAttachment,
   sendAppointmentMessage,
+  subscribeToClientNotifications,
   submitConsultationFeedback,
   subscribeToAppointmentStatus,
   subscribeToAppointmentMessages,
@@ -67,9 +69,46 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
   const [feedbackError, setFeedbackError] = useState('');
+  const [timeWarningPopup, setTimeWarningPopup] = useState(null);
   const messagesEndRef = useRef(null);
   const imagePickerRef = useRef(null);
   const filePickerRef = useRef(null);
+  const shownTimeWarningIdsRef = useRef(new Set());
+  const audioContextRef = useRef(null);
+
+  const playTimeWarningCue = () => {
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+
+      if (!audioContextRef.current) {
+        audioContextRef.current = new AudioContextClass();
+      }
+
+      const context = audioContextRef.current;
+      if (context.state === 'suspended') {
+        context.resume().catch(() => {});
+      }
+
+      const now = context.currentTime;
+      const oscillator = context.createOscillator();
+      const gainNode = context.createGain();
+
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(880, now);
+      gainNode.gain.setValueAtTime(0.0001, now);
+      gainNode.gain.exponentialRampToValueAtTime(0.08, now + 0.02);
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+
+      oscillator.connect(gainNode);
+      gainNode.connect(context.destination);
+
+      oscillator.start(now);
+      oscillator.stop(now + 0.3);
+    } catch {
+      // Ignore audio cue failures so popup still appears.
+    }
+  };
 
   const syncClosedSessionFeedbackState = async (appointmentId, options = {}) => {
     const openModalWhileLoading = options.openModalWhileLoading !== false;
@@ -132,7 +171,7 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
         });
 
         if (!rows.length) {
-          setLoadError('Consultation chat becomes available when your schedule is marked as started/active.');
+          setLoadError('Consultation chat opens at your scheduled appointment time.');
         } else {
           setLoadError('');
         }
@@ -146,8 +185,13 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
 
     loadThreads();
 
+    const refreshId = window.setInterval(() => {
+      loadThreads();
+    }, 30000);
+
     return () => {
       isMounted = false;
+      window.clearInterval(refreshId);
     };
   }, [profile?.id, initialAppointmentId]);
 
@@ -219,6 +263,50 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
       unsubscribe();
     };
   }, [activeAppointmentId]);
+
+  useEffect(() => {
+    if (!profile?.id) return undefined;
+
+    let cancelled = false;
+
+    const maybeShowWarningPopup = async () => {
+      try {
+        const items = await fetchClientNotifications(profile.id, { limit: 20 });
+        if (cancelled) return;
+
+        const matchingWarning = items.find((item) => {
+          const type = String(item?.type || '').toLowerCase();
+          if (type !== 'consultation_time_warning') return false;
+
+          const body = String(item?.desc || '');
+          if (!activeAppointmentId) return true;
+          return body.includes(`Ref #${activeAppointmentId}`);
+        });
+
+        if (!matchingWarning) return;
+
+        const warningId = String(matchingWarning.id || '');
+        if (!warningId || shownTimeWarningIdsRef.current.has(warningId)) return;
+
+        shownTimeWarningIdsRef.current.add(warningId);
+        playTimeWarningCue();
+        setTimeWarningPopup({
+          title: matchingWarning.title || 'Consultation Reminder',
+          body: matchingWarning.desc || 'Only 10 minutes left. Please prepare your final questions.',
+        });
+      } catch {
+        // Keep chat usable even if notifications fetch fails.
+      }
+    };
+
+    maybeShowWarningPopup();
+    const unsubscribe = subscribeToClientNotifications(profile.id, maybeShowWarningPopup);
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [profile?.id, activeAppointmentId]);
 
   useEffect(() => {
     if (!activeAppointmentId) return undefined;
@@ -693,13 +781,27 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
                   <button
                     type="button"
                     className="cr-feedback-return"
-                    onClick={() => onNavigate('home-logged')}
+                    onClick={() => onNavigate('client-logs', { appointmentId: activeAppointmentId })}
                   >
-                    Return to Dashboard
+                    Go to Logs
                   </button>
                 </div>
               </>
             )}
+          </div>
+        </div>
+      ) : null}
+
+      {timeWarningPopup ? (
+        <div className="cr-time-warning-overlay" onClick={() => setTimeWarningPopup(null)}>
+          <div className="cr-time-warning-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+            <h3>{timeWarningPopup.title}</h3>
+            <p>{timeWarningPopup.body}</p>
+            <div className="cr-time-warning-actions">
+              <button type="button" className="cr-time-warning-close" onClick={() => setTimeWarningPopup(null)}>
+                OK
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

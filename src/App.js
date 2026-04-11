@@ -38,7 +38,7 @@ const AttorneyHome = lazy(() => import('./AttorneyDashboard/AttorneyHome'));
 const ConsultationRequests = lazy(() => import('./AttorneyDashboard/ConsultationRequests'));
 const UpcomingAppointments = lazy(() => import('./AttorneyDashboard/UpcomingAppointments'));
 const NotarialRequestsAtty = lazy(() => import('./AttorneyDashboard/NotarialRequestsAtty'));
-const AttorneyEarnings = lazy(() => import('./AttorneyDashboard/AttorneyEarnings'));
+const AttorneyAnalytics = lazy(() => import('./AttorneyDashboard/AttorneyAnalytics'));
 const AttorneyMessages = lazy(() => import('./AttorneyDashboard/AttorneyMessages'));
 const AttorneyLogs = lazy(() => import('./AttorneyDashboard/AttorneyLogs'));
 const AttorneyAnnouncements = lazy(() => import('./AttorneyDashboard/AttorneyAnnouncements'));
@@ -77,7 +77,7 @@ const ATTORNEY_PAGES = [
   'consultation-requests',
   'upcoming-appointments',
   'notarial-requests-atty',
-  'attorney-earnings',
+  'attorney-analytics',
   'attorney-messages',
   'attorney-logs',
   'attorney-announcements',
@@ -531,7 +531,7 @@ function App() {
   if (page === 'consultation-requests') return renderLazy(<ConsultationRequests onNavigate={handleNavigate} profile={currentProfile} />);
   if (page === 'upcoming-appointments') return renderLazy(<UpcomingAppointments onNavigate={handleNavigate} profile={currentProfile} />);
   if (page === 'notarial-requests-atty') return renderLazy(<NotarialRequestsAtty onNavigate={handleNavigate} profile={currentProfile} />);
-  if (page === 'attorney-earnings') return renderLazy(<AttorneyEarnings onNavigate={handleNavigate} profile={currentProfile} />);
+  if (page === 'attorney-analytics') return renderLazy(<AttorneyAnalytics onNavigate={handleNavigate} profile={currentProfile} />);
   if (page === 'attorney-messages') return renderLazy(<AttorneyMessages onNavigate={handleNavigate} profile={currentProfile} initialAppointmentId={pageParams?.appointmentId || ''} />);
   if (page === 'attorney-logs') return renderLazy(<AttorneyLogs onNavigate={handleNavigate} profile={currentProfile} />);
   if (page === 'attorney-announcements') return renderLazy(<AttorneyAnnouncements onNavigate={handleNavigate} profile={currentProfile} />);

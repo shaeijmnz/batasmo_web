@@ -216,8 +216,6 @@ function LandingPage({ onNavigate }) {
 
                   <div className="lp-partner-content">
                     <h3>{attorney.name}</h3>
-                    <p className="lp-partner-price">Consultation: PHP {Number(attorney.consultationFee || 0).toLocaleString()}</p>
-                    <p className="lp-partner-license">PRC/License: {attorney.prcId || 'Available on request'}</p>
 
                     {(attorney.expertiseFields || []).length > 0 ? (
                       <ul>

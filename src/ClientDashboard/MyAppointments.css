@@ -159,6 +159,198 @@
   width: 100%;
 }
 
+.ma-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: linear-gradient(135deg, rgba(8, 23, 42, 0.95), rgba(4, 24, 44, 0.88));
+  border-radius: 14px;
+  border: 1px solid rgba(148, 189, 240, 0.2);
+  padding: 18px 20px;
+  margin-bottom: 22px;
+}
+
+.ma-summary__label {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 1.1px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.ma-summary__count {
+  margin: 2px 0 4px;
+  font-size: 2rem;
+  line-height: 1;
+  color: #ffffff;
+  font-weight: 800;
+}
+
+.ma-summary__meta {
+  margin: 0;
+  font-size: 0.88rem;
+  color: rgba(196, 216, 245, 0.85);
+}
+
+.ma-summary__refresh {
+  background: rgba(33, 56, 86, 0.9);
+  color: #f3f7ff;
+  border: 1px solid rgba(148, 189, 240, 0.28);
+  border-radius: 11px;
+  padding: 11px 22px;
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+  min-width: 110px;
+}
+
+.ma-summary__refresh:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.ma-reschedule-note {
+  margin: -6px 0 20px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 189, 240, 0.28);
+  background: rgba(11, 33, 59, 0.72);
+}
+
+.ma-reschedule-note__title {
+  margin: 0 0 4px;
+  font-size: 0.86rem;
+  letter-spacing: 0.6px;
+  font-weight: 800;
+  color: #f6d884;
+  text-transform: uppercase;
+}
+
+.ma-reschedule-note__text {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #d5e6ff;
+}
+
+.ma-queue-section {
+  margin-bottom: 24px;
+}
+
+.ma-queue-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(148, 189, 240, 0.22);
+  position: relative;
+}
+
+.ma-queue-section__header::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -2px;
+  height: 2px;
+  background: linear-gradient(90deg, #e8b84f, #f6d884, transparent);
+}
+
+.ma-queue-section__header h2 {
+  margin: 0;
+  font-size: 0.8rem;
+  letter-spacing: 1.3px;
+  font-weight: 800;
+  color: #e9f2ff;
+}
+
+.ma-queue-section__header span {
+  min-width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #e5edfb;
+  background: rgba(41, 74, 126, 0.9);
+  border: 1px solid rgba(147, 197, 253, 0.5);
+}
+
+.ma-appointment-card--queue {
+  margin-bottom: 6px;
+  background: linear-gradient(145deg, rgba(8, 24, 45, 0.9), rgba(7, 26, 48, 0.86));
+  border: 1px solid rgba(142, 180, 225, 0.26);
+  border-radius: 18px;
+  box-shadow: none;
+  padding: 20px;
+}
+
+.ma-queue-card__top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.ma-queue-card__avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #4f46e5, #6366f1);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.92rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.ma-queue-card__info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ma-queue-card__area {
+  margin: 2px 0 0;
+  font-size: 0.72rem;
+  color: #8ea6c9;
+  letter-spacing: 0.8px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.ma-queue-card__bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ma-queue-card__btns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ma-queue-card__schedule {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #f5a623;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.ma-queue-card__schedule svg {
+  color: #f5a623;
+}
+
 /* Filters */
 .ma-filters {
   display: flex;
@@ -194,7 +386,7 @@
 .ma-appointments-list {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 12px;
 }
 
 .ma-appointment-card {
@@ -237,15 +429,15 @@
 }
 
 .ma-attorney-name {
-  font-size: 1.1rem;
+  font-size: 0.98rem;
   font-weight: 700;
-  color: #1a1a2e;
-  margin: 0 0 4px 0;
+  color: #eef4ff;
+  margin: 0;
 }
 
 .ma-specialty {
   font-size: 0.85rem;
-  color: #9ca3af;
+  color: #8ea6c9;
   margin: 0;
 }
 
@@ -345,15 +537,42 @@
 }
 
 .ma-btn {
-  padding: 10px 20px;
+  padding: 10px 18px;
   border: none;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  font-weight: 600;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  font-weight: 800;
   cursor: pointer;
   transition: all .2s ease;
-  flex: 1;
+  letter-spacing: 0.06em;
   min-width: 180px;
+}
+
+.ma-btn--queue-secondary,
+.ma-btn--queue-primary {
+  background: #ffffff;
+  color: #1c1f2e;
+  border: 1.5px solid #d1d5db;
+}
+
+.ma-btn--queue-secondary {
+  border-color: #1c1f2e;
+}
+
+.ma-btn--queue-secondary:hover:not(:disabled) {
+  background: #1c1f2e;
+  color: #ffffff;
+}
+
+.ma-btn--queue-primary:hover:not(:disabled) {
+  border-color: #1c1f2e;
+  color: #1c1f2e;
+}
+
+.ma-btn--queue-primary:disabled,
+.ma-btn--queue-secondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .ma-btn--primary {
@@ -436,10 +655,26 @@
 }
 
 .ma-empty-state {
-  text-align: center;
-  padding: 48px 24px;
-  color: #9ca3af;
+  text-align: left;
+  padding: 26px 20px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 189, 240, 0.24);
+  background: linear-gradient(145deg, rgba(12, 34, 62, 0.84), rgba(9, 28, 52, 0.86));
+  color: #c4d7f5;
   font-size: 1rem;
+}
+
+.ma-empty-state__title {
+  margin: 0 0 6px;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #f1f5ff;
+}
+
+.ma-empty-state__text {
+  margin: 0;
+  font-size: 0.88rem;
+  color: #c4d7f5;
 }
 
 /* Chat FAB */
@@ -1411,6 +1646,19 @@
 
 /* Responsive */
 @media (max-width: 900px) {
+  .ma-summary {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .ma-summary__refresh {
+    width: 100%;
+  }
+
+  .ma-reschedule-note {
+    margin-top: 0;
+  }
+
   .ma-appointment-details {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -1431,6 +1679,21 @@
 
   .ma-header h1 {
     font-size: 1.8rem;
+  }
+
+  .ma-queue-card__bottom {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .ma-queue-card__btns {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ma-queue-section__header h2 {
+    font-size: 0.84rem;
   }
 
   .ma-card-header {
