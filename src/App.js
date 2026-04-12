@@ -492,6 +492,10 @@ function App() {
     const hasRecoveryFlow = localStorage.getItem(RECOVERY_ACTIVE_KEY) === 'true'
 
     if (isPublicPage) {
+      if (page === 'home') {
+        return
+      }
+
       if (isRecoveryFlowPage && hasRecoveryFlow) {
         return
       }

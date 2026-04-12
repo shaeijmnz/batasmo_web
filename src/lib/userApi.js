@@ -369,7 +369,7 @@ export async function fetchClientHomeData(userId) {
   const [appointmentsRes, notificationsRes, transactionsRes] = await Promise.all([
     supabase
       .from('appointments')
-      .select('id, title, scheduled_at, slot_date, slot_time, status, attorney:attorney_id(full_name), amount')
+      .select('id, title, scheduled_at, status, attorney:attorney_id(full_name), amount')
       .eq('client_id', userId)
       .order('scheduled_at', { ascending: true }),
     supabase
@@ -405,24 +405,31 @@ export async function fetchClientHomeData(userId) {
         status === 'active'
       )
     })
-    .map((item) => ({
-      id: item.id,
-      name: item.attorney?.full_name || 'Attorney',
-      area: item.title || 'Consultation',
-      date: item.scheduled_at,
-      time: item.scheduled_at,
-      scheduledAt: item.scheduled_at || null,
-      slotDate: item.slot_date || null,
-      slotTime: item.slot_time || null,
-      status: item.status || 'pending',
-      payment: paymentByAppointment.get(item.id) === 'paid' ? 'Paid' : 'Unpaid',
-      chatAccessible: isConsultationChatWindowOpen({
-        status: item.status,
-        scheduledAt: item.scheduled_at,
-        slotDate: item.slot_date,
-        slotTime: item.slot_time,
-      }),
-    }))
+    .map((item) => {
+      const scheduled = item.scheduled_at ? new Date(item.scheduled_at) : null
+      const hasScheduled = scheduled && !Number.isNaN(scheduled.getTime())
+      const derivedSlotDate = hasScheduled ? scheduled.toISOString().slice(0, 10) : null
+      const derivedSlotTime = hasScheduled ? formatSlotTime(scheduled) : null
+
+      return {
+        id: item.id,
+        name: item.attorney?.full_name || 'Attorney',
+        area: item.title || 'Consultation',
+        date: item.scheduled_at,
+        time: item.scheduled_at,
+        scheduledAt: item.scheduled_at || null,
+        slotDate: derivedSlotDate,
+        slotTime: derivedSlotTime,
+        status: item.status || 'pending',
+        payment: paymentByAppointment.get(item.id) === 'paid' ? 'Paid' : 'Unpaid',
+        chatAccessible: isConsultationChatWindowOpen({
+          status: item.status,
+          scheduledAt: item.scheduled_at,
+          slotDate: derivedSlotDate,
+          slotTime: derivedSlotTime,
+        }),
+      }
+    })
 
   const notifications = (notificationsRes.data || []).map((n) => ({
     id: n.id,
