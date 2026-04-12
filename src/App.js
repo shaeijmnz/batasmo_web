@@ -211,7 +211,7 @@ function App() {
   const [page, setPage] = useState(() => resolveInitialPage());
   const [pageParams, setPageParams] = useState({});
   const [showNotaryModal, setShowNotaryModal] = useState(false);
-  const [signupContext, setSignupContext] = useState({ email: '', role: 'Client' });
+  const [signupContext, setSignupContext] = useState({ email: '', role: 'Client', otpChannel: 'email' });
   const [currentProfile, setCurrentProfile] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authScopeVersion, setAuthScopeVersion] = useState(0);
@@ -226,7 +226,7 @@ function App() {
     previousRoleRef.current = ''
     activeAuthUserIdRef.current = null
     setCurrentProfile(null)
-    setSignupContext({ email: '', role: 'Client' })
+    setSignupContext({ email: '', role: 'Client', otpChannel: 'email' })
     setAuthScopeVersion((prev) => prev + 1)
     setPage('login')
 
@@ -424,7 +424,7 @@ function App() {
 
   const handleAuthSuccess = useCallback((profile) => {
     clearTransientAuthState({ includeRecovery: true });
-    setSignupContext({ email: '', role: 'Client' });
+    setSignupContext({ email: '', role: 'Client', otpChannel: 'email' });
     setCurrentProfile(profile);
     setPage(pageFromRole(profile?.role));
   }, []);
@@ -497,18 +497,32 @@ function App() {
       }
 
       if (isRecoveryFlowPage && hasRecoveryFlow) {
-        return
+        return undefined
       }
 
-      if (page !== roleHomePage) {
-        setPage(roleHomePage)
+      let cancelled = false
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (cancelled) return
+        if (!session?.user) return
+
+        const emailConfirmed = Boolean(session.user.email_confirmed_at)
+        if (!emailConfirmed && (page === 'otp' || page === 'signup')) {
+          return
+        }
+
+        if (page !== roleHomePage) {
+          setPage(roleHomePage)
+        }
+      })
+      return () => {
+        cancelled = true
       }
-      return
     }
 
     if (!canAccessPage(role, page) && page !== roleHomePage) {
       setPage(roleHomePage)
     }
+    return undefined
   }, [currentProfile, page, isPublicPage])
 
   if (!authLoading && !isPublicPage && !currentProfile) {
@@ -516,7 +530,14 @@ function App() {
   }
 
   if (page === 'signup') return <SignUp onNavigate={handleNavigate} onEmailChange={setSignupContext} />;
-  if (page === 'otp') return <OtpVerification onNavigate={handleNavigate} email={signupContext.email} role={signupContext.role} />;
+  if (page === 'otp') return (
+    <OtpVerification
+      onNavigate={handleNavigate}
+      email={signupContext.email}
+      role={signupContext.role}
+      otpChannel={signupContext.otpChannel}
+    />
+  );
   if (page === 'verified') return <VerificationSuccess onNavigate={handleNavigate} />;
   if (page === 'login') return <Login onNavigate={handleNavigate} onAuthSuccess={handleAuthSuccess} />;
   if (page === 'forgot-password') return <ForgotPassword onNavigate={handleNavigate} />;

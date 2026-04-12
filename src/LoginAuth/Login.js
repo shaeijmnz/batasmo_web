@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import './Login.css';
-import { signInWithEmail } from '../lib/authApi';
+import { OTP_RESUME_LOGIN_KEY, PENDING_OTP_CHANNEL_KEY, signInWithEmail } from '../lib/authApi';
 import { normalizeRole, pageFromRole } from '../lib/userApi';
 import { isValidEmail, VALID_EMAIL_MESSAGE } from '../lib/validators';
 
@@ -34,7 +34,6 @@ const EyeIcon = ({ show }) => (
 function Login({ onNavigate, onAuthSuccess }) {
   const [form, setForm] = useState({ email: '', password: '' });
   const [showPass, setShowPass] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorText, setErrorText] = useState('');
   const [lockoutSeconds, setLockoutSeconds] = useState(0);
@@ -113,6 +112,16 @@ function Login({ onNavigate, onAuthSuccess }) {
       const normalized = String(error?.message || '').toLowerCase();
       if (normalized.includes('email not confirmed') || normalized.includes('email not verified')) {
         localStorage.setItem('batasmo_pending_otp_email', form.email.trim());
+        // OTP channel is chosen on Sign Up; from login default to email (user may switch on OTP screen).
+        localStorage.setItem(PENDING_OTP_CHANNEL_KEY, 'email');
+        try {
+          sessionStorage.setItem(
+            OTP_RESUME_LOGIN_KEY,
+            JSON.stringify({ email: form.email.trim(), password: form.password }),
+          );
+        } catch {
+          /* ignore */
+        }
         onNavigate('otp');
         return;
       }
@@ -188,17 +197,7 @@ function Login({ onNavigate, onAuthSuccess }) {
               </div>
             </div>
 
-            <div className="lg-options-row">
-              <label className="lg-checkbox-container">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={() => setRememberMe((prev) => !prev)}
-                />
-                <span className="lg-checkmark" />
-                <span className="lg-option-text">Remember me</span>
-              </label>
-
+            <div className="lg-options-row" style={{ justifyContent: 'flex-end' }}>
               <button type="button" className="lg-link-button" onClick={() => onNavigate('forgot-password')}>
                 Forgot password?
               </button>

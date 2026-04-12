@@ -1,0 +1,7 @@
+# Allow OTP Edge Functions to be invoked before the user is logged in (uses service-role validation inside the function).
+# Names must match functions deployed on your Supabase project.
+[functions.signup-sms-otp-send]
+verify_jwt = false
+
+[functions.signup-sms-otp-verify]
+verify_jwt = false

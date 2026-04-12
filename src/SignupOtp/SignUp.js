@@ -1,7 +1,14 @@
 import { useState } from 'react';
 import './SignUp.css';
-import { signUpWithEmail } from '../lib/authApi';
 import {
+  OTP_RESUME_SIGNUP_KEY,
+  PENDING_OTP_CHANNEL_KEY,
+  PENDING_SIGNUP_USER_ID_KEY,
+  PENDING_SMS_PHONE_KEY,
+  signUpWithEmail,
+} from '../lib/authApi';
+import {
+  getPasswordRuleChecks,
   isValidEmail,
   isValidPhoneNumber,
   isStrongPassword,
@@ -38,6 +45,20 @@ const LockIcon = () => (
   </svg>
 );
 
+const EyeIcon = ({ show }) =>
+  show ? (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  ) : (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+      <line x1="1" y1="1" x2="23" y2="23" />
+    </svg>
+  );
+
 const getErrorMessage = (error, fallback) => {
   if (!error) return fallback;
   if (typeof error === 'string') return error;
@@ -47,6 +68,7 @@ const getErrorMessage = (error, fallback) => {
 };
 
 function SignUp({ onNavigate, onEmailChange }) {
+  const [otpDelivery, setOtpDelivery] = useState('email');
   const [form, setForm] = useState({
     fullName: '',
     email: '',
@@ -60,6 +82,9 @@ function SignUp({ onNavigate, onEmailChange }) {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState({});
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const validateForm = (values) => {
     const nextErrors = {};
@@ -108,6 +133,14 @@ function SignUp({ onNavigate, onEmailChange }) {
       }
     }
 
+    if (otpDelivery === 'sms' && !isValidPhoneNumber(values.contact)) {
+      nextErrors.contact = 'SMS verification requires a valid 11-digit mobile number.';
+    }
+
+    if (!agreedToTerms) {
+      nextErrors.agreedToTerms = 'Please read and accept the Terms and Conditions to continue.';
+    }
+
     return nextErrors;
   };
 
@@ -137,7 +170,7 @@ function SignUp({ onNavigate, onEmailChange }) {
     setErrors({});
 
     try {
-      await signUpWithEmail({
+      const result = await signUpWithEmail({
         email: form.email.trim(),
         password: form.password,
         fullName: form.fullName.trim(),
@@ -147,13 +180,27 @@ function SignUp({ onNavigate, onEmailChange }) {
         address: form.address.trim(),
         guardianName: parsedAge < 18 ? form.guardianName.trim() : null,
         guardianContact: parsedAge < 18 ? form.guardianContact.trim() : null,
+        preferredOtpChannel: otpDelivery,
       });
 
       localStorage.setItem('batasmo_pending_otp_email', form.email.trim());
       localStorage.setItem('batasmo_pending_otp_role', 'Client');
+      localStorage.setItem(PENDING_OTP_CHANNEL_KEY, otpDelivery);
+      localStorage.setItem(PENDING_SMS_PHONE_KEY, form.contact.trim());
+      if (result?.user?.id) {
+        localStorage.setItem(PENDING_SIGNUP_USER_ID_KEY, String(result.user.id));
+      }
+      try {
+        sessionStorage.setItem(
+          OTP_RESUME_SIGNUP_KEY,
+          JSON.stringify({ email: form.email.trim(), password: form.password }),
+        );
+      } catch {
+        /* ignore */
+      }
 
       if (onEmailChange) {
-        onEmailChange({ email: form.email.trim(), role: 'Client' });
+        onEmailChange({ email: form.email.trim(), role: 'Client', otpChannel: otpDelivery });
       }
 
       onNavigate('otp');
@@ -312,19 +359,80 @@ function SignUp({ onNavigate, onEmailChange }) {
               </div>
             ) : null}
 
+            <div className="su-input-group">
+              <label>Send verification code via</label>
+              <div className="su-input-wrap" style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input
+                    type="radio"
+                    name="otp-delivery"
+                    checked={otpDelivery === 'email'}
+                    onChange={() => setOtpDelivery('email')}
+                  />
+                  Email
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input
+                    type="radio"
+                    name="otp-delivery"
+                    checked={otpDelivery === 'sms'}
+                    onChange={() => setOtpDelivery('sms')}
+                  />
+                  SMS
+                </label>
+              </div>
+              <p style={{ marginTop: 4, color: '#6b7280', fontSize: 12 }}>
+                Email uses the existing BatasMo email code. SMS uses IPROG and your contact number above.
+              </p>
+            </div>
+
             <div className="su-input-group su-grid-2">
               <div>
                 <label>Password</label>
                 <div className="su-input-wrap">
                   <LockIcon />
                   <input
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     name="password"
                     placeholder=""
                     value={form.password}
                     onChange={handleChange}
+                    autoComplete="new-password"
                   />
+                  <button
+                    type="button"
+                    className="su-eye"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    onClick={() => setShowPassword((v) => !v)}
+                  >
+                    <EyeIcon show={showPassword} />
+                  </button>
                 </div>
+                {form.password ? (
+                  <ul
+                    style={{
+                      margin: '8px 0 0',
+                      padding: 0,
+                      listStyle: 'none',
+                      fontSize: 12,
+                      lineHeight: 1.4,
+                      textAlign: 'left',
+                    }}
+                  >
+                    {getPasswordRuleChecks(form.password).map((rule) => (
+                      <li
+                        key={rule.text}
+                        style={{
+                          color: rule.ok ? '#86efac' : '#9ca3af',
+                          marginBottom: 3,
+                        }}
+                      >
+                        {rule.ok ? '✓ ' : '○ '}
+                        {rule.text}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
                 {errors.password ? <p className="su-error-text">{errors.password}</p> : null}
               </div>
 
@@ -333,15 +441,99 @@ function SignUp({ onNavigate, onEmailChange }) {
                 <div className="su-input-wrap">
                   <LockIcon />
                   <input
-                    type="password"
+                    type={showConfirmPassword ? 'text' : 'password'}
                     name="confirmPassword"
                     placeholder=""
                     value={form.confirmPassword}
                     onChange={handleChange}
+                    autoComplete="new-password"
                   />
+                  <button
+                    type="button"
+                    className="su-eye"
+                    aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                    onClick={() => setShowConfirmPassword((v) => !v)}
+                  >
+                    <EyeIcon show={showConfirmPassword} />
+                  </button>
                 </div>
+                {form.confirmPassword ? (
+                  <p
+                    style={{
+                      margin: '8px 0 0',
+                      fontSize: 12,
+                      textAlign: 'left',
+                      color:
+                        form.password === form.confirmPassword
+                          ? '#86efac'
+                          : '#f5b2b2',
+                    }}
+                  >
+                    {form.password === form.confirmPassword
+                      ? 'Passwords match.'
+                      : 'Passwords do not match.'}
+                  </p>
+                ) : null}
                 {errors.confirmPassword ? <p className="su-error-text">{errors.confirmPassword}</p> : null}
               </div>
+            </div>
+
+            <div className="su-input-group">
+              <label>Terms and Conditions</label>
+              <div
+                style={{
+                  maxHeight: 200,
+                  overflowY: 'auto',
+                  padding: '12px 14px',
+                  borderRadius: 8,
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  fontSize: 13,
+                  lineHeight: 1.55,
+                  color: '#9ca3af',
+                  marginBottom: 12,
+                  textAlign: 'left',
+                }}
+              >
+                <p style={{ margin: '0 0 12px', fontWeight: 600, color: '#e5e7eb' }}>Terms and Conditions</p>
+                <p style={{ margin: '0 0 12px' }}>
+                  By accessing and using the BatasMo platform, you agree to provide accurate and complete information and
+                  to use the system only for lawful purposes. Users are responsible for maintaining the confidentiality of
+                  their account and any activities performed under it.
+                </p>
+                <p style={{ margin: '0 0 12px' }}>
+                  BatasMo respects and protects your personal data in accordance with the Data Privacy Act of 2012
+                  (Republic Act No. 10173). All information submitted in the system will be securely stored and used
+                  solely for the purpose of providing legal consultation and related services.
+                </p>
+                <p style={{ margin: 0 }}>
+                  By proceeding, you confirm that you have read, understood, and agreed to these terms and conditions.
+                </p>
+              </div>
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 10,
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  color: '#d1d5db',
+                  textAlign: 'left',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={agreedToTerms}
+                  onChange={(e) => {
+                    setAgreedToTerms(e.target.checked);
+                    setErrors((prev) => ({ ...prev, agreedToTerms: '' }));
+                  }}
+                  style={{ marginTop: 3 }}
+                />
+                <span>
+                  I confirm that I have read, understood, and agree to the Terms and Conditions above.
+                </span>
+              </label>
+              {errors.agreedToTerms ? <p className="su-error-text">{errors.agreedToTerms}</p> : null}
             </div>
 
             {errors.form ? <p className="su-error-text">{errors.form}</p> : null}

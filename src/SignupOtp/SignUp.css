@@ -258,6 +258,17 @@
   color: #8b9aa7;
 }
 
+.su-eye {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #b7c0c9;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 4px;
+}
+
 .su-error-text {
   margin: 0;
   color: #f5b2b2;
