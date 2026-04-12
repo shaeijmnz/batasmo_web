@@ -1,0 +1,345 @@
+:root {
+  --ui-navy-950: #030b1c;
+  --ui-navy-900: #08182f;
+  --ui-navy-800: #0e2446;
+  --ui-gold: #b7924b;
+  --ui-cream: #f4ecdb;
+  --ui-bg: #f2eee6;
+  --ui-surface: #fffdfa;
+  --ui-border: #e4d9c7;
+  --ui-text: #1a2d46;
+  --ui-muted: #627691;
+}
+
+body {
+  background: linear-gradient(180deg, #f8f3ea 0%, var(--ui-bg) 100%);
+  color: var(--ui-text);
+}
+
+/* Hide scrollbar visuals while keeping scroll functionality */
+html,
+body,
+.main-content,
+.main-panel,
+.scroll-content,
+.content-wrapper {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+.main-content::-webkit-scrollbar,
+.main-panel::-webkit-scrollbar,
+.scroll-content::-webkit-scrollbar,
+.content-wrapper::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+.app-container,
+.dashboard-container,
+.main-content,
+.main-panel {
+  background: transparent !important;
+}
+
+.sidebar,
+.navbar,
+.top-bar {
+  background: linear-gradient(180deg, var(--ui-navy-900) 0%, #0a1d39 50%, var(--ui-navy-800) 100%) !important;
+}
+
+.sidebar {
+  border-right: 1px solid rgba(183, 146, 75, 0.28) !important;
+}
+
+.navbar,
+.top-bar {
+  position: relative;
+  border-bottom: 1px solid rgba(183, 146, 75, 0.25) !important;
+}
+
+.navbar::after,
+.top-bar::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent 0%, rgba(183, 146, 75, 0.75) 50%, transparent 100%);
+}
+
+.sidebar.closed {
+  width: 76px !important;
+}
+
+.sidebar.closed .sidebar-nav {
+  padding: 10px 8px !important;
+}
+
+.sidebar.closed .nav-item {
+  justify-content: center;
+  padding: 10px 0 !important;
+}
+
+.content-wrapper,
+.scroll-content {
+  width: 100%;
+  max-width: 1360px;
+  margin: 0;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 14px 14px 10px !important;
+}
+
+.stats-grid,
+.stats-row {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important;
+  gap: 12px !important;
+}
+
+.grid-split,
+.bottom-grid {
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)) !important;
+  gap: 12px !important;
+}
+
+.title,
+.card-title,
+h3,
+h4,
+.item-title,
+.client-name,
+.attorney-name,
+.request-title,
+.session-title {
+  color: var(--ui-text) !important;
+}
+
+.nav-title,
+.page-title {
+  font-family: "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: var(--ui-cream) !important;
+}
+
+.subtitle,
+.item-subtitle,
+.stat-label,
+.user-email,
+.email,
+.info-label,
+.info-text,
+.client-info p,
+.attorney-info p,
+.meta-info,
+.contact-info,
+.exp-text,
+.m-label,
+.notes-label,
+.notes-text,
+.plan-info p,
+.card-details span,
+.history-item span,
+.stat-change span {
+  color: var(--ui-muted) !important;
+}
+
+.stat-card,
+.info-card,
+.clients-container,
+.attorneys-container,
+.request-card,
+.session-card,
+.chart-container,
+.report-stat-card,
+.card,
+.filter-bar,
+.search-filter-section,
+.settings-tabs,
+.generate-section,
+.tabs-container,
+.payment-method,
+.plan-banner,
+.chart-placeholder,
+.revenue-chart,
+.pie-chart-wrap,
+.performance-chart-list {
+  background: var(--ui-surface) !important;
+  border: 1px solid var(--ui-border) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 22px rgba(6, 18, 35, 0.07) !important;
+}
+
+.stat-card,
+.info-card,
+.request-card,
+.session-card,
+.report-stat-card,
+.card {
+  border-top: 3px solid #102a4b !important;
+}
+
+.settings-tab,
+.tab,
+.btn-secondary,
+.btn-edit,
+.btn-add-method,
+.btn-outline,
+.chart-export,
+.gen-btn,
+.btn-save,
+.add-btn,
+.export-all-btn,
+.btn-primary,
+.btn-full.gold,
+.logout-btn,
+.logout-action {
+  min-height: 40px;
+  padding: 9px 14px !important;
+  line-height: 1.2;
+  border: 1px solid #dcccad !important;
+  box-sizing: border-box;
+  transition: background-color 0.2s ease, color 0.2s ease;
+  transform: none !important;
+}
+
+.settings-tab,
+.tab,
+.btn-secondary,
+.btn-edit,
+.btn-add-method,
+.btn-outline,
+.chart-export,
+.gen-btn {
+  background: #fff9f0 !important;
+  color: var(--ui-text) !important;
+}
+
+.settings-tabs,
+.tabs-container {
+  gap: 6px !important;
+  padding: 5px !important;
+}
+
+.settings-tab.active,
+.tab.active,
+.nav-item.active,
+.btn-save,
+.add-btn,
+.export-all-btn,
+.btn-primary,
+.btn-full.gold,
+.gen-btn.client,
+.gen-btn.attorney,
+.gen-btn.financial,
+.gen-btn.activity,
+.logo-icon,
+.logo-box,
+.profile-avatar,
+.user-avatar,
+.rank-badge {
+  background: linear-gradient(140deg, #d3b273 0%, var(--ui-gold) 100%) !important;
+  color: #263950 !important;
+  border-color: transparent !important;
+}
+
+.logout-btn,
+.logout-action {
+  background: transparent !important;
+  border: none !important;
+  color: var(--ui-cream) !important;
+  justify-content: flex-start;
+}
+
+.logout-btn svg,
+.logout-action svg,
+.menu-toggle svg,
+.hamburger svg {
+  stroke: var(--ui-cream) !important;
+}
+
+.menu-toggle,
+.hamburger {
+  background: transparent !important;
+  border: none !important;
+  color: var(--ui-cream) !important;
+  min-height: auto !important;
+  padding: 4px !important;
+  box-shadow: none !important;
+}
+
+.view-all,
+.chart-export,
+.stat-change,
+.rating-star,
+.dl-icon,
+.specialty-badge {
+  color: var(--ui-gold) !important;
+}
+
+.search-box,
+.search-box input,
+.input-group input,
+.input-group textarea,
+.input-group select {
+  background: #fffdf8 !important;
+  color: var(--ui-text) !important;
+  border: 1px solid #e0d4bf !important;
+}
+
+.search-box input::placeholder,
+.input-group input::placeholder,
+.input-group textarea::placeholder {
+  color: #8f8068;
+}
+
+.nav-item {
+  color: #dce5f2 !important;
+}
+
+.sidebar .logo-text,
+.sidebar .user-name,
+.sidebar .name {
+  color: var(--ui-cream) !important;
+}
+
+.brand-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid rgba(183, 146, 75, 0.45);
+  background: #0f2445;
+}
+
+.sidebar.closed .brand-logo {
+  margin: 0 auto;
+}
+
+.nav-item:hover:not(.active),
+.btn-secondary:hover,
+.gen-btn:hover,
+.btn-edit:hover,
+.btn-add-method:hover,
+.btn-outline:hover,
+.chart-export:hover {
+  background: #f0e5d2 !important;
+  color: var(--ui-text) !important;
+}
+
+.red-dot,
+.dot {
+  background: #a52f2f !important;
+}
+
+@media (max-width: 900px) {
+  .content-wrapper,
+  .scroll-content {
+    padding: 12px 8px 8px !important;
+  }
+}
