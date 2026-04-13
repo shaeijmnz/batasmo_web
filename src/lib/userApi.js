@@ -633,7 +633,7 @@ const normalizeConsultationTypeLabel = (title) => {
     .replace(/consultation/gi, '')
     .replace(/legal/gi, '')
     .replace(/\s{2,}/g, ' ')
-    .replace(/[\-:]+$/g, '')
+    .replace(/[-:]+$/g, '')
     .trim() || 'General Consultation'
 }
 
@@ -1726,9 +1726,7 @@ export async function fetchAttorneyConsultationRequests(userId, options = {}) {
       const bTime = b.parsed_scheduled_at?.getTime() || 0
       return aTime - bTime
     })
-    .map((item) => {
-      const status = normalizeAppointmentStatus(item.status)
-    return {
+    .map((item) => ({
       id: item.id,
       clientId: item.client_id,
       name: item.client_name || 'Client',
@@ -1744,8 +1742,7 @@ export async function fetchAttorneyConsultationRequests(userId, options = {}) {
       payment: Number(item.amount || 0) > 0 ? 'Paid' : 'Unpaid',
       status: 'Approved',
       concern: item.notes || 'No additional notes provided.',
-    }
-    })
+    }))
 
   const storedNotifications = (notificationsRes.data || []).map((item) => ({
     id: item.id,

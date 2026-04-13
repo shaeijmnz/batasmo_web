@@ -40,11 +40,6 @@ const ScheduleIcon = () => (
     <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
   </svg>
 );
-const MessagesIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-  </svg>
-);
 const LogsIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><polyline points="14 2 14 8 20 8"/>
@@ -139,10 +134,6 @@ function ConsultationRequests({ onNavigate, profile }) {
     setReschedNote('');
   };
 
-  const handleAccept = (id) => {
-    setModal({ type: 'accept', requestId: id });
-  };
-
   const confirmAccept = async () => {
     try {
       await updateAttorneyConsultationRequestStatus({ appointmentId: modal.requestId, status: 'confirmed' });
@@ -152,10 +143,6 @@ function ConsultationRequests({ onNavigate, profile }) {
       setLoadError(error.message || 'Failed to approve request.');
     }
     closeModal();
-  };
-
-  const handleReject = (id) => {
-    setModal({ type: 'reject', requestId: id });
   };
 
   const confirmReject = async () => {
@@ -172,10 +159,6 @@ function ConsultationRequests({ onNavigate, profile }) {
       setLoadError(error.message || 'Failed to reject request.');
     }
     closeModal();
-  };
-
-  const handleReschedule = (id) => {
-    setModal({ type: 'reschedule', requestId: id });
   };
 
   const confirmReschedule = async () => {

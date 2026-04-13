@@ -132,6 +132,7 @@ const RECOVERY_ACTIVE_KEY = 'batasmo_recovery_active'
 const RECOVERY_EMAIL_KEY = 'batasmo_recovery_email'
 const RECOVERY_VERIFIED_KEY = 'batasmo_recovery_verified'
 const FORCE_LOGIN_REDIRECT_KEY = 'batasmo_force_login_redirect'
+const IS_DEV = process.env.NODE_ENV !== 'production'
 
 const resolveInitialPage = () => {
   const forcedLogin = sessionStorage.getItem(FORCE_LOGIN_REDIRECT_KEY) === '1'
@@ -198,6 +199,7 @@ function PageLifecycleTrace({ page, profile, children }) {
   const role = normalizeRole(profile?.role || '')
 
   useEffect(() => {
+    if (!IS_DEV) return undefined
     console.log('[lifecycle] page mounted', { page, userId, role })
     return () => {
       console.log('[lifecycle] page unmounted', { page, userId, role })
@@ -237,7 +239,9 @@ function App() {
   const resetRuntimeForAuthBoundary = useCallback((reason, details = {}) => {
     resetUserApiRuntimeState()
     setAuthScopeVersion((prev) => prev + 1)
-    console.log('[auth] runtime scope reset', { reason, ...details })
+    if (IS_DEV) {
+      console.log('[auth] runtime scope reset', { reason, ...details })
+    }
   }, [])
 
   useEffect(() => {
@@ -255,10 +259,12 @@ function App() {
           })
         }
         activeAuthUserIdRef.current = sessionUserId;
-        console.log('[auth] bootstrap session resolved', {
-          userId: sessionUserId,
-          role: normalizeRole(profile?.role || session?.user?.user_metadata?.role || ''),
-        })
+        if (IS_DEV) {
+          console.log('[auth] bootstrap session resolved', {
+            userId: sessionUserId,
+            role: normalizeRole(profile?.role || session?.user?.user_metadata?.role || ''),
+          })
+        }
 
         if (isMounted) {
           if (!sessionUserId) {
@@ -297,7 +303,9 @@ function App() {
           })
         }
         activeAuthUserIdRef.current = sessionUserId;
-        console.log('[auth] onAuthStateChange', { event, userId: sessionUserId })
+        if (IS_DEV) {
+          console.log('[auth] onAuthStateChange', { event, userId: sessionUserId })
+        }
 
         if (event === 'TOKEN_REFRESH_FAILED') {
           forceResetToLogin('token refresh failed')
@@ -343,7 +351,9 @@ function App() {
     return () => {
       isMounted = false;
       authListener?.subscription?.unsubscribe?.();
-      console.log('[auth] auth listener unsubscribed')
+      if (IS_DEV) {
+        console.log('[auth] auth listener unsubscribed')
+      }
     };
   }, [forceResetToLogin, resetRuntimeForAuthBoundary]);
 
@@ -415,6 +425,7 @@ function App() {
   }, [currentProfile?.id, currentProfile?.role, resetRuntimeForAuthBoundary])
 
   useEffect(() => {
+    if (!IS_DEV) return
     console.log('[nav] page changed', {
       page,
       userId: currentProfile?.id || null,
@@ -447,7 +458,9 @@ function App() {
       console.error('[auth] sign out failed, forcing local cleanup', error)
     } finally {
       forceResetToLogin('manual sign out')
-      console.log('[auth] sign out flow completed')
+      if (IS_DEV) {
+        console.log('[auth] sign out flow completed')
+      }
     }
   }, [forceResetToLogin]);
 

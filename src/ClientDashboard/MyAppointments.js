@@ -74,24 +74,6 @@ const CalendarIcon = () => (
   </svg>
 );
 
-const ClockIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-  </svg>
-);
-
-const LocationIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" />
-  </svg>
-);
-
-const FeesIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="10" /><path d="M12 6v12M9 9h6a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-6" />
-  </svg>
-);
-
 function MyAppointments({ onNavigate, profile }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [appointments, setAppointments] = useState([]);
@@ -326,11 +308,6 @@ function MyAppointments({ onNavigate, profile }) {
     setSelectedPaymentMethod('');
     setPhoneNumber('');
     setPaymentCode('');
-  };
-
-  const openTranscriptModal = (appointment) => {
-    setSelectedAppointmentForTranscript(appointment);
-    setShowTranscriptModal(true);
   };
 
   const closeTranscriptModal = () => {
