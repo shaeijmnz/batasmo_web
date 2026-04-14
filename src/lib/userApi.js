@@ -2991,7 +2991,10 @@ export function subscribeToConsultationRoomStatus(appointmentId, onStatusChange)
       },
       (payload) => {
         if (typeof onStatusChange === 'function') {
-          onStatusChange(Boolean(payload?.new?.is_closed))
+          onStatusChange({
+            isClosed: Boolean(payload?.new?.is_closed),
+            videoMeetingId: payload?.new?.video_meeting_id ?? null,
+          })
         }
       },
     )
@@ -3517,7 +3520,6 @@ export async function fetchAttorneyAnnouncementsData(userId) {
 
 // ─── VideoSDK helpers ────────────────────────────────────────────────────────
 
-const VIDEOSDK_API_BASE = 'https://api.videosdk.live/v2'
 const VIDEOSDK_BACKEND_URL = process.env.REACT_APP_CHATBOT_API_URL || 'http://localhost:4000'
 
 let cachedVideoSdkToken = null
@@ -3555,22 +3557,19 @@ export async function getOrCreateVideoMeeting(appointmentId) {
     return { meetingId: room.video_meeting_id, roomId: room.id, token: videoToken }
   }
 
-  // Create a new VideoSDK meeting room
-  const videoToken = await getVideoSdkToken()
-  const response = await fetch(`${VIDEOSDK_API_BASE}/rooms`, {
+  // Create a new VideoSDK room via the backend (server-to-server — avoids CORS/auth issues)
+  const createRes = await fetch(`${VIDEOSDK_BACKEND_URL}/videosdk-create-room`, {
     method: 'POST',
-    headers: {
-      Authorization: videoToken,
-      'Content-Type': 'application/json',
-    },
   })
 
-  if (!response.ok) {
-    const body = await response.text()
-    throw new Error(`VideoSDK room creation failed: ${body}`)
+  if (!createRes.ok) {
+    const body = await createRes.text()
+    let message = `VideoSDK room creation failed (${createRes.status})`
+    try { message = JSON.parse(body).error || message } catch { /* ignore */ }
+    throw new Error(message)
   }
 
-  const { roomId: newMeetingId } = await response.json()
+  const { roomId: newMeetingId, token: videoToken } = await createRes.json()
 
   const { error: updateError } = await supabase
     .from('consultation_rooms')

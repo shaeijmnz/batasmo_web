@@ -76,7 +76,9 @@ function ParticipantView({ participantId }) {
 
 function Controls({ onLeave, localParticipantId, toggleMic, toggleWebcam }) {
   // useParticipant gives the live, reactive state for the local participant.
-  const { micOn, webcamOn } = useParticipant(localParticipantId || '');
+  // localParticipantId is guaranteed to be a valid non-empty string here
+  // because Controls is only rendered after joinState === 'JOINED' && localParticipant?.id is truthy.
+  const { micOn, webcamOn } = useParticipant(localParticipantId);
 
   return (
     <div className="vc-controls">
@@ -228,11 +230,11 @@ function MeetingView({ meetingId, onLeave }) {
         </div>
       )}
 
-      {/* Full controls only when joined — prevents stale toggles during connect */}
-      {joinState === 'JOINED' ? (
+      {/* Full controls only when joined AND local participant is ready */}
+      {joinState === 'JOINED' && localParticipant?.id ? (
         <Controls
           onLeave={handleLeave}
-          localParticipantId={localParticipant?.id}
+          localParticipantId={localParticipant.id}
           toggleMic={toggleMic}
           toggleWebcam={toggleWebcam}
         />

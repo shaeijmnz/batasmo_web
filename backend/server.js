@@ -631,23 +631,59 @@ app.post('/chatbot/message', async (req, res) => {
 // HEALTH CHECK
 // ============================================================================
 
-// ── VideoSDK token endpoint ───────────────────────────────────────────────────
-app.get('/videosdk-token', (req, res) => {
+// ── VideoSDK helpers ──────────────────────────────────────────────────────────
+
+const buildVideoSdkToken = () => {
   const apiKey = process.env.VIDEOSDK_API_KEY
   const secret = process.env.VIDEOSDK_API_SECRET
-
-  if (!apiKey || !secret) {
-    return res.status(500).json({ error: 'VideoSDK credentials not configured on server.' })
-  }
+  if (!apiKey || !secret) throw new Error('VideoSDK credentials not configured on server.')
 
   const payload = {
     apikey: apiKey,
     permissions: ['allow_join', 'allow_mod'],
     version: 2,
   }
+  return jwt.sign(payload, secret, { expiresIn: '120m', algorithm: 'HS256' })
+}
 
-  const token = jwt.sign(payload, secret, { expiresIn: '120m', algorithm: 'HS256' })
-  res.json({ token })
+// ── VideoSDK token endpoint ───────────────────────────────────────────────────
+app.get('/videosdk-token', (req, res) => {
+  try {
+    const token = buildVideoSdkToken()
+    res.json({ token })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ── VideoSDK create room endpoint ─────────────────────────────────────────────
+// Creates a VideoSDK room server-side (avoids CORS + auth issues from the browser).
+// Returns { roomId, token } — roomId to join, token for the React SDK.
+app.post('/videosdk-create-room', async (req, res) => {
+  try {
+    const token = buildVideoSdkToken()
+
+    const response = await fetch('https://api.videosdk.live/v2/rooms', {
+      method: 'POST',
+      headers: {
+        Authorization: token,
+        'Content-Type': 'application/json',
+      },
+    })
+
+    const body = await response.text()
+
+    if (!response.ok) {
+      console.error('[videosdk] Room creation failed:', response.status, body)
+      return res.status(response.status).json({ error: `VideoSDK room creation failed: ${body}` })
+    }
+
+    const { roomId } = JSON.parse(body)
+    res.json({ roomId, token })
+  } catch (err) {
+    console.error('[videosdk] /videosdk-create-room error:', err)
+    res.status(500).json({ error: err.message })
+  }
 })
 
 app.get('/health', (req, res) => {

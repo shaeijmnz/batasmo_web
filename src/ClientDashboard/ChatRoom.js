@@ -17,6 +17,7 @@ import {
   subscribeToConsultationRoomStatus,
   getOrCreateVideoMeeting,
   clearVideoMeetingId,
+  getVideoSdkToken,
 } from '../lib/userApi';
 import VideoCallModal from '../components/VideoCallModal';
 
@@ -76,6 +77,7 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
   const [videoCall, setVideoCall] = useState(null);
   const [videoCallLoading, setVideoCallLoading] = useState(false);
   const [videoCallError, setVideoCallError] = useState('');
+  const videoCallRef = useRef(null);
   const messagesEndRef = useRef(null);
   const imagePickerRef = useRef(null);
   const filePickerRef = useRef(null);
@@ -258,17 +260,27 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
   useEffect(() => {
     if (!activeAppointmentId) return undefined;
 
-    const unsubscribe = subscribeToConsultationRoomStatus(activeAppointmentId, async (closed) => {
-      setIsClosed(Boolean(closed));
-      if (!closed) return;
+    const unsubscribe = subscribeToConsultationRoomStatus(activeAppointmentId, async ({ isClosed, videoMeetingId }) => {
+      setIsClosed(Boolean(isClosed));
+      if (isClosed) {
+        await syncClosedSessionFeedbackState(activeAppointmentId);
+      }
 
-      await syncClosedSessionFeedbackState(activeAppointmentId);
+      // Auto-open video call when attorney starts one (video_meeting_id just appeared)
+      if (videoMeetingId && !videoCallRef.current) {
+        try {
+          const { meetingId, roomId, token } = await getOrCreateVideoMeeting(activeAppointmentId);
+          openVideoCall({ meetingId, roomId, token });
+        } catch {
+          // silently ignore — client can still click the button manually
+        }
+      }
     });
 
     return () => {
       unsubscribe();
     };
-  }, [activeAppointmentId]);
+  }, [activeAppointmentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!profile?.id) return undefined;
@@ -586,13 +598,18 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
     return <p>{msg.text}</p>;
   };
 
+  const openVideoCall = (callData) => {
+    videoCallRef.current = callData;
+    setVideoCall(callData);
+  };
+
   const handleStartVideoCall = async () => {
     if (!activeAppointmentId || videoCallLoading) return;
     setVideoCallLoading(true);
     setVideoCallError('');
     try {
       const { meetingId, roomId, token } = await getOrCreateVideoMeeting(activeAppointmentId);
-      setVideoCall({ meetingId, roomId, token });
+      openVideoCall({ meetingId, roomId, token });
     } catch (err) {
       setVideoCallError(err.message || 'Failed to start video call.');
     } finally {
@@ -604,6 +621,7 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
     if (videoCall?.roomId) {
       await clearVideoMeetingId(videoCall.roomId);
     }
+    videoCallRef.current = null;
     setVideoCall(null);
   };
 

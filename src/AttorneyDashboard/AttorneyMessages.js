@@ -13,8 +13,10 @@ import {
   sendAppointmentMessage,
   subscribeToAttorneyAppointments,
   subscribeToAppointmentMessages,
+  subscribeToConsultationRoomStatus,
   getOrCreateVideoMeeting,
   clearVideoMeetingId,
+  getVideoSdkToken,
 } from '../lib/userApi';
 import VideoCallModal from '../components/VideoCallModal';
 
@@ -87,6 +89,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
   const [videoCall, setVideoCall] = useState(null);
   const [videoCallLoading, setVideoCallLoading] = useState(false);
   const [videoCallError, setVideoCallError] = useState('');
+  const videoCallRef = useRef(null);
   const messagesEndRef = useRef(null);
   const imagePickerRef = useRef(null);
   const filePickerRef = useRef(null);
@@ -644,13 +647,18 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
   const timerLabel = formatTimerLabel(remainingSeconds);
   const isTenMinuteWindow = remainingSeconds <= 10 * 60;
 
+  const openVideoCall = (callData) => {
+    videoCallRef.current = callData;
+    setVideoCall(callData);
+  };
+
   const handleStartVideoCall = async () => {
     if (!activeAppointmentId || videoCallLoading) return;
     setVideoCallLoading(true);
     setVideoCallError('');
     try {
       const { meetingId, roomId, token } = await getOrCreateVideoMeeting(activeAppointmentId);
-      setVideoCall({ meetingId, roomId, token });
+      openVideoCall({ meetingId, roomId, token });
     } catch (err) {
       setVideoCallError(err.message || 'Failed to start video call.');
     } finally {
@@ -662,8 +670,27 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
     if (videoCall?.roomId) {
       await clearVideoMeetingId(videoCall.roomId);
     }
+    videoCallRef.current = null;
     setVideoCall(null);
   };
+
+  // Auto-open video call when client starts one (video_meeting_id appears in DB)
+  useEffect(() => {
+    if (!activeAppointmentId) return undefined;
+
+    const unsubscribe = subscribeToConsultationRoomStatus(activeAppointmentId, async ({ videoMeetingId }) => {
+      if (videoMeetingId && !videoCallRef.current) {
+        try {
+          const { meetingId, roomId, token } = await getOrCreateVideoMeeting(activeAppointmentId);
+          openVideoCall({ meetingId, roomId, token });
+        } catch {
+          // silently ignore — attorney can still click the button manually
+        }
+      }
+    });
+
+    return () => unsubscribe();
+  }, [activeAppointmentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="am-page">
