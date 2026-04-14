@@ -1253,6 +1253,9 @@ export const isConsultationChatActiveStatus = (status) =>
   CHAT_ACTIVE_APPOINTMENT_STATUSES.has(String(status || '').toLowerCase())
 
 export const isConsultationChatWindowOpen = ({ status, scheduledAt, slotDate, slotTime, nowValue } = {}) => {
+  // DEV BYPASS — remove this line before going to production
+  if (process.env.REACT_APP_BYPASS_CHAT_WINDOW === 'true') return true
+
   if (!isConsultationChatActiveStatus(status)) return false
 
   const scheduled = parseChatScheduleDate({ scheduledAt, slotDate, slotTime })
@@ -1268,7 +1271,7 @@ export async function fetchClientAppointmentsData(userId) {
   const [appointmentsRes, transactionsRes] = await Promise.all([
     supabase
       .from('appointments')
-      .select('id, title, notes, scheduled_at, slot_date, slot_time, status, amount, attorney_id, attorney:attorney_id(full_name)')
+      .select('id, title, notes, scheduled_at, status, amount, attorney_id, attorney:attorney_id(full_name)')
       .eq('client_id', userId)
       .order('scheduled_at', { ascending: false }),
     supabase
@@ -1337,7 +1340,7 @@ export async function fetchClientAppointmentsData(userId) {
 export async function fetchClientChatEligibleAppointments(userId) {
   const { data, error } = await supabase
     .from('appointments')
-    .select('id, title, scheduled_at, slot_date, slot_time, status, attorney:attorney_id(full_name)')
+    .select('id, title, scheduled_at, status, attorney:attorney_id(full_name)')
     .eq('client_id', userId)
     .order('scheduled_at', { ascending: true })
 
@@ -1348,8 +1351,6 @@ export async function fetchClientChatEligibleAppointments(userId) {
       isConsultationChatWindowOpen({
         status: item.status,
         scheduledAt: item.scheduled_at,
-        slotDate: item.slot_date,
-        slotTime: item.slot_time,
       }),
     )
     .map((item) => ({
@@ -2381,20 +2382,29 @@ export async function fetchClientAttorneyActiveBookingCount({ clientId, attorney
 }
 
 async function getOrCreateConsultationRoom(appointmentId) {
+  const devBypass = process.env.REACT_APP_BYPASS_CHAT_WINDOW === 'true'
+
+  // Only fetch time-related columns when the bypass is off
+  const selectFields = devBypass
+    ? 'status'
+    : 'status, scheduled_at, slot_date, slot_time'
+
   const { data: appointment, error: appointmentError } = await supabase
     .from('appointments')
-    .select('status, scheduled_at, slot_date, slot_time')
+    .select(selectFields)
     .eq('id', appointmentId)
     .maybeSingle()
 
   if (appointmentError) throw appointmentError
 
   const status = String(appointment?.status || '').toLowerCase()
-  if (!isConsultationChatActiveStatus(status)) {
+
+  if (!devBypass && !isConsultationChatActiveStatus(status)) {
     throw new Error(CHAT_ACCESS_BLOCKED_MESSAGE)
   }
 
   if (
+    !devBypass &&
     !isConsultationChatWindowOpen({
       status,
       scheduledAt: appointment?.scheduled_at,
@@ -3505,3 +3515,81 @@ export async function fetchAttorneyAnnouncementsData(userId) {
   })
 }
 
+// ─── VideoSDK helpers ────────────────────────────────────────────────────────
+
+const VIDEOSDK_API_BASE = 'https://api.videosdk.live/v2'
+const VIDEOSDK_BACKEND_URL = process.env.REACT_APP_CHATBOT_API_URL || 'http://localhost:4000'
+
+let cachedVideoSdkToken = null
+
+export async function getVideoSdkToken() {
+  if (cachedVideoSdkToken) return cachedVideoSdkToken
+  const res = await fetch(`${VIDEOSDK_BACKEND_URL}/videosdk-token`)
+  if (!res.ok) throw new Error('Failed to fetch VideoSDK token from server.')
+  const { token } = await res.json()
+  cachedVideoSdkToken = token
+  // Clear cache after 110 minutes so it refreshes before 120m expiry
+  setTimeout(() => { cachedVideoSdkToken = null }, 110 * 60 * 1000)
+  return token
+}
+
+/**
+ * Returns the VideoSDK meeting ID for the consultation room linked to the
+ * given appointmentId. If no meeting exists yet, a new VideoSDK room is
+ * created via the REST API and the ID is stored on `consultation_rooms`.
+ */
+export async function getOrCreateVideoMeeting(appointmentId) {
+  if (!appointmentId) throw new Error('appointmentId is required')
+
+  const { data: room, error: roomError } = await supabase
+    .from('consultation_rooms')
+    .select('id, video_meeting_id')
+    .eq('appointment_id', appointmentId)
+    .maybeSingle()
+
+  if (roomError) throw roomError
+  if (!room) throw new Error('Consultation room not found for this appointment.')
+
+  if (room.video_meeting_id) {
+    const videoToken = await getVideoSdkToken()
+    return { meetingId: room.video_meeting_id, roomId: room.id, token: videoToken }
+  }
+
+  // Create a new VideoSDK meeting room
+  const videoToken = await getVideoSdkToken()
+  const response = await fetch(`${VIDEOSDK_API_BASE}/rooms`, {
+    method: 'POST',
+    headers: {
+      Authorization: videoToken,
+      'Content-Type': 'application/json',
+    },
+  })
+
+  if (!response.ok) {
+    const body = await response.text()
+    throw new Error(`VideoSDK room creation failed: ${body}`)
+  }
+
+  const { roomId: newMeetingId } = await response.json()
+
+  const { error: updateError } = await supabase
+    .from('consultation_rooms')
+    .update({ video_meeting_id: newMeetingId })
+    .eq('id', room.id)
+
+  if (updateError) throw updateError
+
+  return { meetingId: newMeetingId, roomId: room.id, token: videoToken }
+}
+
+/**
+ * Clears the video_meeting_id from the consultation_rooms row after the call ends.
+ */
+export async function clearVideoMeetingId(consultationRoomId) {
+  if (!consultationRoomId) return
+  const { error } = await supabase
+    .from('consultation_rooms')
+    .update({ video_meeting_id: null })
+    .eq('id', consultationRoomId)
+  if (error) console.error('[video] clearVideoMeetingId error', error)
+}

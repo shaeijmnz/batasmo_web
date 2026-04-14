@@ -15,7 +15,10 @@ import {
   subscribeToAppointmentStatus,
   subscribeToAppointmentMessages,
   subscribeToConsultationRoomStatus,
+  getOrCreateVideoMeeting,
+  clearVideoMeetingId,
 } from '../lib/userApi';
+import VideoCallModal from '../components/VideoCallModal';
 
 const ATTORNEY_AVATAR_BG = 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)';
 
@@ -70,6 +73,9 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
   const [feedbackError, setFeedbackError] = useState('');
   const [timeWarningPopup, setTimeWarningPopup] = useState(null);
+  const [videoCall, setVideoCall] = useState(null);
+  const [videoCallLoading, setVideoCallLoading] = useState(false);
+  const [videoCallError, setVideoCallError] = useState('');
   const messagesEndRef = useRef(null);
   const imagePickerRef = useRef(null);
   const filePickerRef = useRef(null);
@@ -580,6 +586,27 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
     return <p>{msg.text}</p>;
   };
 
+  const handleStartVideoCall = async () => {
+    if (!activeAppointmentId || videoCallLoading) return;
+    setVideoCallLoading(true);
+    setVideoCallError('');
+    try {
+      const { meetingId, roomId, token } = await getOrCreateVideoMeeting(activeAppointmentId);
+      setVideoCall({ meetingId, roomId, token });
+    } catch (err) {
+      setVideoCallError(err.message || 'Failed to start video call.');
+    } finally {
+      setVideoCallLoading(false);
+    }
+  };
+
+  const handleCloseVideoCall = async () => {
+    if (videoCall?.roomId) {
+      await clearVideoMeetingId(videoCall.roomId);
+    }
+    setVideoCall(null);
+  };
+
   return (
     <div className="cr-page">
       <div className="cr-chat-area">
@@ -595,20 +622,44 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
             )}
           </div>
 
-          {threads.length > 0 ? (
-            <select
-              value={activeAppointmentId}
-              onChange={(e) => setActiveAppointmentId(e.target.value)}
-              className="cr-thread-select"
+          <div className="cr-session-bar__actions">
+            <button
+              type="button"
+              className="cr-video-call-btn"
+              onClick={handleStartVideoCall}
+              disabled={!activeAppointmentId || videoCallLoading || isClosed}
+              title="Start Video Call"
             >
-              {threads.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name} • {item.scheduleLabel}
-                </option>
-              ))}
-            </select>
-          ) : null}
+              {videoCallLoading ? (
+                'Connecting…'
+              ) : (
+                <>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <polygon points="23 7 16 12 23 17 23 7" />
+                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                  </svg>
+                  Video Call
+                </>
+              )}
+            </button>
+            {threads.length > 0 ? (
+              <select
+                value={activeAppointmentId}
+                onChange={(e) => setActiveAppointmentId(e.target.value)}
+                className="cr-thread-select"
+              >
+                {threads.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name} • {item.scheduleLabel}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+          </div>
         </div>
+        {videoCallError ? (
+          <div className="cr-video-error">{videoCallError}</div>
+        ) : null}
 
         <div className="cr-messages">
           {loadError ? (
@@ -804,6 +855,15 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
             </div>
           </div>
         </div>
+      ) : null}
+
+      {videoCall ? (
+        <VideoCallModal
+          meetingId={videoCall.meetingId}
+          token={videoCall.token || ''}
+          participantName={profile?.full_name || profile?.email || 'Client'}
+          onClose={handleCloseVideoCall}
+        />
       ) : null}
     </div>
   );

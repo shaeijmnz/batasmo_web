@@ -2,6 +2,7 @@ import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import jwt from 'jsonwebtoken'
 
 dotenv.config()
 
@@ -629,6 +630,25 @@ app.post('/chatbot/message', async (req, res) => {
 // ============================================================================
 // HEALTH CHECK
 // ============================================================================
+
+// ── VideoSDK token endpoint ───────────────────────────────────────────────────
+app.get('/videosdk-token', (req, res) => {
+  const apiKey = process.env.VIDEOSDK_API_KEY
+  const secret = process.env.VIDEOSDK_API_SECRET
+
+  if (!apiKey || !secret) {
+    return res.status(500).json({ error: 'VideoSDK credentials not configured on server.' })
+  }
+
+  const payload = {
+    apikey: apiKey,
+    permissions: ['allow_join', 'allow_mod'],
+    version: 2,
+  }
+
+  const token = jwt.sign(payload, secret, { expiresIn: '120m', algorithm: 'HS256' })
+  res.json({ token })
+})
 
 app.get('/health', (req, res) => {
   res.json({

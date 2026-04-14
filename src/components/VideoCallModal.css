@@ -1,0 +1,279 @@
+/* ── Overlay & Modal Shell ─────────────────────────────────────────────────── */
+
+.vc-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.vc-modal {
+  background: #111827;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 920px;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.7);
+}
+
+/* ── Header ───────────────────────────────────────────────────────────────── */
+
+.vc-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.vc-modal__title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #f9fafb;
+  letter-spacing: 0.3px;
+}
+
+.vc-modal__close {
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: #9ca3af;
+  font-size: 14px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.vc-modal__close:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
+/* ── Meeting container ─────────────────────────────────────────────────────── */
+
+.vc-meeting {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.vc-meeting__id {
+  padding: 6px 20px;
+  font-size: 11px;
+  color: #6b7280;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  flex-shrink: 0;
+}
+
+/* ── Connecting spinner ───────────────────────────────────────────────────── */
+
+.vc-connecting {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: #9ca3af;
+  font-size: 14px;
+}
+
+.vc-connecting__spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: vc-spin 0.8s linear infinite;
+}
+
+@keyframes vc-spin {
+  to { transform: rotate(360deg); }
+}
+
+.vc-error-msg {
+  color: #f87171;
+  font-size: 14px;
+  text-align: center;
+  max-width: 360px;
+  line-height: 1.5;
+}
+
+/* ── Participant grid ─────────────────────────────────────────────────────── */
+
+.vc-grid {
+  flex: 1;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  overflow-y: auto;
+  align-content: start;
+}
+
+.vc-grid--sm {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.vc-grid--lg {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+/* ── Participant tile ─────────────────────────────────────────────────────── */
+
+.vc-participant {
+  position: relative;
+  background: #1f2937;
+  border-radius: 12px;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.vc-participant__video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 0;
+}
+
+.vc-participant__avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 1px;
+  z-index: 1;
+}
+
+.vc-participant__label {
+  position: absolute;
+  bottom: 8px;
+  left: 10px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #f9fafb;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+  backdrop-filter: blur(4px);
+  z-index: 2;
+}
+
+.vc-participant__status {
+  position: absolute;
+  bottom: 8px;
+  right: 10px;
+  z-index: 2;
+  display: flex;
+  gap: 4px;
+}
+
+.vc-participant__mic-off {
+  font-size: 14px;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.6));
+}
+
+/* ── Controls bar ────────────────────────────────────────────────────────── */
+
+.vc-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 14px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+  background: #0f172a;
+}
+
+.vc-ctrl-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 16px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  min-width: 72px;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.vc-ctrl-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.vc-ctrl-btn--active {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f9fafb;
+}
+
+.vc-ctrl-btn--active:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.vc-ctrl-btn--muted {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+.vc-ctrl-btn--muted:hover {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+.vc-ctrl-btn--leave {
+  background: #ef4444;
+  color: #fff;
+}
+
+.vc-ctrl-btn--leave:hover {
+  background: #dc2626;
+  transform: scale(1.04);
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 600px) {
+  .vc-modal {
+    max-height: 100dvh;
+    border-radius: 12px;
+  }
+
+  .vc-ctrl-btn span {
+    display: none;
+  }
+
+  .vc-ctrl-btn {
+    min-width: unset;
+    padding: 10px;
+  }
+}

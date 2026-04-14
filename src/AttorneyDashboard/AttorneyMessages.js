@@ -13,7 +13,10 @@ import {
   sendAppointmentMessage,
   subscribeToAttorneyAppointments,
   subscribeToAppointmentMessages,
+  getOrCreateVideoMeeting,
+  clearVideoMeetingId,
 } from '../lib/userApi';
+import VideoCallModal from '../components/VideoCallModal';
 
 const CONSULTATION_TIMER_TOTAL_SECONDS = 60 * 60;
 
@@ -81,6 +84,9 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
   const [deletingMessageId, setDeletingMessageId] = useState('');
   const [signedUrlsByMessageId, setSignedUrlsByMessageId] = useState({});
   const [remainingSeconds, setRemainingSeconds] = useState(CONSULTATION_TIMER_TOTAL_SECONDS);
+  const [videoCall, setVideoCall] = useState(null);
+  const [videoCallLoading, setVideoCallLoading] = useState(false);
+  const [videoCallError, setVideoCallError] = useState('');
   const messagesEndRef = useRef(null);
   const imagePickerRef = useRef(null);
   const filePickerRef = useRef(null);
@@ -638,6 +644,27 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
   const timerLabel = formatTimerLabel(remainingSeconds);
   const isTenMinuteWindow = remainingSeconds <= 10 * 60;
 
+  const handleStartVideoCall = async () => {
+    if (!activeAppointmentId || videoCallLoading) return;
+    setVideoCallLoading(true);
+    setVideoCallError('');
+    try {
+      const { meetingId, roomId, token } = await getOrCreateVideoMeeting(activeAppointmentId);
+      setVideoCall({ meetingId, roomId, token });
+    } catch (err) {
+      setVideoCallError(err.message || 'Failed to start video call.');
+    } finally {
+      setVideoCallLoading(false);
+    }
+  };
+
+  const handleCloseVideoCall = async () => {
+    if (videoCall?.roomId) {
+      await clearVideoMeetingId(videoCall.roomId);
+    }
+    setVideoCall(null);
+  };
+
   return (
     <div className="am-page">
       {/* Sidebar overlay */}
@@ -708,6 +735,25 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
           <div className="am-chat-actions">
             <button
               type="button"
+              className="am-video-call-btn"
+              onClick={handleStartVideoCall}
+              disabled={videoCallLoading}
+              title="Start Video Call"
+            >
+              {videoCallLoading ? (
+                'Connecting…'
+              ) : (
+                <>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <polygon points="23 7 16 12 23 17 23 7" />
+                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                  </svg>
+                  Video Call
+                </>
+              )}
+            </button>
+            <button
+              type="button"
               className="am-end-session-btn am-end-session-btn--top"
               onClick={openEndSessionConfirm}
               disabled={endingSession}
@@ -715,6 +761,9 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
               {endingSession ? 'Ending...' : 'End Session'}
             </button>
           </div>
+        ) : null}
+        {videoCallError ? (
+          <div className="am-video-error">{videoCallError}</div>
         ) : null}
 
         {/* Messages */}
@@ -844,6 +893,15 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
             </div>
           </div>
         </div>
+      ) : null}
+
+      {videoCall ? (
+        <VideoCallModal
+          meetingId={videoCall.meetingId}
+          token={videoCall.token || ''}
+          participantName={profile?.full_name || profile?.email || 'Attorney'}
+          onClose={handleCloseVideoCall}
+        />
       ) : null}
     </div>
   );

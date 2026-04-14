@@ -149,6 +149,40 @@
   margin-left: 0;
 }
 
+.am-video-call-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 8px 14px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s, transform 0.1s;
+}
+
+.am-video-call-btn:hover:not(:disabled) {
+  opacity: 0.88;
+  transform: scale(1.02);
+}
+
+.am-video-call-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.am-video-error {
+  padding: 6px 24px;
+  font-size: 0.78rem;
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.07);
+  border-bottom: 1px solid rgba(239, 68, 68, 0.12);
+}
+
 .am-thread-select {
   margin-left: auto;
   min-width: 280px;
