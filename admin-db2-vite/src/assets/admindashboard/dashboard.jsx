@@ -2,11 +2,121 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Users, Scale, FileText, MessageSquare, 
-  BarChart3, Settings, LogOut, Menu, Star, Bell, DollarSign,
+  BarChart3, Settings, LogOut, Menu, Star, Bell,
   X, Send, Trash2, Eye, AlertCircle, CheckCircle
 } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import './Dashboard.css';
+
+const formatDateTimeForUi = (value) => {
+  const parsed = value ? new Date(value) : null;
+  if (!parsed || Number.isNaN(parsed.getTime())) {
+    return { date: 'TBD', time: 'TBD' };
+  }
+
+  return {
+    date: parsed.toLocaleDateString('en-PH', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }),
+    time: parsed.toLocaleTimeString('en-PH', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    }),
+  };
+};
+
+const normalizeNotaryWorkflowStatus = (status) => {
+  const value = String(status || '').toLowerCase();
+  if (value === 'approved' || value === 'accepted' || value === 'in_process' || value === 'in-progress') {
+    return 'in_process';
+  }
+  if (value === 'completed') {
+    return 'completed';
+  }
+  if (value === 'rejected' || value === 'cancelled') {
+    return 'closed';
+  }
+  return 'pending';
+};
+
+const notaryStatusLabel = (status) => {
+  if (status === 'in_process') return 'In Process';
+  if (status === 'completed') return 'Ready for Pick Up';
+  if (status === 'closed') return 'Closed';
+  return 'Pending';
+};
+
+const CLAIMED_MARKER = '[CLIENT_CLAIMED]';
+
+const hasClaimedMarker = (notes) => String(notes || '').includes(CLAIMED_MARKER);
+
+const appendClaimedMarker = (notes) => {
+  const existing = String(notes || '').trim();
+  if (existing.includes(CLAIMED_MARKER)) {
+    return existing;
+  }
+  const stamp = new Date().toISOString();
+  return `${existing}\n${CLAIMED_MARKER}:${stamp}`.trim();
+};
+
+const isImageFile = (value) => /\.(png|jpg|jpeg|gif|webp|svg)(\?|$)/i.test(String(value || ''));
+
+const getLastSixMonthKeys = () => {
+  const result = [];
+  const now = new Date();
+  for (let i = 5; i >= 0; i -= 1) {
+    const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    const label = date.toLocaleDateString('en-PH', { month: 'short' });
+    result.push({ key, label });
+  }
+  return result;
+};
+
+const getWeekWindow = () => {
+  const now = new Date();
+  const start = new Date(now);
+  const day = start.getDay();
+  const diffToMonday = day === 0 ? 6 : day - 1;
+  start.setDate(start.getDate() - diffToMonday);
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date(start);
+  end.setDate(start.getDate() + 7);
+  return { start, end };
+};
+
+const dayToMondayFirstIndex = (day) => (day === 0 ? 6 : day - 1);
+
+const normalizeRequestStatusForUi = (status) => {
+  const value = String(status || '').toLowerCase();
+  if (value === 'started' || value === 'in_progress' || value === 'in-progress' || value === 'active') {
+    return 'In Progress';
+  }
+  if (value === 'completed') {
+    return 'Completed';
+  }
+  if (value === 'confirmed' || value === 'rescheduled') {
+    return 'Scheduled';
+  }
+  return 'Pending';
+};
+
+const formatScheduleLabel = (value) => {
+  const parsed = value ? new Date(value) : null;
+  if (!parsed || Number.isNaN(parsed.getTime())) {
+    return 'Schedule TBD';
+  }
+  return parsed.toLocaleString('en-PH', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+};
 
 const Dashboard = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
@@ -15,25 +125,56 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const handleQuickAction = (message) => window.alert(message);
 
-  // Sample Data
-  const clientsData = [
-    { id: 1, name: 'Maria Santos', email: 'maria@email.com', phone: '09123456789', status: 'Active' },
-    { id: 2, name: 'John Reyes', email: 'john@email.com', phone: '09234567890', status: 'Active' },
-    { id: 3, name: 'Lisa Tan', email: 'lisa@email.com', phone: '09345678901', status: 'Active' },
-    { id: 4, name: 'David Cruz', email: 'david@email.com', phone: '09456789012', status: 'Active' },
-  ];
+  const [clients, setClients] = useState([]);
+  const [totalClients, setTotalClients] = useState(0);
+  const [attorneys, setAttorneys] = useState([]);
+  const [totalAttorneys, setTotalAttorneys] = useState(0);
+  const [pendingNotaryRequests, setPendingNotaryRequests] = useState([]);
+  const [isUpdatingNotary, setIsUpdatingNotary] = useState(false);
+  const [completedConsultations, setCompletedConsultations] = useState([]);
+  const [completedNotaryRequests, setCompletedNotaryRequests] = useState([]);
+  const [toast, setToast] = useState(null);
+  const [documentPreview, setDocumentPreview] = useState({ open: false, url: '', title: '' });
+  const [revenueData, setRevenueData] = useState([0, 0, 0, 0, 0, 0]);
+  const [monthLabels, setMonthLabels] = useState(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']);
+  const [weekData, setWeekData] = useState([0, 0, 0, 0, 0, 0, 0]);
+  const [recentRequests, setRecentRequests] = useState([]);
+  const [topAttorneys, setTopAttorneys] = useState([]);
 
-  const attorneysData = [
-    { id: 1, name: 'Atty. Juan dela Cruz', specialty: 'Family Law', consultations: 234, rating: 4.9 },
-    { id: 2, name: 'Atty. Ana Garcia', specialty: 'Corporate Law', consultations: 198, rating: 4.8 },
-    { id: 3, name: 'Atty. Pedro Mendoza', specialty: 'Criminal Law', consultations: 176, rating: 4.9 },
-    { id: 4, name: 'Atty. Rosa Santos', specialty: 'Labor Law', consultations: 165, rating: 4.7 },
-  ];
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    window.setTimeout(() => {
+      setToast((current) => (current?.message === message ? null : current));
+    }, 3000);
+  };
 
-  const [clients, setClients] = useState(clientsData);
-  const [totalClients, setTotalClients] = useState(clientsData.length);
-  const [attorneys, setAttorneys] = useState(attorneysData);
-  const [totalAttorneys, setTotalAttorneys] = useState(attorneysData.length);
+  const fetchPendingNotaryRequests = async () => {
+    const { data, error } = await supabase
+      .from('notarial_requests')
+      .select('id, client_id, service_type, document_url, status, preferred_date, created_at, updated_at, notes, client:client_id(full_name)')
+      .in('status', ['pending', 'approved', 'accepted', 'in_process'])
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw error;
+    }
+
+    const mapped = (data || []).map((item) => {
+      const { date } = formatDateTimeForUi(item.created_at);
+      return {
+        id: item.id,
+        clientId: item.client_id,
+        clientName: item.client?.full_name || 'Client',
+        document: item.service_type || 'Notarial Request',
+        documentUrl: item.document_url || '',
+        notes: item.notes || '',
+        submissionDate: date,
+        status: normalizeNotaryWorkflowStatus(item.status),
+      };
+    });
+
+    setPendingNotaryRequests(mapped);
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -92,22 +233,16 @@ const Dashboard = () => {
           return;
         }
 
-        if (normalizedClients.length > 0) {
-          setClients(normalizedClients);
-        }
-
-        if (normalizedAttorneys.length > 0) {
-          setAttorneys(normalizedAttorneys);
-        }
-
-        setTotalClients(clientCount ?? normalizedClients.length ?? clientsData.length);
-        setTotalAttorneys(attorneyCount ?? normalizedAttorneys.length ?? attorneysData.length);
+        setClients(normalizedClients);
+        setAttorneys(normalizedAttorneys);
+        setTotalClients(clientCount ?? normalizedClients.length ?? 0);
+        setTotalAttorneys(attorneyCount ?? normalizedAttorneys.length ?? 0);
       } catch (error) {
         if (isMounted) {
-          setClients(clientsData);
-          setTotalClients(clientsData.length);
-          setAttorneys(attorneysData);
-          setTotalAttorneys(attorneysData.length);
+          setClients([]);
+          setTotalClients(0);
+          setAttorneys([]);
+          setTotalAttorneys(0);
         }
         console.error(error);
       }
@@ -120,25 +255,537 @@ const Dashboard = () => {
     };
   }, []);
 
-  const pendingConsultations = [
-    { id: 1, clientName: 'Maria Santos', attorneyName: 'Atty. Juan dela Cruz', date: '2025-04-10', time: '10:00 AM', specialty: 'Family Law', status: 'Scheduled' },
-    { id: 2, clientName: 'John Reyes', attorneyName: 'Atty. Ana Garcia', date: '2025-04-11', time: '2:00 PM', specialty: 'Corporate Law', status: 'Scheduled' },
-  ];
+  useEffect(() => {
+    let isMounted = true;
 
-  const pendingNotaryRequests = [
-    { id: 1, clientName: 'Lisa Tan', document: 'Contract Agreement', submissionDate: '2025-04-05', status: 'Pending' },
-    { id: 2, clientName: 'David Cruz', document: 'Power of Attorney', submissionDate: '2025-04-06', status: 'Pending' },
-  ];
+    const loadQueueAndTopAttorneys = async () => {
+      try {
+        const [appointmentsQueueRes, feedbackRes, completedAppointmentsRes] = await Promise.all([
+          supabase
+            .from('appointments')
+            .select('id, title, status, scheduled_at, client:client_id(full_name), attorney:attorney_id(full_name)')
+            .in('status', ['pending', 'confirmed', 'rescheduled', 'started', 'in_progress', 'active'])
+            .order('scheduled_at', { ascending: true })
+            .limit(8),
+          supabase
+            .from('consultation_feedback')
+            .select('attorney_id, rating, attorney:attorney_id(full_name)')
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('appointments')
+            .select('attorney_id, status')
+            .eq('status', 'completed'),
+        ]);
 
-  const completedConsultations = [
-    { id: 1, clientName: 'Alice Johnson', attorneyName: 'Atty. Juan dela Cruz', date: '2025-04-01', time: '3:00 PM', specialty: 'Family Law', transcript: 'Consultation regarding divorce proceedings...' },
-    { id: 2, clientName: 'Robert Smith', attorneyName: 'Atty. Ana Garcia', date: '2025-04-02', time: '10:30 AM', specialty: 'Corporate Law', transcript: 'Discussion on business merger strategies...' },
-  ];
+        if (appointmentsQueueRes.error) throw appointmentsQueueRes.error;
+        if (feedbackRes.error) throw feedbackRes.error;
+        if (completedAppointmentsRes.error) throw completedAppointmentsRes.error;
 
-  const completedNotaryRequests = [
-    { id: 1, clientName: 'Emma Wilson', document: 'Deed of Sale', completionDate: '2025-04-01', pickedUp: true },
-    { id: 2, clientName: 'Michael Brown', document: 'Notarized Affidavit', completionDate: '2025-04-03', pickedUp: false },
-  ];
+        const nextRecentRequests = (appointmentsQueueRes.data || []).map((item) => ({
+          id: item.id,
+          name: item.client?.full_name || 'Client',
+          atty: item.attorney?.full_name || 'Attorney',
+          law: item.title || 'Consultation',
+          status: normalizeRequestStatusForUi(item.status),
+          age: formatScheduleLabel(item.scheduled_at),
+        }));
+
+        const completedCountByAttorney = new Map();
+        (completedAppointmentsRes.data || []).forEach((row) => {
+          if (!row.attorney_id) {
+            return;
+          }
+          completedCountByAttorney.set(
+            row.attorney_id,
+            Number(completedCountByAttorney.get(row.attorney_id) || 0) + 1,
+          );
+        });
+
+        const feedbackByAttorney = new Map();
+        (feedbackRes.data || []).forEach((row) => {
+          const attorneyId = row.attorney_id;
+          if (!attorneyId) {
+            return;
+          }
+          const existing = feedbackByAttorney.get(attorneyId) || {
+            name: row.attorney?.full_name || 'Attorney',
+            totalRating: 0,
+            ratingCount: 0,
+          };
+          existing.totalRating += Number(row.rating || 0);
+          existing.ratingCount += 1;
+          feedbackByAttorney.set(attorneyId, existing);
+        });
+
+        const nextTopAttorneys = Array.from(feedbackByAttorney.entries())
+          .map(([attorneyId, item]) => ({
+            id: attorneyId,
+            name: item.name,
+            law: 'Consultation Practice',
+            consultations: Number(completedCountByAttorney.get(attorneyId) || 0),
+            rating: item.ratingCount > 0 ? Number((item.totalRating / item.ratingCount).toFixed(1)) : 0,
+          }))
+          .sort((a, b) => {
+            if (b.rating !== a.rating) return b.rating - a.rating;
+            return b.consultations - a.consultations;
+          })
+          .slice(0, 4)
+          .map((item, index) => ({ ...item, rank: index + 1 }));
+
+        if (!isMounted) {
+          return;
+        }
+
+        setRecentRequests(nextRecentRequests);
+        setTopAttorneys(nextTopAttorneys);
+      } catch (error) {
+        console.error(error);
+        if (isMounted) {
+          setRecentRequests([]);
+          setTopAttorneys([]);
+        }
+      }
+    };
+
+    loadQueueAndTopAttorneys();
+
+    const appointmentsChannel = supabase
+      .channel('admin-dashboard-queue-appointments')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'appointments' },
+        () => {
+          loadQueueAndTopAttorneys();
+        },
+      )
+      .subscribe();
+
+    const feedbackChannel = supabase
+      .channel('admin-dashboard-feedback')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'consultation_feedback' },
+        () => {
+          loadQueueAndTopAttorneys();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(appointmentsChannel);
+      supabase.removeChannel(feedbackChannel);
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadChartData = async () => {
+      try {
+        const months = getLastSixMonthKeys();
+        const monthMap = new Map(months.map((item) => [item.key, 0]));
+        const weekCounts = [0, 0, 0, 0, 0, 0, 0];
+        const { start, end } = getWeekWindow();
+
+        const [transactionsRes, appointmentsRes] = await Promise.all([
+          supabase
+            .from('transactions')
+            .select('amount, payment_status, created_at')
+            .eq('payment_status', 'paid')
+            .gte('created_at', `${months[0].key}-01T00:00:00.000Z`)
+            .order('created_at', { ascending: true }),
+          supabase
+            .from('appointments')
+            .select('status, created_at')
+            .gte('created_at', start.toISOString())
+            .lt('created_at', end.toISOString()),
+        ]);
+
+        if (transactionsRes.error) throw transactionsRes.error;
+        if (appointmentsRes.error) throw appointmentsRes.error;
+
+        (transactionsRes.data || []).forEach((row) => {
+          const createdAt = new Date(row.created_at);
+          if (Number.isNaN(createdAt.getTime())) {
+            return;
+          }
+          const key = `${createdAt.getFullYear()}-${String(createdAt.getMonth() + 1).padStart(2, '0')}`;
+          if (!monthMap.has(key)) {
+            return;
+          }
+          monthMap.set(key, Number(monthMap.get(key) || 0) + Number(row.amount || 0));
+        });
+
+        (appointmentsRes.data || []).forEach((row) => {
+          const status = String(row.status || '').toLowerCase();
+          if (status === 'cancelled') {
+            return;
+          }
+
+          const createdAt = new Date(row.created_at);
+          if (Number.isNaN(createdAt.getTime())) {
+            return;
+          }
+
+          const index = dayToMondayFirstIndex(createdAt.getDay());
+          weekCounts[index] += 1;
+        });
+
+        if (!isMounted) {
+          return;
+        }
+
+        setMonthLabels(months.map((item) => item.label));
+        setRevenueData(months.map((item) => Number(monthMap.get(item.key) || 0)));
+        setWeekData(weekCounts);
+      } catch (error) {
+        console.error(error);
+        if (isMounted) {
+          setRevenueData([0, 0, 0, 0, 0, 0]);
+          setWeekData([0, 0, 0, 0, 0, 0, 0]);
+        }
+      }
+    };
+
+    loadChartData();
+
+    const transactionsChannel = supabase
+      .channel('admin-dashboard-transactions-chart')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'transactions' },
+        () => {
+          loadChartData();
+        },
+      )
+      .subscribe();
+
+    const appointmentsChartChannel = supabase
+      .channel('admin-dashboard-appointments-chart')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'appointments' },
+        () => {
+          loadChartData();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(transactionsChannel);
+      supabase.removeChannel(appointmentsChartChannel);
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadPendingNotary = async () => {
+      try {
+        await fetchPendingNotaryRequests();
+      } catch (error) {
+        if (isMounted) {
+          setPendingNotaryRequests([]);
+        }
+        console.error(error);
+      }
+    };
+
+    loadPendingNotary();
+
+    const notaryPendingChannel = supabase
+      .channel('admin-dashboard-pending-notary')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'notarial_requests' },
+        () => {
+          loadPendingNotary();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(notaryPendingChannel);
+    };
+  }, []);
+
+  const notifyClient = async (clientId, body) => {
+    if (!clientId) {
+      return;
+    }
+
+    const { error } = await supabase.from('notifications').insert({
+      user_id: clientId,
+      title: 'Notarial Request Update',
+      body,
+      type: 'notarial_update',
+      is_read: false,
+    });
+
+    if (error) {
+      throw error;
+    }
+  };
+
+  const openNotaryDocument = (request) => {
+    if (!request.documentUrl) {
+      showToast('No document uploaded for this request.', 'error');
+      return;
+    }
+    setDocumentPreview({
+      open: true,
+      url: request.documentUrl,
+      title: `${request.clientName} - ${request.document}`,
+    });
+  };
+
+  const closeDocumentPreview = () => {
+    setDocumentPreview({ open: false, url: '', title: '' });
+  };
+
+  const markNotaryInProcess = async (request) => {
+    if (isUpdatingNotary) {
+      return;
+    }
+
+    setIsUpdatingNotary(true);
+    try {
+      const { error } = await supabase
+        .from('notarial_requests')
+        .update({ status: 'approved', updated_at: new Date().toISOString() })
+        .eq('id', request.id);
+
+      if (error) {
+        throw error;
+      }
+
+      await notifyClient(
+        request.clientId,
+        `Your notary request for ${request.document} is now in process.`,
+      );
+
+      await fetchPendingNotaryRequests();
+      showToast('Notary request moved to In Process. Client notified.');
+    } catch (error) {
+      console.error(error);
+      showToast('Failed to mark request as in process.', 'error');
+    } finally {
+      setIsUpdatingNotary(false);
+    }
+  };
+
+  const markNotaryReadyForPickup = async (request) => {
+    if (isUpdatingNotary) {
+      return;
+    }
+
+    setIsUpdatingNotary(true);
+    try {
+      const { error } = await supabase
+        .from('notarial_requests')
+        .update({ status: 'completed', updated_at: new Date().toISOString() })
+        .eq('id', request.id);
+
+      if (error) {
+        throw error;
+      }
+
+      await notifyClient(
+        request.clientId,
+        `Your notarized document for ${request.document} is ready for pick up.`,
+      );
+
+      await fetchPendingNotaryRequests();
+      showToast('Notary request marked as ready for pick up. Client notified.');
+    } catch (error) {
+      console.error(error);
+      showToast('Failed to mark request as ready for pick up.', 'error');
+    } finally {
+      setIsUpdatingNotary(false);
+    }
+  };
+
+  const markNotaryAsClaimed = async (request) => {
+    if (isUpdatingNotary) {
+      return;
+    }
+
+    setIsUpdatingNotary(true);
+    try {
+      const { error } = await supabase
+        .from('notarial_requests')
+        .update({ notes: appendClaimedMarker(request.notes), updated_at: new Date().toISOString() })
+        .eq('id', request.id);
+
+      if (error) {
+        throw error;
+      }
+
+      await notifyClient(
+        request.clientId,
+        `Your notarized document for ${request.document} was marked as claimed.`,
+      );
+
+      setCompletedNotaryRequests((prev) =>
+        prev.map((item) => (item.id === request.id ? { ...item, pickedUp: true, notes: appendClaimedMarker(item.notes) } : item)),
+      );
+      showToast('Marked as claimed. Client notified.');
+    } catch (error) {
+      console.error(error);
+      showToast('Failed to mark request as claimed.', 'error');
+    } finally {
+      setIsUpdatingNotary(false);
+    }
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+    let isFetching = false;
+
+    const fetchCompletedRequests = async () => {
+      if (isFetching) {
+        return;
+      }
+
+      isFetching = true;
+      try {
+        const [appointmentsRes, notaryRes] = await Promise.all([
+          supabase
+            .from('appointments')
+            .select('id, title, notes, scheduled_at, updated_at, client:client_id(full_name), attorney:attorney_id(full_name)')
+            .eq('status', 'completed')
+            .order('updated_at', { ascending: false }),
+          supabase
+            .from('notarial_requests')
+            .select('id, client_id, service_type, document_url, status, created_at, updated_at, notes, client:client_id(full_name)')
+            .eq('status', 'completed')
+            .order('updated_at', { ascending: false }),
+        ]);
+
+        if (appointmentsRes.error) throw appointmentsRes.error;
+        if (notaryRes.error) throw notaryRes.error;
+
+        const nextCompletedConsultations = (appointmentsRes.data || []).map((item) => {
+          const { date, time } = formatDateTimeForUi(item.scheduled_at || item.updated_at);
+          return {
+            id: item.id,
+            clientName: item.client?.full_name || 'Client',
+            attorneyName: item.attorney?.full_name || 'Attorney',
+            date,
+            time,
+            specialty: item.title || 'Legal Consultation',
+            transcript: item.notes || 'No transcript available yet.',
+          };
+        });
+
+        const nextCompletedNotaryRequests = (notaryRes.data || []).map((item) => {
+          const { date } = formatDateTimeForUi(item.updated_at || item.created_at);
+          return {
+            id: item.id,
+            clientId: item.client_id,
+            clientName: item.client?.full_name || 'Client',
+            document: item.service_type || item.document_url || 'Notarial Request',
+            documentUrl: item.document_url || '',
+            completionDate: date,
+            notes: item.notes || '',
+            pickedUp: hasClaimedMarker(item.notes),
+          };
+        });
+
+        if (!isMounted) {
+          return;
+        }
+
+        setCompletedConsultations(nextCompletedConsultations);
+        setCompletedNotaryRequests(nextCompletedNotaryRequests);
+      } catch (error) {
+        if (isMounted) {
+          setCompletedConsultations([]);
+          setCompletedNotaryRequests([]);
+        }
+        console.error(error);
+      } finally {
+        isFetching = false;
+      }
+    };
+
+    const shouldRefreshForCompleted = (payload) => {
+      const nextStatus = String(payload?.new?.status || '').toLowerCase();
+      const prevStatus = String(payload?.old?.status || '').toLowerCase();
+      return nextStatus === 'completed' || prevStatus === 'completed';
+    };
+
+    fetchCompletedRequests();
+
+    const appointmentsChannel = supabase
+      .channel('admin-dashboard-completed-appointments')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'appointments' },
+        (payload) => {
+          if (shouldRefreshForCompleted(payload)) {
+            fetchCompletedRequests();
+          }
+        },
+      )
+      .subscribe();
+
+    const notaryChannel = supabase
+      .channel('admin-dashboard-completed-notary')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'notarial_requests' },
+        (payload) => {
+          if (shouldRefreshForCompleted(payload)) {
+            fetchCompletedRequests();
+          }
+        },
+      )
+      .subscribe();
+
+    const consultationRoomChannel = supabase
+      .channel('admin-dashboard-consultation-rooms')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'consultation_rooms' },
+        (payload) => {
+          const isClosedNow = Boolean(payload?.new?.is_closed);
+          const wasClosed = Boolean(payload?.old?.is_closed);
+          if (isClosedNow || wasClosed) {
+            fetchCompletedRequests();
+          }
+        },
+      )
+      .subscribe();
+
+    const handleVisibilityRefresh = () => {
+      if (!document.hidden) {
+        fetchCompletedRequests();
+      }
+    };
+
+    const pollId = window.setInterval(() => {
+      if (!document.hidden) {
+        fetchCompletedRequests();
+      }
+    }, 5000);
+
+    window.addEventListener('focus', fetchCompletedRequests);
+    document.addEventListener('visibilitychange', handleVisibilityRefresh);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(pollId);
+      window.removeEventListener('focus', fetchCompletedRequests);
+      document.removeEventListener('visibilitychange', handleVisibilityRefresh);
+      supabase.removeChannel(appointmentsChannel);
+      supabase.removeChannel(notaryChannel);
+      supabase.removeChannel(consultationRoomChannel);
+    };
+  }, []);
 
   const navItems = [
     { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/' },
@@ -153,28 +800,11 @@ const Dashboard = () => {
   const stats = [
     { label: 'Total Clients', value: totalClients, color: '#1e3a8a', icon: <Users size={20}/>, modal: 'clients' },
     { label: 'Total Attorneys', value: totalAttorneys, color: '#eab308', icon: <Scale size={20}/>, modal: 'attorneys' },
-    { label: 'Pending Requests', value: pendingConsultations.length + pendingNotaryRequests.length, color: '#ef4444', icon: <FileText size={20}/>, modal: 'pendingRequests' },
+    { label: 'Pending Notary', value: pendingNotaryRequests.length, color: '#ef4444', icon: <FileText size={20}/>, modal: 'pendingRequests' },
     { label: 'Completed Consultations', value: completedConsultations.length + completedNotaryRequests.length, color: '#22c55e', icon: <MessageSquare size={20}/>, modal: 'completedRequests' },
   ];
 
-  const revenueData = [45000, 52000, 48000, 61000, 58000, 68000];
-  const weekData = [45, 52, 38, 66, 58, 42, 30];
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-  const recentRequests = [
-    { name: 'Maria Santos', atty: 'Atty. Juan dela Cruz', law: 'Family Law', status: 'Pending', age: '2 hours ago' },
-    { name: 'John Reyes', atty: 'Atty. Ana Garcia', law: 'Corporate Law', status: 'In Progress', age: '4 hours ago' },
-    { name: 'Lisa Tan', atty: 'Atty. Pedro Mendoza', law: 'Criminal Law', status: 'Pending', age: '5 hours ago' },
-    { name: 'David Cruz', atty: 'Atty. Rosa Santos', law: 'Labor Law', status: 'Completed', age: '1 day ago' },
-  ];
-
-  const topAttorneys = [
-    { rank: 1, name: 'Atty. Juan dela Cruz', law: 'Family Law', consultations: 234, rating: 4.9 },
-    { rank: 2, name: 'Atty. Ana Garcia', law: 'Corporate Law', consultations: 198, rating: 4.8 },
-    { rank: 3, name: 'Atty. Pedro Mendoza', law: 'Criminal Law', consultations: 176, rating: 4.9 },
-    { rank: 4, name: 'Atty. Rosa Santos', law: 'Labor Law', consultations: 165, rating: 4.7 },
-  ];
 
   return (
     <div className="dashboard-container">
@@ -254,9 +884,9 @@ const Dashboard = () => {
           <section className="grid-split charts-row">
             <section className="info-card chart-card">
               <div className="card-header">
-                <h4><DollarSign size={18} /> Revenue Overview</h4>
+                <h4>₱ Revenue Overview</h4>
               </div>
-              <SimpleLineChart values={revenueData} labels={months} />
+              <SimpleLineChart values={revenueData} labels={monthLabels} />
             </section>
 
             <section className="info-card chart-card">
@@ -278,9 +908,13 @@ const Dashboard = () => {
                 }}>View All</a>
               </div>
               <div className="list-stack">
-                {recentRequests.map((item) => (
-                  <RequestItem key={item.name} {...item} />
-                ))}
+                {recentRequests.length === 0 ? (
+                  <p className="item-subtitle">No upcoming scheduled consultations.</p>
+                ) : (
+                  recentRequests.map((item) => (
+                    <RequestItem key={item.id} {...item} />
+                  ))
+                )}
               </div>
             </section>
 
@@ -293,22 +927,17 @@ const Dashboard = () => {
                 }}>View All</a>
               </div>
               <div className="list-stack">
-                {topAttorneys.map((item) => (
-                  <AttorneyItem key={item.rank} {...item} />
-                ))}
+                {topAttorneys.length === 0 ? (
+                  <p className="item-subtitle">No attorney ratings yet.</p>
+                ) : (
+                  topAttorneys.map((item) => (
+                    <AttorneyItem key={item.id} {...item} />
+                  ))
+                )}
               </div>
             </section>
           </div>
 
-          <section className="info-card quick-actions-card">
-            <div className="card-header"><h4>Quick Actions</h4></div>
-            <div className="quick-actions-grid">
-              <button className="quick-btn navy" onClick={() => handleQuickAction('Add Client clicked')}><Users size={16} /> Add Client</button>
-              <button className="quick-btn gold" onClick={() => handleQuickAction('Add Attorney clicked')}><Scale size={16} /> Add Attorney</button>
-              <button className="quick-btn light" onClick={() => navigate('/requests')}><FileText size={16} /> View Requests</button>
-              <button className="quick-btn light" onClick={() => handleQuickAction('Generate Report clicked')}><BarChart3 size={16} /> Generate Report</button>
-            </div>
-          </section>
         </div>
       </main>
 
@@ -338,8 +967,11 @@ const Dashboard = () => {
 
       {activeModal === 'pendingRequests' && (
         <PendingRequestsModal 
-          consultations={pendingConsultations}
           notaryRequests={pendingNotaryRequests}
+          onOpenDocument={openNotaryDocument}
+          onMarkInProcess={markNotaryInProcess}
+          onMarkPickupReady={markNotaryReadyForPickup}
+          isUpdating={isUpdatingNotary}
           onClose={() => setActiveModal(null)}
         />
       )}
@@ -348,9 +980,26 @@ const Dashboard = () => {
         <CompletedRequestsModal 
           consultations={completedConsultations}
           notaryRequests={completedNotaryRequests}
+          onOpenDocument={openNotaryDocument}
+          onMarkClaimed={markNotaryAsClaimed}
+          isUpdating={isUpdatingNotary}
           onClose={() => setActiveModal(null)}
         />
       )}
+
+      {documentPreview.open ? (
+        <DocumentPreviewModal
+          url={documentPreview.url}
+          title={documentPreview.title}
+          onClose={closeDocumentPreview}
+        />
+      ) : null}
+
+      {toast ? (
+        <div className={`admin-toast ${toast.type === 'error' ? 'error' : 'success'}`}>
+          {toast.message}
+        </div>
+      ) : null}
     </div>
   );
 };
@@ -418,47 +1067,52 @@ const AttorneysModal = ({ attorneys, onClose, onMessage }) => (
   </div>
 );
 
-const PendingRequestsModal = ({ consultations, notaryRequests, onClose }) => (
+const PendingRequestsModal = ({ notaryRequests, onOpenDocument, onMarkInProcess, onMarkPickupReady, isUpdating, onClose }) => (
   <div className="modal-overlay" onClick={onClose}>
     <div className="modal-content modal-large" onClick={(e) => e.stopPropagation()}>
       <div className="modal-header">
-        <h2>Pending Requests</h2>
+        <h2>Notary Requests</h2>
         <button className="modal-close" onClick={onClose}><X size={24} /></button>
       </div>
       <div className="modal-body">
         <div className="pending-sections">
           <div className="pending-section">
-            <h3>Scheduled Consultations ({consultations.length})</h3>
-            <div className="consultations-list">
-              {consultations.map((consultation) => (
-                <div key={consultation.id} className="consultation-item">
-                  <div className="consultation-info">
-                    <h4>{consultation.clientName}</h4>
-                    <p>Attorney: {consultation.attorneyName}</p>
-                    <p>Specialty: {consultation.specialty}</p>
-                    <p>Date & Time: {consultation.date} at {consultation.time}</p>
-                  </div>
-                  <span className={`status-badge ${consultation.status.toLowerCase()}`}>{consultation.status}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="pending-section">
-            <h3>Pending Notary Requests ({notaryRequests.length})</h3>
+            <h3>Active Notary Requests ({notaryRequests.length})</h3>
             <div className="notary-list">
-              {notaryRequests.map((notary) => (
-                <div key={notary.id} className="notary-item">
-                  <div className="notary-info">
-                    <h4>{notary.clientName}</h4>
-                    <p>Document: {notary.document}</p>
-                    <p>Submitted: {notary.submissionDate}</p>
+              {notaryRequests.length === 0 ? (
+                <p className="item-subtitle">No active notary requests right now.</p>
+              ) : (
+                notaryRequests.map((notary) => (
+                  <div key={notary.id} className="notary-item">
+                    <div className="notary-info">
+                      <h4>{notary.clientName}</h4>
+                      <p>Document: {notary.document}</p>
+                      <p>Submitted: {notary.submissionDate}</p>
+                      {notary.notes ? <p>Notes: {notary.notes}</p> : null}
+                    </div>
+                    <div className="notary-item-actions">
+                      <span className={`status-badge ${notary.status.replace('_', '-')}`}>
+                        <AlertCircle size={14} /> {notaryStatusLabel(notary.status)}
+                      </span>
+                      <div className="notary-action-buttons">
+                        <button className="btn-message" onClick={() => onOpenDocument(notary)}>
+                          <Eye size={16} /> View Document
+                        </button>
+                        {notary.status === 'pending' ? (
+                          <button className="btn-view-transcript" disabled={isUpdating} onClick={() => onMarkInProcess(notary)}>
+                            <Send size={16} /> In Process
+                          </button>
+                        ) : null}
+                        {notary.status === 'in_process' ? (
+                          <button className="btn-view-transcript" disabled={isUpdating} onClick={() => onMarkPickupReady(notary)}>
+                            <CheckCircle size={16} /> Pick Up
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
                   </div>
-                  <span className={`status-badge ${notary.status.toLowerCase()}`}>
-                    <AlertCircle size={14} /> {notary.status}
-                  </span>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -467,7 +1121,27 @@ const PendingRequestsModal = ({ consultations, notaryRequests, onClose }) => (
   </div>
 );
 
-const CompletedRequestsModal = ({ consultations, notaryRequests, onClose }) => (
+const DocumentPreviewModal = ({ url, title, onClose }) => (
+  <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-content modal-xlarge" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-header">
+        <h2>{title || 'Document Preview'}</h2>
+        <button className="modal-close" onClick={onClose}><X size={24} /></button>
+      </div>
+      <div className="modal-body">
+        <div className="document-preview-wrap">
+          {isImageFile(url) ? (
+            <img src={url} alt={title || 'Document preview'} className="document-preview-image" />
+          ) : (
+            <iframe src={url} title={title || 'Document preview'} className="document-preview-frame" />
+          )}
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+const CompletedRequestsModal = ({ consultations, notaryRequests, onOpenDocument, onMarkClaimed, isUpdating, onClose }) => (
   <div className="modal-overlay" onClick={onClose}>
     <div className="modal-content modal-large" onClick={(e) => e.stopPropagation()}>
       <div className="modal-header">
@@ -479,49 +1153,67 @@ const CompletedRequestsModal = ({ consultations, notaryRequests, onClose }) => (
           <div className="completed-section">
             <h3>Completed Consultations ({consultations.length})</h3>
             <div className="completed-consultations-list">
-              {consultations.map((consultation) => (
-                <div key={consultation.id} className="completed-consultation-item">
-                  <div className="consultation-overview">
-                    <div className="overview-header">
-                      <h4>{consultation.clientName}</h4>
-                      <CheckCircle size={18} color="#22c55e" />
+              {consultations.length === 0 ? (
+                <p className="item-subtitle">No completed consultations yet.</p>
+              ) : (
+                consultations.map((consultation) => (
+                  <div key={consultation.id} className="completed-consultation-item">
+                    <div className="consultation-overview">
+                      <div className="overview-header">
+                        <h4>{consultation.clientName}</h4>
+                        <CheckCircle size={18} color="#22c55e" />
+                      </div>
+                      <div className="overview-details">
+                        <p><strong>Attorney:</strong> {consultation.attorneyName}</p>
+                        <p><strong>Specialty:</strong> {consultation.specialty}</p>
+                        <p><strong>Date & Time:</strong> {consultation.date} at {consultation.time}</p>
+                      </div>
                     </div>
-                    <div className="overview-details">
-                      <p><strong>Attorney:</strong> {consultation.attorneyName}</p>
-                      <p><strong>Specialty:</strong> {consultation.specialty}</p>
-                      <p><strong>Date & Time:</strong> {consultation.date} at {consultation.time}</p>
-                    </div>
+                    <button className="btn-view-transcript" onClick={() => window.alert(`Transcript: ${consultation.transcript}`)}>
+                      <Eye size={16} /> View Transcript
+                    </button>
                   </div>
-                  <button className="btn-view-transcript" onClick={() => window.alert(`Transcript: ${consultation.transcript}`)}>
-                    <Eye size={16} /> View Transcript
-                  </button>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
 
           <div className="completed-section">
             <h3>Completed Notary Requests ({notaryRequests.length})</h3>
             <div className="completed-notary-list">
-              {notaryRequests.map((notary) => (
-                <div key={notary.id} className="completed-notary-item">
-                  <div className="notary-overview">
-                    <div className="overview-header">
-                      <h4>{notary.clientName}</h4>
-                      {notary.pickedUp ? (
-                        <CheckCircle size={18} color="#22c55e" />
-                      ) : (
-                        <AlertCircle size={18} color="#ef4444" />
-                      )}
+              {notaryRequests.length === 0 ? (
+                <p className="item-subtitle">No completed notary requests yet.</p>
+              ) : (
+                notaryRequests.map((notary) => (
+                  <div key={notary.id} className="completed-notary-item">
+                    <div className="notary-overview">
+                      <div className="overview-header">
+                        <h4>{notary.clientName}</h4>
+                        {notary.pickedUp ? (
+                          <CheckCircle size={18} color="#22c55e" />
+                        ) : (
+                          <AlertCircle size={18} color="#ef4444" />
+                        )}
+                      </div>
+                      <div className="overview-details">
+                        <p><strong>Document:</strong> {notary.document}</p>
+                        <p><strong>Completion Date:</strong> {notary.completionDate}</p>
+                        <p><strong>Status:</strong> {notary.pickedUp ? '✓ Claimed by Client' : '⚠ Awaiting Client Pickup'}</p>
+                      </div>
                     </div>
-                    <div className="overview-details">
-                      <p><strong>Document:</strong> {notary.document}</p>
-                      <p><strong>Completion Date:</strong> {notary.completionDate}</p>
-                      <p><strong>Status:</strong> {notary.pickedUp ? '✓ Document Picked Up' : '⚠ Awaiting Pickup'}</p>
+                    <div className="notary-action-buttons">
+                      <button className="btn-message" onClick={() => onOpenDocument(notary)}>
+                        <Eye size={16} /> View Document
+                      </button>
+                      {!notary.pickedUp ? (
+                        <button className="btn-view-transcript" disabled={isUpdating} onClick={() => onMarkClaimed(notary)}>
+                          <CheckCircle size={16} /> Mark Claimed
+                        </button>
+                      ) : null}
                     </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -573,12 +1265,17 @@ const SimpleLineChart = ({ values, labels }) => {
   const width = 560;
   const height = 240;
   const pad = 34;
-  const min = Math.min(...values) * 0.75;
-  const max = Math.max(...values) * 1.08;
+  const safeValues = values.length ? values : [0];
+  const rawMin = Math.min(...safeValues);
+  const rawMax = Math.max(...safeValues);
+  const hasSpread = rawMax !== rawMin;
+  const min = hasSpread ? rawMin * 0.9 : rawMin - 1;
+  const max = hasSpread ? rawMax * 1.1 : rawMax + 1;
   const innerW = width - pad * 2;
   const innerH = height - pad * 2;
   const x = (i) => pad + (i / (values.length - 1)) * innerW;
-  const y = (v) => pad + ((max - v) / (max - min)) * innerH;
+  const denominator = max - min || 1;
+  const y = (v) => pad + ((max - v) / denominator) * innerH;
   const path = values.map((v, i) => `${i === 0 ? 'M' : 'L'} ${x(i)} ${y(v)}`).join(' ');
 
   return (
@@ -597,14 +1294,15 @@ const SimpleLineChart = ({ values, labels }) => {
 };
 
 const SimpleBarChart = ({ values, labels }) => {
-  const max = Math.max(...values);
+  const max = Math.max(...values, 0);
+  const safeMax = max > 0 ? max : 1;
 
   return (
     <div className="week-bar-chart">
       {values.map((value, i) => (
         <div key={labels[i]} className="bar-col">
           <div className="bar-track">
-            <div className="bar-fill" style={{ height: `${(value / max) * 100}%` }}></div>
+            <div className="bar-fill" style={{ height: `${(value / safeMax) * 100}%` }}></div>
           </div>
           <span className="chart-axis-label">{labels[i]}</span>
         </div>

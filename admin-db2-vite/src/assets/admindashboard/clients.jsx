@@ -1,14 +1,37 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Users, Scale, FileText, MessageSquare, 
   BarChart3, Settings, LogOut, Menu, Bell, Plus, Search, 
   Filter, Download, Mail, MapPin, Phone, Calendar, MoreVertical 
 } from 'lucide-react';
+import { supabase } from '../../lib/supabaseClient';
 import './Clients.css';
+
+const formatJoinedDate = (value) => {
+  const parsed = value ? new Date(value) : null;
+  if (!parsed || Number.isNaN(parsed.getTime())) return 'Unknown';
+  return parsed.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const initialsFromName = (name) => {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return 'CL';
+  return parts.slice(0, 2).map((part) => part[0].toUpperCase()).join('');
+};
 
 const Clients = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [clients, setClients] = useState([]);
+  const [clientStats, setClientStats] = useState([
+    { label: 'Total Clients', value: '0', color: '#1e3a8a' },
+    { label: 'Active Clients', value: '0', color: '#22c55e' },
+    { label: 'New This Month', value: '0', color: '#eab308' },
+    { label: 'Total Consultations', value: '0', color: '#64748b' },
+  ]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const navigate = useNavigate();
   const handleQuickAction = (message) => window.alert(message);
 
@@ -22,18 +45,112 @@ const Clients = () => {
     { label: 'Settings', icon: <Settings size={20} />, path: '/settings' },
   ];
 
-  const clientStats = [
-    { label: 'Total Clients', value: '2,543', color: '#1e3a8a' },
-    { label: 'Active Clients', value: '2,187', color: '#22c55e' },
-    { label: 'New This Month', value: '356', color: '#eab308' },
-    { label: 'Total Consultations', value: '12,458', color: '#64748b' },
-  ];
+  useEffect(() => {
+    let isMounted = true;
 
-  const clientsList = [
-    { id: 'MS', name: 'Maria Santos', email: 'maria.santos@email.com', location: 'Manila, Philippines', phone: '+63 912 345 6789', joined: 'Jan 15, 2024', consultations: 8 },
-    { id: 'JR', name: 'John Reyes', email: 'john.reyes@email.com', location: 'Quezon City, Philippines', phone: '+63 923 456 7890', joined: 'Feb 3, 2024', consultations: 5 },
-    { id: 'LT', name: 'Lisa Tan', email: 'lisa.tan@email.com', location: 'Makati, Philippines', phone: '+63 934 567 8901', joined: 'Dec 10, 2023', consultations: 12 },
-  ];
+    const loadClients = async () => {
+      try {
+        const [profilesRes, appointmentsRes] = await Promise.all([
+          supabase
+            .from('profiles')
+            .select('id, full_name, email, phone, address, created_at')
+            .eq('role', 'Client')
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('appointments')
+            .select('id, client_id, status, created_at')
+            .order('created_at', { ascending: false }),
+        ]);
+
+        if (profilesRes.error) throw profilesRes.error;
+        if (appointmentsRes.error) throw appointmentsRes.error;
+
+        const profileRows = profilesRes.data || [];
+        const appointmentRows = appointmentsRes.data || [];
+        const validConsultations = appointmentRows.filter(
+          (row) => String(row.status || '').toLowerCase() !== 'cancelled',
+        );
+
+        const consultationsByClient = new Map();
+        validConsultations.forEach((row) => {
+          if (!row.client_id) return;
+          consultationsByClient.set(
+            row.client_id,
+            Number(consultationsByClient.get(row.client_id) || 0) + 1,
+          );
+        });
+
+        const currentMonth = new Date().getMonth();
+        const currentYear = new Date().getFullYear();
+        const newThisMonth = profileRows.filter((row) => {
+          const created = row.created_at ? new Date(row.created_at) : null;
+          if (!created || Number.isNaN(created.getTime())) return false;
+          return created.getMonth() === currentMonth && created.getFullYear() === currentYear;
+        }).length;
+
+        const activeClientIds = new Set(validConsultations.map((row) => row.client_id).filter(Boolean));
+
+        const normalizedClients = profileRows.map((row) => ({
+          id: row.id,
+          avatar: initialsFromName(row.full_name),
+          name: row.full_name || 'Unnamed Client',
+          email: row.email || 'No email',
+          location: row.address || 'No location provided',
+          phone: row.phone || 'No phone',
+          joined: formatJoinedDate(row.created_at),
+          consultations: Number(consultationsByClient.get(row.id) || 0),
+        }));
+
+        if (!isMounted) return;
+
+        setClients(normalizedClients);
+        setClientStats([
+          { label: 'Total Clients', value: profileRows.length.toLocaleString(), color: '#1e3a8a' },
+          { label: 'Active Clients', value: activeClientIds.size.toLocaleString(), color: '#22c55e' },
+          { label: 'New This Month', value: newThisMonth.toLocaleString(), color: '#eab308' },
+          { label: 'Total Consultations', value: validConsultations.length.toLocaleString(), color: '#64748b' },
+        ]);
+        setLoadError('');
+      } catch (error) {
+        if (isMounted) {
+          setClients([]);
+          setLoadError(error.message || 'Failed to load clients.');
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadClients();
+
+    const profilesChannel = supabase
+      .channel('admin-clients-profiles')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => loadClients())
+      .subscribe();
+
+    const appointmentsChannel = supabase
+      .channel('admin-clients-appointments')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => loadClients())
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(profilesChannel);
+      supabase.removeChannel(appointmentsChannel);
+    };
+  }, []);
+
+  const filteredClients = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return clients;
+    return clients.filter((client) =>
+      [client.name, client.email, client.location].some((value) =>
+        String(value || '').toLowerCase().includes(term),
+      ),
+    );
+  }, [clients, searchTerm]);
 
   return (
     <div className="app-container">
@@ -116,7 +233,12 @@ const Clients = () => {
           <div className="filter-bar">
             <div className="search-box">
               <Search size={18} className="search-icon" />
-              <input type="text" placeholder="Search clients by name, email, or location..." />
+              <input
+                type="text"
+                placeholder="Search clients by name, email, or location..."
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+              />
             </div>
             <div className="filter-actions">
               <button className="btn-secondary" onClick={() => handleQuickAction('Client filters opened')}><Filter size={18} /> Filter</button>
@@ -127,13 +249,15 @@ const Clients = () => {
           {/* Clients List */}
           <div className="clients-container">
             <div className="list-header">
-              <h3>All Clients ({clientsList.length})</h3>
+              <h3>All Clients ({filteredClients.length})</h3>
             </div>
+            {loadError ? <p className="clients-info-message">{loadError}</p> : null}
+            {loading ? <p className="clients-info-message">Loading clients...</p> : null}
             <div className="client-stack">
-              {clientsList.map((client) => (
+              {filteredClients.map((client) => (
                 <div key={client.id} className="client-row">
                   <div className="client-identity">
-                    <div className="client-avatar">{client.id}</div>
+                    <div className="client-avatar">{client.avatar}</div>
                     <div className="client-details">
                       <div className="name-wrapper">
                         <span className="client-name">{client.name}</span>
@@ -161,6 +285,9 @@ const Clients = () => {
                   </div>
                 </div>
               ))}
+              {!loading && !loadError && filteredClients.length === 0 ? (
+                <p className="clients-info-message">No clients found.</p>
+              ) : null}
             </div>
           </div>
         </div>

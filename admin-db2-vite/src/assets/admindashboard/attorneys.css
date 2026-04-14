@@ -50,6 +50,11 @@
 /* Attorney Card Styles */
 .attorneys-container { background: white; border-radius: 12px; border: 1px solid var(--border); }
 .list-header { padding: 20px; border-bottom: 1px solid var(--border); }
+.attorneys-info-message {
+  padding: 16px 20px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid #f1f5f9;
+}
 .attorney-row { display: flex; justify-content: space-between; align-items: center; padding: 20px; border-bottom: 1px solid #f1f5f9; }
 
 .attorney-identity { display: flex; align-items: center; gap: 20px; }

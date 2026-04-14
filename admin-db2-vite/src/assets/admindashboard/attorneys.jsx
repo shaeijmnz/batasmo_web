@@ -1,25 +1,45 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Users, Scale, FileText, MessageSquare, 
   BarChart3, Settings, LogOut, Menu, Bell, Plus, Search, 
-  Filter, Download, Mail, Phone, Star, Award, MoreVertical, X
+  Filter, Download, Mail, Phone, Star, Award, MoreVertical
 } from 'lucide-react';
+import { supabase } from '../../lib/supabaseClient';
 import './Attorneys.css';
+
+const formatSpecialty = (value) => {
+  if (Array.isArray(value)) {
+    return value.filter(Boolean).join(', ') || 'General Practice';
+  }
+  const text = String(value || '').trim();
+  return text || 'General Practice';
+};
+
+const formatExperience = (years) => {
+  const numeric = Number(years);
+  if (Number.isFinite(numeric) && numeric > 0) {
+    return `${numeric} years experience`;
+  }
+  return 'Experience not set';
+};
+
+const computeAvailability = (activeCount) => (activeCount > 0 ? 'Busy' : 'Available');
 
 const Attorneys = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [attorneyStats, setAttorneyStats] = useState([
+    { label: 'Total Attorneys', value: '0', color: '#1e3a8a' },
+    { label: 'Available Now', value: '0', color: '#22c55e' },
+    { label: 'Average Rating', value: '0.0', color: '#eab308' },
+    { label: 'Total Consultations', value: '0', color: '#3b82f6' },
+  ]);
+  const [attorneysList, setAttorneysList] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const navigate = useNavigate();
   const handleQuickAction = (message) => window.alert(message);
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-
-  const initialAttorneyForm = {
-    name: '',
-    email: '',
-    specialty: '',
-  };
-
-  const [attorneyForm, setAttorneyForm] = useState(initialAttorneyForm);
 
   const navItems = [
     { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/' },
@@ -31,90 +51,166 @@ const Attorneys = () => {
     { label: 'Settings', icon: <Settings size={20} />, path: '/settings' },
   ];
 
-  const attorneyStats = [
-    { label: 'Total Attorneys', value: '86', color: '#1e3a8a' },
-    { label: 'Available Now', value: '72', color: '#22c55e' },
-    { label: 'Average Rating', value: '4.8', color: '#eab308' },
-    { label: 'Total Consultations', value: '1,243', color: '#3b82f6' },
-  ];
+  useEffect(() => {
+    let isMounted = true;
 
-  const [attorneysList, setAttorneysList] = useState([
-    { 
-      name: 'Atty. Juan dela Cruz', 
-      status: 'Available', 
-      rating: '4.9', 
-      specialty: 'Family Law', 
-      experience: '15 years experience', 
-      email: 'juan.delacruz@batasmo.com', 
-      phone: '+63 912 111 2222', 
-      consultations: '234', 
-      cases: '89' 
-    },
-    { 
-      name: 'Atty. Ana Garcia', 
-      status: 'Available', 
-      rating: '4.8', 
-      specialty: 'Corporate Law', 
-      experience: '12 years experience', 
-      email: 'ana.garcia@batasmo.com', 
-      phone: '+63 923 222 3333', 
-      consultations: '198', 
-      cases: '76' 
-    },
-    { 
-      name: 'Atty. Pedro Mendoza', 
-      status: 'Busy', 
-      rating: '4.9', 
-      specialty: 'Criminal Law', 
-      experience: '18 years experience', 
-      email: 'pedro.mendoza@batasmo.com', 
-      phone: '+63 934 333 4444', 
-      consultations: '176', 
-      cases: '92' 
-    },
-  ]);
+    const loadAttorneys = async () => {
+      try {
+        const [profilesRes, attorneyProfilesRes, appointmentsRes, feedbackRes] = await Promise.all([
+          supabase
+            .from('profiles')
+            .select('id, full_name, email, phone')
+            .eq('role', 'Attorney')
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('attorney_profiles')
+            .select('user_id, years_experience, specialties')
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('appointments')
+            .select('id, attorney_id, status')
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('consultation_feedback')
+            .select('attorney_id, rating')
+            .order('created_at', { ascending: false }),
+        ]);
 
-  const handleOpenAddModal = () => {
-    setAttorneyForm(initialAttorneyForm);
-    setIsAddModalOpen(true);
-  };
+        if (profilesRes.error) throw profilesRes.error;
+        if (attorneyProfilesRes.error) throw attorneyProfilesRes.error;
+        if (appointmentsRes.error) throw appointmentsRes.error;
+        if (feedbackRes.error) throw feedbackRes.error;
 
-  const handleCloseAddModal = () => {
-    setIsAddModalOpen(false);
-  };
+        const profileRows = profilesRes.data || [];
+        const attorneyProfileRows = attorneyProfilesRes.data || [];
+        const appointmentRows = appointmentsRes.data || [];
+        const feedbackRows = feedbackRes.data || [];
 
-  const handleFormChange = (event) => {
-    const { name, value } = event.target;
-    setAttorneyForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
+        const attorneyProfileById = new Map(attorneyProfileRows.map((row) => [row.user_id, row]));
 
-  const handleAddAttorney = (event) => {
-    event.preventDefault();
+        const consultationsByAttorney = new Map();
+        const completedCasesByAttorney = new Map();
+        const activeByAttorney = new Map();
+        appointmentRows.forEach((row) => {
+          const attorneyId = row.attorney_id;
+          if (!attorneyId) return;
 
-    if (!attorneyForm.name.trim() || !attorneyForm.email.trim() || !attorneyForm.specialty.trim()) {
-      handleQuickAction('Please complete all fields before adding an attorney.');
-      return;
-    }
+          const status = String(row.status || '').toLowerCase();
+          if (status !== 'cancelled') {
+            consultationsByAttorney.set(
+              attorneyId,
+              Number(consultationsByAttorney.get(attorneyId) || 0) + 1,
+            );
+          }
+          if (status === 'completed') {
+            completedCasesByAttorney.set(
+              attorneyId,
+              Number(completedCasesByAttorney.get(attorneyId) || 0) + 1,
+            );
+          }
+          if (status === 'started' || status === 'in_progress' || status === 'in-progress' || status === 'active') {
+            activeByAttorney.set(attorneyId, Number(activeByAttorney.get(attorneyId) || 0) + 1);
+          }
+        });
 
-    const newAttorney = {
-      name: attorneyForm.name.trim(),
-      status: 'Available',
-      rating: '4.8',
-      specialty: attorneyForm.specialty.trim(),
-      experience: 'Newly added',
-      email: attorneyForm.email.trim(),
-      phone: 'Not provided',
-      consultations: '0',
-      cases: '0',
+        const ratingAggregateByAttorney = new Map();
+        feedbackRows.forEach((row) => {
+          const attorneyId = row.attorney_id;
+          if (!attorneyId) return;
+          const current = ratingAggregateByAttorney.get(attorneyId) || { total: 0, count: 0 };
+          current.total += Number(row.rating || 0);
+          current.count += 1;
+          ratingAggregateByAttorney.set(attorneyId, current);
+        });
+
+        const normalized = profileRows.map((row) => {
+          const extra = attorneyProfileById.get(row.id);
+          const ratingData = ratingAggregateByAttorney.get(row.id) || { total: 0, count: 0 };
+          const rating = ratingData.count > 0 ? (ratingData.total / ratingData.count) : 0;
+          const activeCount = Number(activeByAttorney.get(row.id) || 0);
+          return {
+            id: row.id,
+            name: row.full_name || 'Attorney',
+            status: computeAvailability(activeCount),
+            rating: rating.toFixed(1),
+            specialty: formatSpecialty(extra?.specialties),
+            experience: formatExperience(extra?.years_experience),
+            email: row.email || 'No email',
+            phone: row.phone || 'No phone',
+            consultations: Number(consultationsByAttorney.get(row.id) || 0),
+            cases: Number(completedCasesByAttorney.get(row.id) || 0),
+          };
+        });
+
+        const availableCount = normalized.filter((item) => item.status === 'Available').length;
+        const totalConsultations = normalized.reduce((sum, item) => sum + item.consultations, 0);
+        const ratingValues = normalized.map((item) => Number(item.rating)).filter((value) => value > 0);
+        const averageRating = ratingValues.length
+          ? (ratingValues.reduce((sum, value) => sum + value, 0) / ratingValues.length).toFixed(1)
+          : '0.0';
+
+        if (!isMounted) return;
+
+        setAttorneysList(normalized);
+        setAttorneyStats([
+          { label: 'Total Attorneys', value: profileRows.length.toLocaleString(), color: '#1e3a8a' },
+          { label: 'Available Now', value: availableCount.toLocaleString(), color: '#22c55e' },
+          { label: 'Average Rating', value: averageRating, color: '#eab308' },
+          { label: 'Total Consultations', value: totalConsultations.toLocaleString(), color: '#3b82f6' },
+        ]);
+        setLoadError('');
+      } catch (error) {
+        if (isMounted) {
+          setAttorneysList([]);
+          setLoadError(error.message || 'Failed to load attorneys.');
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
     };
 
-    setAttorneysList((prev) => [newAttorney, ...prev]);
-    setIsAddModalOpen(false);
-    handleQuickAction('Attorney added successfully.');
-  };
+    loadAttorneys();
+
+    const profilesChannel = supabase
+      .channel('admin-attorneys-profiles')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => loadAttorneys())
+      .subscribe();
+
+    const attorneyProfilesChannel = supabase
+      .channel('admin-attorneys-profile-details')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'attorney_profiles' }, () => loadAttorneys())
+      .subscribe();
+
+    const appointmentsChannel = supabase
+      .channel('admin-attorneys-appointments')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => loadAttorneys())
+      .subscribe();
+
+    const feedbackChannel = supabase
+      .channel('admin-attorneys-feedback')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'consultation_feedback' }, () => loadAttorneys())
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(profilesChannel);
+      supabase.removeChannel(attorneyProfilesChannel);
+      supabase.removeChannel(appointmentsChannel);
+      supabase.removeChannel(feedbackChannel);
+    };
+  }, []);
+
+  const filteredAttorneys = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return attorneysList;
+    return attorneysList.filter((attorney) =>
+      [attorney.name, attorney.specialty, attorney.email].some((value) =>
+        String(value || '').toLowerCase().includes(term),
+      ),
+    );
+  }, [attorneysList, searchTerm]);
 
   return (
     <div className="app-container">
@@ -178,7 +274,7 @@ const Attorneys = () => {
               <h2 className="title">Attorneys Management</h2>
               <p className="subtitle">Manage and view all registered attorneys</p>
             </div>
-            <button className="add-btn" onClick={handleOpenAddModal}>
+            <button className="add-btn" onClick={() => handleQuickAction('Use the main admin flow to add attorneys.')}> 
               <Plus size={18} /> Add New Attorney
             </button>
           </div>
@@ -197,7 +293,12 @@ const Attorneys = () => {
           <div className="filter-bar">
             <div className="search-box">
               <Search size={18} className="search-icon" />
-              <input type="text" placeholder="Search attorneys by name, specialty, or email..." />
+              <input
+                type="text"
+                placeholder="Search attorneys by name, specialty, or email..."
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+              />
             </div>
             <div className="filter-actions">
               <button className="btn-secondary" onClick={() => handleQuickAction('Attorney filters opened')}><Filter size={18} /> Filter</button>
@@ -208,11 +309,13 @@ const Attorneys = () => {
           {/* Attorneys List */}
           <div className="attorneys-container">
             <div className="list-header">
-              <h3>All Attorneys ({attorneysList.length})</h3>
+              <h3>All Attorneys ({filteredAttorneys.length})</h3>
             </div>
+            {loadError ? <p className="attorneys-info-message">{loadError}</p> : null}
+            {loading ? <p className="attorneys-info-message">Loading attorneys...</p> : null}
             <div className="attorney-stack">
-              {attorneysList.map((attorney, i) => (
-                <div key={i} className="attorney-row">
+              {filteredAttorneys.map((attorney) => (
+                <div key={attorney.id} className="attorney-row">
                   <div className="attorney-identity">
                     <div className="attorney-avatar">
                       <Award size={24} />
@@ -247,68 +350,13 @@ const Attorneys = () => {
                   </div>
                 </div>
               ))}
+              {!loading && !loadError && filteredAttorneys.length === 0 ? (
+                <p className="attorneys-info-message">No attorneys found.</p>
+              ) : null}
             </div>
           </div>
         </div>
       </main>
-
-      {isAddModalOpen && (
-        <div className="modal-overlay" onClick={handleCloseAddModal}>
-          <div className="add-attorney-modal" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Add New Attorney</h3>
-              <button className="modal-close-btn" onClick={handleCloseAddModal}>
-                <X size={20} />
-              </button>
-            </div>
-
-            <p className="modal-subtitle">Add a new attorney to the system by filling out the form below.</p>
-
-            <form className="modal-form" onSubmit={handleAddAttorney}>
-              <div className="modal-input-group">
-                <label htmlFor="attorney-name">Name</label>
-                <input
-                  id="attorney-name"
-                  name="name"
-                  type="text"
-                  value={attorneyForm.name}
-                  onChange={handleFormChange}
-                  placeholder="Atty. Juan dela Cruz"
-                />
-              </div>
-
-              <div className="modal-input-group">
-                <label htmlFor="attorney-email">Email</label>
-                <input
-                  id="attorney-email"
-                  name="email"
-                  type="email"
-                  value={attorneyForm.email}
-                  onChange={handleFormChange}
-                  placeholder="juan.delacruz@batasmo.com"
-                />
-              </div>
-
-              <div className="modal-input-group">
-                <label htmlFor="attorney-specialty">Specialty</label>
-                <input
-                  id="attorney-specialty"
-                  name="specialty"
-                  type="text"
-                  value={attorneyForm.specialty}
-                  onChange={handleFormChange}
-                  placeholder="Family Law"
-                />
-              </div>
-
-              <div className="modal-actions">
-                <button type="button" className="modal-cancel-btn" onClick={handleCloseAddModal}>Cancel</button>
-                <button type="submit" className="modal-submit-btn">Add Attorney</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

@@ -1,15 +1,46 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Users, Scale, FileText, MessageSquare, 
   BarChart3, Settings, LogOut, Menu, Bell, Search, 
-  Filter, Download, Calendar, Clock, User, ChevronRight 
+  Filter, Download, Clock
 } from 'lucide-react';
+import { supabase } from '../../lib/supabaseClient';
 import './Requests.css';
+
+const normalizeNotaryStatus = (status) => {
+  const value = String(status || '').toLowerCase();
+  if (value === 'approved' || value === 'accepted' || value === 'in_process' || value === 'in-progress') return 'In Progress';
+  if (value === 'completed') return 'Completed';
+  if (value === 'cancelled' || value === 'rejected') return 'Cancelled';
+  return 'Pending';
+};
+
+const formatDateLabel = (value) => {
+  const parsed = value ? new Date(value) : null;
+  if (!parsed || Number.isNaN(parsed.getTime())) return 'TBD';
+  return parsed.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const formatTimeLabel = (value) => {
+  const parsed = value ? new Date(value) : null;
+  if (!parsed || Number.isNaN(parsed.getTime())) return 'TBD';
+  return parsed.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' });
+};
+
+const priorityFromStatus = (status) => {
+  if (status === 'Pending') return 'High';
+  if (status === 'In Progress') return 'Medium';
+  return 'Low';
+};
 
 const Requests = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('All');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const navigate = useNavigate();
   const handleQuickAction = (message) => window.alert(message);
 
@@ -23,35 +54,84 @@ const Requests = () => {
     { label: 'Settings', icon: <Settings size={20} />, path: '/settings' },
   ];
 
-  const requestStats = [
-    { label: 'Pending Requests', value: '3', color: '#eab308' },
-    { label: 'In Progress', value: '2', color: '#3b82f6' },
-    { label: 'Completed', value: '1', color: '#22c55e' },
-    { label: 'Total Requests', value: '7', color: '#64748b' },
-  ];
+  useEffect(() => {
+    let isMounted = true;
 
-  const requests = [
-    { 
-      id: 1, title: 'Divorce Consultation', status: 'Pending', category: 'Family Law', 
-      priority: 'High', client: 'Maria Santos', attorney: 'Atty. Juan dela Cruz', 
-      date: 'Apr 4, 2026', time: '2:30 PM' 
-    },
-    { 
-      id: 2, title: 'Tax Compliance Advisory', status: 'In Progress', category: 'Tax Law', 
-      priority: 'Low', client: 'Anna Lopez', attorney: 'Atty. Miguel Rivera', 
-      date: 'Apr 4, 2026', time: '1:00 PM' 
-    },
-    { 
-      id: 3, title: 'Visa Application Assistance', status: 'Pending', category: 'Immigration Law', 
-      priority: 'Medium', client: 'Robert Garcia', attorney: 'Atty. Carmen Lopez', 
-      date: 'Apr 5, 2026', time: '11:30 AM' 
-    },
-    { 
-      id: 4, title: 'Child Support Modification', status: 'Cancelled', category: 'Family Law', 
-      priority: 'Low', client: 'Sofia Ramos', attorney: 'Atty. Juan dela Cruz', 
-      date: 'Apr 2, 2026', time: '4:00 PM' 
-    },
-  ];
+    const loadNotaryRequests = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('notarial_requests')
+          .select('id, service_type, status, preferred_date, created_at, client:client_id(full_name), attorney:attorney_id(full_name)')
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        const normalized = (data || []).map((row) => {
+          const status = normalizeNotaryStatus(row.status);
+          const schedule = row.preferred_date || row.created_at;
+          return {
+            id: row.id,
+            title: row.service_type || 'Notary Request',
+            status,
+            category: 'Notary Service',
+            priority: priorityFromStatus(status),
+            client: row.client?.full_name || 'Client',
+            attorney: row.attorney?.full_name || 'Unassigned',
+            date: formatDateLabel(schedule),
+            time: formatTimeLabel(schedule),
+          };
+        });
+
+        if (!isMounted) return;
+        setRequests(normalized);
+        setLoadError('');
+      } catch (error) {
+        if (isMounted) {
+          setRequests([]);
+          setLoadError(error.message || 'Failed to load notary requests.');
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadNotaryRequests();
+
+    const notaryChannel = supabase
+      .channel('admin-notary-requests-page')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notarial_requests' }, () => loadNotaryRequests())
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(notaryChannel);
+    };
+  }, []);
+
+  const requestStats = useMemo(() => {
+    const pending = requests.filter((item) => item.status === 'Pending').length;
+    const inProgress = requests.filter((item) => item.status === 'In Progress').length;
+    const completed = requests.filter((item) => item.status === 'Completed').length;
+    return [
+      { label: 'Pending Requests', value: pending.toLocaleString(), color: '#eab308' },
+      { label: 'In Progress', value: inProgress.toLocaleString(), color: '#3b82f6' },
+      { label: 'Completed', value: completed.toLocaleString(), color: '#22c55e' },
+      { label: 'Total Requests', value: requests.length.toLocaleString(), color: '#64748b' },
+    ];
+  }, [requests]);
+
+  const visibleRequests = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    const byTab = activeTab === 'All' ? requests : requests.filter((item) => item.status === activeTab);
+    if (!term) return byTab;
+    return byTab.filter((item) =>
+      [item.title, item.client, item.attorney].some((value) =>
+        String(value || '').toLowerCase().includes(term),
+      ),
+    );
+  }, [activeTab, requests, searchTerm]);
 
   return (
     <div className="app-container">
@@ -112,8 +192,8 @@ const Requests = () => {
         <div className="content-wrapper">
           <div className="page-header">
             <div>
-              <h2 className="title">Consultation Requests</h2>
-              <p className="subtitle">Manage all consultation requests and appointments</p>
+              <h2 className="title">Notary Requests</h2>
+              <p className="subtitle">Manage all notary requests and document processing</p>
             </div>
           </div>
 
@@ -131,7 +211,12 @@ const Requests = () => {
           <div className="search-filter-section">
             <div className="search-box">
               <Search size={18} className="search-icon" />
-              <input type="text" placeholder="Search requests by client, attorney, type, or subject..." />
+              <input
+                type="text"
+                placeholder="Search requests by client, attorney, or type..."
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+              />
             </div>
             <div className="action-buttons">
               <button className="btn-secondary" onClick={() => handleQuickAction('Request filters opened')}><Filter size={18} /> Filter</button>
@@ -154,7 +239,9 @@ const Requests = () => {
 
           {/* Requests List */}
           <div className="requests-stack">
-            {requests.map((req) => (
+            {loadError ? <p className="requests-info-message">{loadError}</p> : null}
+            {loading ? <p className="requests-info-message">Loading notary requests...</p> : null}
+            {visibleRequests.map((req) => (
               <div key={req.id} className="request-card">
                 <div className="request-header">
                   <div className="header-left">
@@ -195,6 +282,9 @@ const Requests = () => {
                 </div>
               </div>
             ))}
+            {!loading && !loadError && visibleRequests.length === 0 ? (
+              <p className="requests-info-message">No notary requests found.</p>
+            ) : null}
           </div>
         </div>
       </main>
