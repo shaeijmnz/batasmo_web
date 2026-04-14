@@ -1,14 +1,46 @@
-import { useEffect, useRef, useState } from 'react';
+import { Component, useEffect, useRef, useState } from 'react';
 import { MeetingProvider, useMeeting, useParticipant } from '@videosdk.live/react-sdk';
 import './VideoCallModal.css';
+
+// ─── Error boundary ──────────────────────────────────────────────────────────
+// Catches VideoSDK internal crashes (e.g. "Cannot read properties of null
+// (reading 'emit')") and recovers without taking down the entire app.
+
+class VideoErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, info) {
+    console.warn('[VideoCallModal] SDK error caught by boundary:', error?.message, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="vc-connecting">
+          <p className="vc-error-msg">
+            Video call encountered an error. Please close and try again.
+          </p>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // ─── Participant tile ────────────────────────────────────────────────────────
 
 function ParticipantView({ participantId }) {
   const micRef = useRef(null);
   const videoRef = useRef(null);
-  const { webcamStream, micStream, webcamOn, micOn, isLocal, displayName } =
-    useParticipant(participantId);
+  const participant = useParticipant(participantId);
+  const { webcamStream, micStream, webcamOn, micOn, isLocal, displayName } = participant || {};
 
   useEffect(() => {
     const el = micRef.current;
@@ -46,7 +78,6 @@ function ParticipantView({ participantId }) {
     <div className="vc-participant">
       <audio ref={micRef} autoPlay playsInline muted={isLocal} />
 
-      {/* Video element always in DOM; hidden when cam is off so srcObject persists */}
       <video
         ref={videoRef}
         autoPlay
@@ -72,14 +103,8 @@ function ParticipantView({ participantId }) {
 }
 
 // ─── Controls bar ─────────────────────────────────────────────────────────────
-// Reads mic/webcam state from useParticipant (authoritative reactive source).
 
-function Controls({ onLeave, localParticipantId, toggleMic, toggleWebcam }) {
-  // useParticipant gives the live, reactive state for the local participant.
-  // localParticipantId is guaranteed to be a valid non-empty string here
-  // because Controls is only rendered after joinState === 'JOINED' && localParticipant?.id is truthy.
-  const { micOn, webcamOn } = useParticipant(localParticipantId);
-
+function Controls({ onLeave, micOn, webcamOn, toggleMic, toggleWebcam }) {
   return (
     <div className="vc-controls">
       <button
@@ -158,9 +183,10 @@ function MeetingView({ meetingId, onLeave }) {
     join,
     leave,
     participants,
-    localParticipant,
     toggleMic,
     toggleWebcam,
+    localMicOn,
+    localWebcamOn,
   } = useMeeting({
     onMeetingJoined: () => {
       clearTimeout(timeoutRef.current);
@@ -225,21 +251,22 @@ function MeetingView({ meetingId, onLeave }) {
           className={`vc-grid ${[...participants.keys()].length <= 2 ? 'vc-grid--sm' : 'vc-grid--lg'}`}
         >
           {[...participants.keys()].map((pid) => (
-            <ParticipantView key={pid} participantId={pid} />
+            <VideoErrorBoundary key={`eb-${pid}`}>
+              <ParticipantView key={pid} participantId={pid} />
+            </VideoErrorBoundary>
           ))}
         </div>
       )}
 
-      {/* Full controls only when joined AND local participant is ready */}
-      {joinState === 'JOINED' && localParticipant?.id ? (
+      {joinState === 'JOINED' ? (
         <Controls
           onLeave={handleLeave}
-          localParticipantId={localParticipant.id}
+          micOn={localMicOn ?? true}
+          webcamOn={localWebcamOn ?? true}
           toggleMic={toggleMic}
           toggleWebcam={toggleWebcam}
         />
       ) : (
-        /* Minimal leave button available at all times */
         <div className="vc-controls">
           <button
             type="button"
@@ -261,13 +288,6 @@ function MeetingView({ meetingId, onLeave }) {
 
 // ─── Public modal wrapper ────────────────────────────────────────────────────
 
-/**
- * Props:
- *   meetingId      — VideoSDK room ID
- *   token          — VideoSDK auth token (JWT)
- *   participantName — Display name for the local user
- *   onClose        — Called when user leaves or closes the modal
- */
 export default function VideoCallModal({ meetingId, token, participantName, onClose }) {
   const handleLeave = () => {
     if (typeof onClose === 'function') onClose();
@@ -288,20 +308,22 @@ export default function VideoCallModal({ meetingId, token, participantName, onCl
           </button>
         </div>
 
-        <MeetingProvider
-          config={{
-            meetingId,
-            micEnabled: true,
-            webcamEnabled: true,
-            name: participantName || 'Participant',
-            multiStream: true,
-          }}
-          token={token}
-          joinWithoutUserInteraction={false}
-          reinitialiseMeetingOnConfigChange={false}
-        >
-          <MeetingView meetingId={meetingId} onLeave={handleLeave} />
-        </MeetingProvider>
+        <VideoErrorBoundary>
+          <MeetingProvider
+            config={{
+              meetingId,
+              micEnabled: true,
+              webcamEnabled: true,
+              name: participantName || 'Participant',
+              multiStream: true,
+            }}
+            token={token}
+            joinWithoutUserInteraction={false}
+            reinitialiseMeetingOnConfigChange={false}
+          >
+            <MeetingView meetingId={meetingId} onLeave={handleLeave} />
+          </MeetingProvider>
+        </VideoErrorBoundary>
       </div>
     </div>
   );
