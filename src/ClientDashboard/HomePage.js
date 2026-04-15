@@ -426,7 +426,7 @@ function HomePage({ onNavigate, profile, onSignOut }) {
                       </div>
                       {isToday && a.payment === 'Paid' && a.chatAccessible ? (
                         <div className="hp-queue-item__today-actions">
-                          <span className="hp-today-label">🔴 TODAY</span>
+                          <span className="hp-today-label">TODAY</span>
                           <button className="hp-enter-room-btn" onClick={() => onNavigate('chat-room', { appointmentId: a.id })}>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
@@ -436,12 +436,12 @@ function HomePage({ onNavigate, profile, onSignOut }) {
                         </div>
                       ) : isToday && a.payment === 'Paid' && !a.chatAccessible ? (
                         <div className="hp-queue-item__today-actions">
-                          <span className="hp-today-label">🔴 TODAY</span>
+                          <span className="hp-today-label">TODAY</span>
                           <span className="hp-payment-needed">Available at scheduled time</span>
                         </div>
                       ) : isToday && a.payment !== 'Paid' ? (
                         <div className="hp-queue-item__today-actions">
-                          <span className="hp-today-label">🔴 TODAY</span>
+                          <span className="hp-today-label">TODAY</span>
                           <span className="hp-payment-needed">Pay first to enter</span>
                         </div>
                       ) : isPast ? (
@@ -508,7 +508,7 @@ function HomePage({ onNavigate, profile, onSignOut }) {
               onChange={e => setChatMsg(e.target.value)}
               disabled={chatLoading}
             />
-            <button type="submit" disabled={chatLoading || !chatMsg.trim()}>➤</button>
+            <button type="submit" disabled={chatLoading || !chatMsg.trim()}>Send</button>
           </form>
         </div>
       )}

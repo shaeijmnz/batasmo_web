@@ -65,12 +65,12 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 32px 24px 48px;
+  padding: 20px 16px 32px;
 }
-.th-container { width: 100%; max-width: 960px; }
+.th-container { width: 100%; max-width: 1200px; }
 
 /* ── Header ── */
-.th-header { margin-bottom: 24px; }
+.th-header { margin-bottom: 18px; }
 .th-header__title-row { display: flex; align-items: center; gap: 10px; }
 .th-header__text h1 {
   font-size: 1.6rem; font-weight: 800; color: #1a1a2e; margin: 0;
@@ -84,7 +84,7 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
-  margin-bottom: 28px;
+  margin-bottom: 24px;
 }
 .th-summary-card {
   background: #fff;
@@ -119,14 +119,14 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
-  gap: 16px;
+  margin-bottom: 18px;
+  gap: 14px;
   flex-wrap: wrap;
 }
 .th-filters { display: flex; gap: 8px; flex-wrap: wrap; }
 .th-filter-btn {
   display: flex; align-items: center; gap: 6px;
-  padding: 8px 18px;
+  padding: 8px 16px;
   border: 1.5px solid #e5e7eb; border-radius: 20px;
   background: #fff; color: #6b7280;
   font-size: 0.82rem; font-weight: 600;
@@ -165,9 +165,10 @@
 
 /* ── Transaction List ── */
 .th-list {
-  background: #fff;
+  background: rgba(14, 27, 45, 0.86);
   border-radius: 14px;
-  box-shadow: 0 2px 12px rgba(0,0,0,.05);
+  border: 1px solid rgba(184, 210, 246, 0.18);
+  box-shadow: inset 0.75px 0.75px 0 rgba(255, 255, 255, 0.12);
   overflow: hidden;
 }
 
@@ -177,13 +178,13 @@
   grid-template-columns: 56px 1fr 120px 100px 110px 100px;
   gap: 8px;
   padding: 14px 22px;
-  background: #f9fafb;
-  border-bottom: 1.5px solid #e5e7eb;
+  background: rgba(17, 32, 53, 0.82);
+  border-bottom: 1.5px solid rgba(184, 210, 246, 0.14);
 }
 .th-list__col {
   font-size: 0.75rem;
   font-weight: 700;
-  color: #9ca3af;
+  color: #d6e3f8;
   text-transform: uppercase;
   letter-spacing: .4px;
 }
@@ -199,18 +200,18 @@
 
 /* ── Transaction Row ── */
 .th-txn {
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid rgba(184, 210, 246, 0.14);
   transition: background .15s;
 }
 .th-txn:last-child { border-bottom: none; }
-.th-txn:hover { background: #fafbfc; }
-.th-txn--expanded { background: #fafbfc; }
+.th-txn:hover { background: rgba(17, 32, 53, 0.76); }
+.th-txn--expanded { background: rgba(13, 27, 45, 0.82); }
 
 .th-txn__row {
   display: grid;
   grid-template-columns: 56px 1fr 120px 100px 110px 100px 28px;
   gap: 8px;
-  padding: 16px 22px;
+  padding: 14px 22px;
   align-items: center;
   cursor: pointer;
 }
@@ -220,8 +221,8 @@
   width: 40px; height: 40px; border-radius: 10px;
   display: flex; align-items: center; justify-content: center;
 }
-.th-txn__icon--consultation { background: #eff6ff; }
-.th-txn__icon--notarial { background: #fffbf0; }
+.th-txn__icon--consultation { background: rgba(37, 99, 235, 0.18); }
+.th-txn__icon--notarial { background: rgba(245, 166, 35, 0.18); }
 
 /* Description */
 .th-list__col--desc {
@@ -295,7 +296,7 @@
 
 /* ── Expanded Receipt ── */
 .th-txn__receipt {
-  padding: 0 22px 20px;
+  padding: 0 22px 18px;
   animation: th-expand .2s ease;
 }
 @keyframes th-expand {
@@ -303,8 +304,8 @@
   to { opacity: 1; transform: translateY(0); }
 }
 .th-receipt {
-  background: #f9fafb;
-  border: 1.5px dashed #e5e7eb;
+  background: rgba(19, 33, 54, 0.65);
+  border: 1.5px dashed rgba(128, 176, 255, 0.25);
   border-radius: 12px;
   overflow: hidden;
 }
@@ -312,43 +313,43 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 14px 18px;
-  background: #fff;
-  border-bottom: 1.5px dashed #e5e7eb;
+  padding: 12px 16px;
+  background: rgba(14, 27, 45, 0.8);
+  border-bottom: 1.5px dashed rgba(128, 176, 255, 0.25);
   font-size: 0.88rem;
   font-weight: 700;
-  color: #1a1a2e;
+  color: #e9f2ff;
 }
-.th-receipt__body { padding: 14px 18px; }
+.th-receipt__body { padding: 12px 16px; }
 .th-receipt__row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 0;
+  padding: 7px 0;
   font-size: 0.84rem;
-  color: #6b7280;
+  color: #a9bfdc;
 }
 .th-receipt__value {
   font-weight: 600;
-  color: #1a1a2e;
+  color: #dce8ff;
   text-align: right;
 }
 .th-receipt__value--mono {
   font-family: 'Courier New', Courier, monospace;
   font-size: 0.82rem;
-  color: #374151;
+  color: #b7c8df;
 }
 .th-receipt__divider {
   height: 1.5px;
-  background: #e5e7eb;
-  margin: 8px 0;
+  background: rgba(128, 176, 255, 0.2);
+  margin: 6px 0;
 }
 .th-receipt__row--total {
   font-weight: 700;
 }
 .th-receipt__row--total span:first-child {
   font-weight: 700;
-  color: #1a1a2e;
+  color: #e9f2ff;
 }
 .th-receipt__row--total .th-receipt__value {
   font-size: 1.05rem;

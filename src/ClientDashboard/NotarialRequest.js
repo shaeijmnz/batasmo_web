@@ -225,7 +225,7 @@ function NotarialRequest({ onNavigate, profile }) {
 
           {/* Preferred Date */}
           <div className="nr-section">
-            <h2 className="nr-section-title">📅 Preferred Service Date</h2>
+            <h2 className="nr-section-title">Preferred Service Date</h2>
             <input
               type="date"
               className="nr-date-input"
@@ -236,7 +236,7 @@ function NotarialRequest({ onNavigate, profile }) {
 
           {/* File Upload */}
           <div className="nr-section">
-            <h2 className="nr-section-title">📁 Upload Documents</h2>
+            <h2 className="nr-section-title">Upload Documents</h2>
             <div className="nr-file-upload">
               <input
                 type="file"
@@ -262,7 +262,7 @@ function NotarialRequest({ onNavigate, profile }) {
 
           {/* Notes */}
           <div className="nr-section">
-            <h2 className="nr-section-title">📝 Additional Notes (Optional)</h2>
+            <h2 className="nr-section-title">Additional Notes (Optional)</h2>
             <textarea
               className="nr-notes-textarea"
               placeholder="Add any additional information or special requests..."

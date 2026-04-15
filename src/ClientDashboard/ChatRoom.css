@@ -1,26 +1,31 @@
 .cr-page {
   min-height: 0;
   height: 100%;
-  flex: 1;
+  flex: 1 1 auto;
   background: transparent;
   font-family: 'Inter', 'Segoe UI', sans-serif;
   width: 100%;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  justify-content: stretch;
   align-items: stretch;
+  overflow: hidden;
 }
 
 .cr-chat-area {
   display: flex;
   flex-direction: column;
   width: 100%;
+  flex: 1 1 auto;
   height: 100%;
   min-height: 0;
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(10, 20, 33, 0.85);
-  box-shadow: inset 0.75px 0.75px 0 rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(184, 210, 246, 0.14);
+  background: linear-gradient(160deg, rgba(10, 20, 34, 0.96), rgba(11, 24, 40, 0.9));
+  box-shadow: inset 0.75px 0.75px 0 rgba(255, 255, 255, 0.08), 0 16px 48px rgba(2, 7, 15, 0.24);
   overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
 }
 
 .cr-session-bar {
@@ -28,9 +33,10 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 18px;
+  padding: 18px 20px;
   border-bottom: 1px solid rgba(184, 210, 246, 0.16);
-  background: rgba(14, 27, 45, 0.9);
+  background: rgba(13, 25, 42, 0.96);
+  flex-shrink: 0;
 }
 
 .cr-session-bar__info {
@@ -84,11 +90,12 @@
 }
 
 .cr-video-error {
-  padding: 8px 18px;
+  padding: 10px 20px;
   font-size: 0.8rem;
   color: #f87171;
   background: rgba(239, 68, 68, 0.08);
   border-bottom: 1px solid rgba(239, 68, 68, 0.15);
+  flex-shrink: 0;
 }
 
 .cr-thread-select {
@@ -102,14 +109,17 @@
 }
 
 .cr-messages {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  padding: 18px;
+  overflow-x: hidden;
+  padding: 22px 20px 26px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-}
+  gap: 16px;
+  align-items: stretch;
+	word-wrap: break-word;
+  }
 
 .cr-messages::-webkit-scrollbar {
   width: 6px;
@@ -122,13 +132,20 @@
 
 .cr-msg {
   display: flex;
-  gap: 10px;
-  max-width: 84%;
+  gap: 12px;
+  max-width: 100%;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .cr-msg--client {
-  align-self: flex-end;
-  flex-direction: row-reverse;
+  margin-left: auto;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.cr-msg--client .cr-msg__content {
+  align-items: flex-end;
 }
 
 .cr-msg--system {
@@ -152,16 +169,21 @@
 .cr-msg__content {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .cr-msg__bubble {
-  padding: 12px 14px;
+  padding: 12px 15px;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(19, 33, 54, 0.75);
   color: #e9f2ff;
   line-height: 1.45;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  max-width: 100%;
 }
 
 .cr-msg__bubble p {
@@ -240,9 +262,14 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 14px 16px;
-  background: rgba(14, 27, 45, 0.9);
+  padding: 18px 20px;
+  min-height: 78px;
+  background: rgba(13, 25, 42, 0.96);
   border-top: 1px solid rgba(184, 210, 246, 0.16);
+  flex-shrink: 0;
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
 }
 
 .cr-attach-actions {
@@ -253,12 +280,12 @@
 
 .cr-attach-btn {
   border: 1px solid rgba(128, 176, 255, 0.36);
-  border-radius: 8px;
+  border-radius: 10px;
   background: rgba(19, 33, 54, 0.82);
   color: #dce8ff;
   font-size: 0.75rem;
   font-weight: 600;
-  padding: 8px 10px;
+  padding: 10px 12px;
   cursor: pointer;
 }
 
@@ -278,10 +305,10 @@
 .cr-input-wrapper input {
   width: 100%;
   border: 1px solid rgba(184, 210, 246, 0.24);
-  border-radius: 10px;
+  border-radius: 12px;
   background: rgba(10, 20, 33, 0.8);
   color: #dce8ff;
-  padding: 12px 14px;
+  padding: 13px 14px;
   font-size: 0.9rem;
   outline: none;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
@@ -298,12 +325,12 @@
 
 .cr-send-btn {
   border: 0;
-  border-radius: 10px;
+  border-radius: 12px;
   background: linear-gradient(135deg, #2563eb, #1d4ed8);
   color: #fff;
   font-weight: 700;
-  min-width: 76px;
-  height: 42px;
+  min-width: 86px;
+  height: 46px;
   cursor: pointer;
 }
 

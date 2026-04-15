@@ -224,6 +224,7 @@
   justify-content: space-between;
   align-items: center;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 .client-shell-topbar-actions {
@@ -462,13 +463,17 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  height: 100%;
   overflow: hidden;
   padding: 0;
+  flex: 1;
 }
 
 .client-shell-content--chat > .client-shell-body--chat {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
+  height: 100%;
+  width: 100%;
 }
 
 .client-shell-content::-webkit-scrollbar {
@@ -486,11 +491,26 @@
   line-height: 1.5;
 }
 
+/* Hide visible scrollbars across client dashboard while preserving scroll */
+.client-shell-body,
+.client-shell-body * {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.client-shell-body::-webkit-scrollbar,
+.client-shell-body *::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
 .client-shell-body--chat {
   min-height: 0;
-  height: auto;
+  height: 100%;
   width: 100%;
   display: flex;
+  align-items: stretch;
 }
 
 .client-shell-backdrop {
@@ -812,6 +832,209 @@
   background: #12233a !important;
 }
 
+.client-shell-body .ba-modal {
+  border: 1px solid rgba(128, 176, 255, 0.34) !important;
+  box-shadow: 0 24px 60px rgba(2, 7, 15, 0.62) !important;
+}
+
+.client-shell-body .ba-modal__header {
+  background: linear-gradient(160deg, rgba(12, 24, 40, 0.98), rgba(14, 27, 45, 0.95)) !important;
+  border-bottom: 1px solid rgba(128, 176, 255, 0.26) !important;
+}
+
+.client-shell-body .ba-modal__header h2,
+.client-shell-body .ba-profile-name,
+.client-shell-body .ba-profile-section-title,
+.client-shell-body .ba-profile-fee-label,
+.client-shell-body .ba-profile-fee-amount {
+  color: #f2f7ff !important;
+}
+
+.client-shell-body .ba-modal__close {
+  color: #dbeafe !important;
+}
+
+.client-shell-body .ba-modal__close:hover {
+  color: #ffffff !important;
+}
+
+.client-shell-body .ba-modal__content {
+  padding: 26px 26px 24px !important;
+}
+
+.client-shell-body .ba-profile-header {
+  gap: 18px !important;
+  margin-bottom: 22px !important;
+  align-items: flex-start !important;
+}
+
+.client-shell-body .ba-profile-photo {
+  border: 2px solid rgba(128, 176, 255, 0.5) !important;
+  box-shadow: 0 10px 22px rgba(7, 15, 28, 0.45) !important;
+}
+
+.client-shell-body .ba-profile-specialty,
+.client-shell-body .ba-profile-exp,
+.client-shell-body .ba-profile-bio,
+.client-shell-body .ba-profile-details,
+.client-shell-body .ba-profile-fee-desc {
+  color: #b9cbe3 !important;
+}
+
+.client-shell-body .ba-profile-rating {
+  color: #ffd166 !important;
+}
+
+.client-shell-body .ba-profile-section {
+  margin-bottom: 20px !important;
+  padding: 16px 16px 14px !important;
+  border-radius: 12px !important;
+  background: rgba(13, 26, 43, 0.58) !important;
+  border: 1px solid rgba(128, 176, 255, 0.18) !important;
+}
+
+.client-shell-body .ba-profile-bio,
+.client-shell-body .ba-profile-details {
+  line-height: 1.65 !important;
+}
+
+.client-shell-body .ba-profile-fee {
+  background: linear-gradient(145deg, rgba(18, 36, 60, 0.88), rgba(13, 28, 48, 0.82)) !important;
+  border: 1px solid rgba(128, 176, 255, 0.22) !important;
+}
+
+.client-shell-body .ba-profile-actions {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 10px !important;
+}
+
+.client-shell-body .ba-profile-btn-secondary {
+  color: #d6e3f8 !important;
+  border-color: rgba(128, 176, 255, 0.34) !important;
+  background: rgba(20, 36, 60, 0.62) !important;
+}
+
+.client-shell-body .ba-profile-btn-secondary:hover {
+  background: rgba(30, 53, 84, 0.82) !important;
+}
+
+.client-shell-body .ba-booking-header {
+  background: linear-gradient(160deg, rgba(12, 24, 40, 0.98), rgba(14, 27, 45, 0.95)) !important;
+  border-bottom: 1px solid rgba(128, 176, 255, 0.26) !important;
+}
+
+.client-shell-body .ba-booking-header h2 {
+  color: #f2f7ff !important;
+}
+
+.client-shell-body .ba-booking-content {
+  background: transparent !important;
+}
+
+.client-shell-body .ba-booking-attorney-info {
+  background: linear-gradient(145deg, rgba(17, 33, 55, 0.88), rgba(13, 28, 47, 0.82)) !important;
+  border-left: 3px solid rgba(47, 111, 219, 0.82) !important;
+  border: 1px solid rgba(128, 176, 255, 0.22) !important;
+  box-shadow: inset 0.75px 0.75px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+.client-shell-body .ba-booking-info-item {
+  border-bottom: 1px solid rgba(128, 176, 255, 0.16) !important;
+}
+
+.client-shell-body .ba-booking-label {
+  color: #9eb6d6 !important;
+}
+
+.client-shell-body .ba-booking-value {
+  color: #e6f0ff !important;
+}
+
+.client-shell-body .ba-booking-price {
+  color: #ffd166 !important;
+}
+
+.client-shell-body .ba-form-label {
+  color: #dce8ff !important;
+}
+
+.client-shell-body .ba-form-input,
+.client-shell-body .ba-form-textarea {
+  border: 1px solid rgba(128, 176, 255, 0.34) !important;
+  background: rgba(10, 20, 33, 0.78) !important;
+  color: #e6f0ff !important;
+}
+
+.client-shell-body .ba-form-input:focus,
+.client-shell-body .ba-form-textarea:focus {
+  border-color: #5b95ee !important;
+  box-shadow: 0 0 0 3px rgba(47, 111, 219, 0.24) !important;
+  background: rgba(10, 20, 33, 0.86) !important;
+}
+
+.client-shell-body .ba-form-textarea::placeholder {
+  color: #8ea7c6 !important;
+}
+
+.client-shell-body .ba-file-upload-label {
+  border: 1.5px dashed rgba(128, 176, 255, 0.34) !important;
+  background: rgba(16, 31, 52, 0.76) !important;
+}
+
+.client-shell-body .ba-file-upload-label:hover {
+  border-color: rgba(128, 176, 255, 0.52) !important;
+  background: rgba(22, 42, 70, 0.86) !important;
+}
+
+.client-shell-body .ba-upload-text {
+  color: #c7d8ef !important;
+}
+
+.client-shell-body .ba-time-slot {
+  border: 1px solid rgba(128, 176, 255, 0.28) !important;
+  background: rgba(17, 33, 55, 0.74) !important;
+  color: #dce8ff !important;
+}
+
+.client-shell-body .ba-time-slot:hover {
+  border-color: rgba(128, 176, 255, 0.52) !important;
+  background: rgba(24, 46, 76, 0.9) !important;
+}
+
+.client-shell-body .ba-time-slot--selected {
+  background: linear-gradient(135deg, rgba(47, 111, 219, 0.88), rgba(31, 86, 204, 0.84)) !important;
+  border-color: rgba(96, 165, 250, 0.75) !important;
+  color: #ffffff !important;
+  box-shadow: 0 10px 24px rgba(15, 41, 84, 0.42) !important;
+}
+
+.client-shell-body .ba-payment-note {
+  background: linear-gradient(145deg, rgba(17, 33, 55, 0.78), rgba(13, 28, 47, 0.76)) !important;
+  border-left: 3px solid rgba(47, 111, 219, 0.8) !important;
+  border: 1px solid rgba(128, 176, 255, 0.2) !important;
+}
+
+.client-shell-body .ba-note-text {
+  color: #b9cbe3 !important;
+}
+
+.client-shell-body .ba-booking-btn--submit {
+  background: linear-gradient(135deg, #2f6fdb, #214ea8) !important;
+  box-shadow: 0 8px 20px rgba(15, 41, 84, 0.42) !important;
+}
+
+.client-shell-body .ba-booking-btn--cancel {
+  background: rgba(20, 36, 60, 0.8) !important;
+  color: #dce8ff !important;
+  border: 1px solid rgba(128, 176, 255, 0.34) !important;
+}
+
+.client-shell-body .ba-booking-btn--cancel:hover {
+  background: rgba(30, 53, 84, 0.84) !important;
+  border-color: rgba(128, 176, 255, 0.45) !important;
+}
+
 .client-shell-body .ma-filter-btn,
 .client-shell-body .ann-filter-btn,
 .client-shell-body .th-filter-btn,
@@ -840,12 +1063,186 @@
 .client-shell-body .ma-status-message,
 .client-shell-body .th-list__header,
 .client-shell-body .th-txn__row,
+.client-shell-body .hp-queue-item,
 .client-shell-body .ann-empty,
 .client-shell-body .mnr-empty,
 .client-shell-body .ma-empty-state {
   background: rgba(17, 32, 53, 0.7) !important;
   color: #c7d8ef !important;
   border-color: rgba(184, 210, 246, 0.14) !important;
+}
+
+.client-shell-body .ma-summary,
+.client-shell-body .ma-reschedule-note,
+.client-shell-body .ma-appointment-card--queue {
+  background: linear-gradient(145deg, rgba(14, 27, 45, 0.9), rgba(11, 29, 52, 0.82)) !important;
+  border: 1px solid rgba(148, 189, 240, 0.22) !important;
+  box-shadow: inset 0.75px 0.75px 0 rgba(255, 255, 255, 0.1) !important;
+}
+
+.client-shell-body .ma-summary__label {
+  color: rgba(221, 235, 255, 0.82) !important;
+}
+
+.client-shell-body .ma-summary__meta,
+.client-shell-body .ma-reschedule-note__text,
+.client-shell-body .ma-queue-card__area {
+  color: #b9cbe3 !important;
+}
+
+.client-shell-body .ma-summary__refresh {
+  background: linear-gradient(135deg, rgba(47, 111, 219, 0.34), rgba(30, 78, 170, 0.3)) !important;
+  color: #eaf3ff !important;
+  border: 1px solid rgba(128, 176, 255, 0.38) !important;
+}
+
+.client-shell-body .ma-summary__refresh:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(47, 111, 219, 0.44), rgba(30, 78, 170, 0.4)) !important;
+}
+
+.client-shell-body .ma-reschedule-note__title {
+  color: #d7e8ff !important;
+}
+
+.client-shell-body .ma-queue-section__header {
+  border-bottom: 1px solid rgba(148, 189, 240, 0.24) !important;
+}
+
+.client-shell-body .ma-queue-section__header::before {
+  background: linear-gradient(90deg, rgba(96, 165, 250, 0.95), rgba(45, 212, 191, 0.75), transparent) !important;
+}
+
+.client-shell-body .ma-queue-card__schedule,
+.client-shell-body .ma-queue-card__schedule svg {
+  color: #8ec5ff !important;
+}
+
+.client-shell-body .ma-btn--queue-secondary,
+.client-shell-body .ma-btn--queue-primary {
+  border-radius: 12px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.055em !important;
+}
+
+.client-shell-body .ma-btn--queue-secondary {
+  background: rgba(20, 36, 60, 0.78) !important;
+  color: #dce8ff !important;
+  border: 1px solid rgba(128, 176, 255, 0.34) !important;
+}
+
+.client-shell-body .ma-btn--queue-secondary:hover:not(:disabled) {
+  background: rgba(30, 53, 84, 0.84) !important;
+  border-color: rgba(128, 176, 255, 0.5) !important;
+  color: #f2f7ff !important;
+}
+
+.client-shell-body .ma-btn--queue-primary {
+  background: linear-gradient(135deg, #2f6fdb, #214ea8) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(96, 165, 250, 0.5) !important;
+  box-shadow: 0 8px 20px rgba(15, 41, 84, 0.4) !important;
+}
+
+.client-shell-body .ma-btn--queue-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #3b82f6, #2b63cb) !important;
+  border-color: rgba(147, 197, 253, 0.72) !important;
+}
+
+.client-shell-body .hp-queue-item:hover {
+  background: rgba(23, 41, 67, 0.82) !important;
+}
+
+.client-shell-body .hp-queue-item--today {
+  background: linear-gradient(90deg, rgba(34, 66, 112, 0.78) 0%, rgba(18, 36, 60, 0.9) 60%) !important;
+  border-left: 3px solid rgba(212, 175, 55, 0.9) !important;
+}
+
+.client-shell-body .hp-queue-item--today:hover {
+  background: linear-gradient(90deg, rgba(40, 74, 122, 0.82) 0%, rgba(21, 41, 69, 0.94) 60%) !important;
+}
+
+.client-shell-body .hp-welcome {
+  background:
+    radial-gradient(460px circle at 88% 10%, rgba(47, 123, 240, 0.2), transparent 54%),
+    radial-gradient(420px circle at 76% 108%, rgba(26, 159, 146, 0.16), transparent 58%),
+    linear-gradient(135deg, rgba(20, 42, 73, 0.94), rgba(24, 55, 98, 0.9)) !important;
+  border: 1px solid rgba(128, 176, 255, 0.24) !important;
+  box-shadow: inset 0.75px 0.75px 0 rgba(255, 255, 255, 0.1) !important;
+}
+
+.client-shell-body .hp-welcome::before {
+  background: rgba(59, 130, 246, 0.1) !important;
+}
+
+.client-shell-body .hp-welcome::after {
+  background: rgba(20, 184, 166, 0.1) !important;
+}
+
+.client-shell-body .hp-action-card {
+  background: linear-gradient(145deg, rgba(14, 27, 45, 0.86), rgba(12, 31, 54, 0.72)) !important;
+  border: 1px solid rgba(184, 210, 246, 0.18) !important;
+  box-shadow: inset 0.75px 0.75px 0 rgba(255, 255, 255, 0.12) !important;
+}
+
+.client-shell-body .hp-action-card__icon {
+  background: linear-gradient(135deg, rgba(47, 111, 219, 0.22), rgba(26, 159, 146, 0.22)) !important;
+  border: 1px solid rgba(128, 176, 255, 0.28) !important;
+}
+
+.client-shell-body .hp-action-card__icon svg {
+  stroke: #8ec5ff !important;
+}
+
+.client-shell-body .hp-queue-card {
+  border-left: 3px solid rgba(47, 111, 219, 0.8) !important;
+}
+
+.client-shell-body .hp-view-all {
+  color: #8ec5ff !important;
+}
+
+.client-shell-body .hp-view-all:hover {
+  color: #b7dbff !important;
+}
+
+.client-shell-body .hp-queue-number,
+.client-shell-body .hp-queue-item__date-block {
+  background: rgba(19, 33, 54, 0.9) !important;
+  color: #dbe8fd !important;
+}
+
+.client-shell-body .hp-queue-month,
+.client-shell-body .hp-queue-day,
+.client-shell-body .hp-queue-item__name,
+.client-shell-body .hp-queue-item__area,
+.client-shell-body .hp-queue-item__time,
+.client-shell-body .hp-queue-item__status-text,
+.client-shell-body .hp-queue-item__status-text--past {
+  color: #d6e3f8 !important;
+}
+
+.client-shell-body .hp-badge--approved {
+  background: rgba(47, 111, 219, 0.28) !important;
+  color: #dbeafe !important;
+  border: 1px solid rgba(96, 165, 250, 0.5) !important;
+}
+
+.client-shell-body .hp-badge--pending {
+  background: rgba(245, 166, 35, 0.22) !important;
+  color: #ffe3a8 !important;
+  border: 1px solid rgba(245, 166, 35, 0.42) !important;
+}
+
+.client-shell-body .hp-badge--paid {
+  background: rgba(16, 185, 129, 0.2) !important;
+  color: #b9f8df !important;
+  border: 1px solid rgba(52, 211, 153, 0.42) !important;
+}
+
+.client-shell-body .hp-badge--unpaid {
+  background: rgba(239, 68, 68, 0.22) !important;
+  color: #fecaca !important;
+  border: 1px solid rgba(248, 113, 113, 0.45) !important;
 }
 
 .client-shell-body .th-list__col,
@@ -966,5 +1363,11 @@
 
   .client-shell-profile-chip span:first-child {
     display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .client-shell-body .ba-profile-actions {
+    grid-template-columns: 1fr !important;
   }
 }

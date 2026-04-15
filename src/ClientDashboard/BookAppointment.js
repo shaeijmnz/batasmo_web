@@ -548,7 +548,7 @@ function BookAppointment({ onNavigate, profile }) {
                   <p className="ba-profile-specialty">
                     <ScaleSmIcon /> {selectedAttorney.specialty}
                   </p>
-                  <p className="ba-profile-exp">⏱ {selectedAttorney.exp}</p>
+                  <p className="ba-profile-exp">{selectedAttorney.exp}</p>
                   <p className="ba-profile-rating">
                     ★ {selectedAttorney.rating.toFixed(1)}/5.0 Rating
                   </p>
@@ -556,14 +556,14 @@ function BookAppointment({ onNavigate, profile }) {
               </div>
 
               <div className="ba-profile-section">
-                <h4 className="ba-profile-section-title">📄 Professional Biography</h4>
+                <h4 className="ba-profile-section-title">Professional Biography</h4>
                 <p className="ba-profile-bio">{selectedAttorney.bio}</p>
                 <p className="ba-profile-details">{selectedAttorney.details}</p>
               </div>
 
               <div className="ba-profile-fee">
                 <div className="ba-profile-fee-label">
-                  💰 CONSULTATION FEE
+                  CONSULTATION FEE
                   <span className="ba-profile-fee-desc">Initial Legal Assessment (1 Hour)</span>
                 </div>
                 <div className="ba-profile-fee-amount">{selectedAttorney.price}</div>
@@ -575,7 +575,7 @@ function BookAppointment({ onNavigate, profile }) {
                   onClick={() => { closeProfile(); handleBookNow(selectedAttorney); }}
                   title={(selectedAttorney?.availableSlots?.length || 0) === 0 ? 'Open to check available dates and slots.' : 'Book appointment'}
                 >
-                  📅 Book Now
+                  Book Now
                 </button>
                 <button className="ba-btn ba-btn--ghost ba-profile-btn-secondary" onClick={closeProfile}>Close</button>
               </div>
@@ -614,7 +614,7 @@ function BookAppointment({ onNavigate, profile }) {
 
                 {/* Step 1: Select Date & Time & Reason */}
                 <div className="ba-form-group">
-                  <label className="ba-form-label">📅 Select Date</label>
+                  <label className="ba-form-label">Select Date</label>
                   <input
                     type="date"
                     className="ba-form-input"
@@ -627,14 +627,14 @@ function BookAppointment({ onNavigate, profile }) {
                 {selectedDate && bookingStep === 1 && (
                   <>
                     <div className="ba-form-group">
-                      <label className="ba-form-label">⏰ Available Time Slots</label>
+                      <label className="ba-form-label">Available Time Slots</label>
                       {hiddenPastSlotsCount > 0 ? (
                         <p style={{ color: '#f59e0b', marginBottom: 8, fontSize: '0.85rem' }}>
                           {hiddenPastSlotsCount} slot{hiddenPastSlotsCount > 1 ? 's were' : ' was'} hidden because the time already passed today.
                         </p>
                       ) : null}
                       {slotsLoading ? (
-                        <p style={{ color: '#6b7280', textAlign: 'center' }}>⏳ Loading available slots...</p>
+                        <p style={{ color: '#6b7280', textAlign: 'center' }}>Loading available slots...</p>
                       ) : availableSlots.length > 0 ? (
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', gap: 8 }}>
                           {availableSlots.map((timeStr) => (
@@ -647,12 +647,12 @@ function BookAppointment({ onNavigate, profile }) {
                           ))}
                         </div>
                       ) : (
-                        <p style={{ color: '#ef4444' }}>❌ No available slots for this date. Please select another date.</p>
+                        <p style={{ color: '#ef4444' }}>No available slots for this date. Please select another date.</p>
                       )}
                     </div>
 
                     <div className="ba-form-group">
-                      <label className="ba-form-label">📝 Notes (Optional)</label>
+                      <label className="ba-form-label">Notes (Optional)</label>
                       <textarea
                         className="ba-form-textarea"
                         placeholder="Add notes for the attorney (optional)..."

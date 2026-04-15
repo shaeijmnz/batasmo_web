@@ -264,8 +264,16 @@
   max-width: 600px;
   max-height: 85vh;
   overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   box-shadow: 0 20px 60px rgba(0,0,0,0.3);
   animation: slideUp .3s ease-out;
+}
+
+.ba-modal::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 @keyframes slideUp {
