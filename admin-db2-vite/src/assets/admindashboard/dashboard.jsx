@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, Users, Scale, FileText, MessageSquare, 
   BarChart3, Settings, LogOut, Menu, Star, Bell,
-  X, Send, Trash2, Eye, AlertCircle, CheckCircle
+  X, Send, Trash2, Eye, AlertCircle, CheckCircle, Calendar
 } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import './Dashboard.css';
@@ -863,6 +863,28 @@ const Dashboard = () => {
         </header>
 
         <div className="scroll-content">
+          {/* Welcome Section */}
+          <section className="welcome-section">
+            <div className="welcome-card dark-blue">
+              <h1 className="welcome-title">Welcome Back, Admin</h1>
+              <p className="welcome-subtitle">Here's what's happening with your legal matters today.</p>
+            </div>
+          </section>
+
+          {/* Quick Action Cards */}
+          <section className="quick-actions">
+            <div className="action-card" onClick={() => navigate('/consultations')}>
+              <Calendar size={32} className="action-icon" />
+              <h3 className="action-title">View Consultations</h3>
+              <p className="action-description">Manage upcoming consultations</p>
+            </div>
+            <div className="action-card" onClick={() => navigate('/requests')}>
+              <FileText size={32} className="action-icon" />
+              <h3 className="action-title">Notarial Requests</h3>
+              <p className="action-description">Review pending notary requests</p>
+            </div>
+          </section>
+
           {/* Stat Cards Grid */}
           <section className="stats-row">
             {stats.map((stat, i) => (

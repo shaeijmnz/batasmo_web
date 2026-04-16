@@ -1,58 +1,76 @@
 /* SHARED SETTINGS STYLES */
-.settings-tabs { 
-  display: flex; 
-  background: #f1f5f9; 
-  padding: 5px; 
-  border-radius: 12px; 
-  margin-bottom: 30px; 
-  border: 1px solid var(--border);
+.settings-tabs {
+  display: flex;
+  background: var(--ui-bg-card);
+  padding: 5px;
+  border-radius: 12px;
+  margin-bottom: 30px;
+  border: 1px solid var(--ui-glass-border);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
-.settings-tab { 
-  flex: 1; 
-  padding: 12px; 
-  border: none; 
-  background: none; 
-  border-radius: 8px; 
-  cursor: pointer; 
-  font-weight: 600; 
-  color: var(--text-secondary);
+.settings-tab {
+  flex: 1;
+  padding: 12px;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--ui-text-secondary);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.settings-tab.active { 
-  background: white; 
-  color: var(--text-primary); 
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05); 
+.settings-tab.active {
+  background: linear-gradient(135deg, var(--ui-accent) 0%, var(--ui-accent-hover) 100%);
+  color: white;
+  box-shadow: var(--ui-shadow-glow);
+}
+.settings-tab:hover:not(.active) {
+  background: var(--ui-glass-bg);
+  color: var(--ui-text-primary);
 }
 
 .settings-stack { display: flex; flex-direction: column; gap: 25px; }
-.card { background: white; padding: 25px; border-radius: 12px; border: 1px solid var(--border); }
-.card-title { font-size: 1rem; font-weight: 700; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; color: #1e3a8a; }
+.card { background: var(--ui-bg-card); padding: 25px; border-radius: 16px; border: 1px solid var(--ui-glass-border); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.card-title { font-size: 1rem; font-weight: 700; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; color: var(--ui-text-primary); }
 
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .input-group { margin-bottom: 20px; display: flex; flex-direction: column; gap: 8px; }
-.input-group label { font-size: 0.85rem; font-weight: 700; color: var(--text-primary); }
+.input-group label { font-size: 0.85rem; font-weight: 700; color: var(--ui-text-primary); }
 .input-group input, .input-group textarea, .input-group select {
-  padding: 12px; background: #f8fafc; border: 1px solid #f1f5f9; border-radius: 8px; font-size: 0.9rem; outline: none;
+  padding: 12px; background: var(--ui-glass-bg); border: 1px solid var(--ui-glass-border); border-radius: 8px; font-size: 0.9rem; outline: none; color: var(--ui-text-primary); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); transition: all 0.3s ease;
+}
+.input-group input:focus, .input-group textarea:focus, .input-group select:focus {
+  border-color: var(--ui-accent);
+  box-shadow: var(--ui-shadow-glow);
 }
 .input-group textarea { height: 100px; resize: none; }
 
-.btn-save { background: #d4a017; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; }
-.btn-save.gold-outline { background: #d4a017; border: none; }
+.btn-save { background: linear-gradient(135deg, var(--ui-accent) 0%, var(--ui-accent-hover) 100%); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: var(--ui-shadow-glow); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+.btn-save:hover { transform: translateY(-2px); box-shadow: 0 0 30px rgba(59, 130, 246, 0.6); }
+.btn-save.gold-outline { background: linear-gradient(135deg, var(--ui-accent) 0%, var(--ui-accent-hover) 100%); border: none; }
 
 /* TOGGLE SWITCHES */
 .toggle-item { display: flex; justify-content: space-between; align-items: center; padding: 15px 0; }
-.toggle-item h4 { font-size: 0.95rem; margin-bottom: 4px; }
-.toggle-item p { font-size: 0.8rem; color: var(--text-secondary); }
-.border-b { border-bottom: 1px solid #f1f5f9; }
+.toggle-item h4 { font-size: 0.95rem; margin-bottom: 4px; color: var(--ui-text-primary); }
+.toggle-item p { font-size: 0.8rem; color: var(--ui-text-secondary); }
+.border-b { border-bottom: 1px solid var(--ui-glass-border); }
 
-.switch { appearance: none; width: 40px; height: 20px; background: #cbd5e1; border-radius: 20px; position: relative; cursor: pointer; transition: 0.3s; }
-.switch:checked { background: #0f172a; }
+.switch { appearance: none; width: 40px; height: 20px; background: var(--ui-glass-border); border-radius: 20px; position: relative; cursor: pointer; transition: 0.3s; }
+.switch:checked { background: linear-gradient(135deg, var(--ui-accent) 0%, var(--ui-accent-hover) 100%); box-shadow: var(--ui-shadow-glow); }
 .switch::before { content: ''; position: absolute; width: 16px; height: 16px; background: white; border-radius: 50%; top: 2px; left: 2px; transition: 0.3s; }
 .switch:checked::before { transform: translateX(20px); }
 
 /* BILLING SPECIFICS */
-.plan-banner { background: #0f172a; color: white; padding: 25px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+.plan-banner { background: var(--ui-bg-card); color: var(--ui-text-primary); padding: 25px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
 .plan-info h4 { font-size: 1.2rem; margin-bottom: 5px; }
-.plan-info p { color: #94a3b8; font-size: 0.9rem; }
+.plan-info p { color: var(--ui-text-secondary); font-size: 0.9rem; }
+.plan-price { font-size: 1.8rem; font-weight: 700; color: var(--gold); }
+.plan-price span { font-size: 0.9rem; font-weight: 400; color: #94a3b8; }
+.btn-full.gold { background: #d4a017; width: 100%; padding: 12px; border: none; border-radius: 8px; color: white; font-weight: 700; cursor: pointer; }
+.plan-price { font-size: 1.8rem; font-weight: 700; color: var(--ui-accent); }
+.plan-price span { font-size: 0.9rem; font-weight: 400; color: var(--ui-text-secondary); }
+.btn-full.gold { background: var(--ui-accent); width: 100%; padding: 12px; border: none; border-radius: 8px; color: white; font-weight: 700; cursor: pointer; }
 .plan-price { font-size: 1.8rem; font-weight: 700; color: var(--gold); }
 .plan-price span { font-size: 0.9rem; font-weight: 400; color: #94a3b8; }
 .btn-full.gold { background: #d4a017; width: 100%; padding: 12px; border: none; border-radius: 8px; color: white; font-weight: 700; cursor: pointer; }

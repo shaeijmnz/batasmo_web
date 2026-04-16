@@ -4,33 +4,49 @@
   --gold: #eab308;
   --bg-main: #f8fafc;
   --border: #e2e8f0;
+  --ui-accent: #3b82f6;
+  --ui-accent-hover: #2e6ad4;
+  --ui-bg-card: #1f3558;
+  --ui-bg-card-hover: #1e3a8a;
+  --ui-border: #304863;
+  --ui-glass-border: #304863;
+  --ui-glass-bg: #0f172a;
+  --ui-shadow-premium: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --ui-shadow-glow: 0 0 30px rgba(59, 130, 246, 0.6);
+  --ui-text-primary: #f8fafc;
+  --ui-text-secondary: #94a3b8;
 }
 
-.export-all-btn { background: #d4a017; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+.export-all-btn { background: linear-gradient(135deg, var(--ui-accent) 0%, var(--ui-accent-hover) 100%); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: var(--ui-shadow-glow); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+.export-all-btn:hover { transform: translateY(-2px); box-shadow: 0 0 30px rgba(59, 130, 246, 0.6); }
 
 /* Stats Enhancements */
-.report-stat-card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+.report-stat-card { background: var(--ui-bg-card); padding: 20px; border-radius: 16px; border: 1px solid var(--ui-glass-border); box-shadow: var(--ui-shadow-premium); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+.report-stat-card:hover { background: var(--ui-bg-card-hover); border-color: var(--ui-accent); box-shadow: var(--ui-shadow-glow); transform: translateY(-2px); }
 .stat-main { display: flex; justify-content: space-between; align-items: center; }
-.stat-value { font-size: 1.5rem; font-weight: 700; margin: 5px 0; }
-.stat-label { color: var(--text-secondary); font-size: 0.85rem; font-weight: 600; }
-.stat-change { color: #22c55e; font-size: 0.75rem; font-weight: 700; display: flex; align-items: center; gap: 4px; }
-.stat-change span { color: #94a3b8; font-weight: 400; }
+.stat-value { font-size: 1.5rem; font-weight: 700; margin: 5px 0; color: var(--ui-text-primary); }
+.stat-label { color: var(--ui-text-secondary); font-size: 0.85rem; font-weight: 600; }
+.stat-change { color: var(--ui-accent); font-size: 0.75rem; font-weight: 700; display: flex; align-items: center; gap: 4px; }
+.stat-change span { color: var(--ui-text-secondary); font-weight: 400; }
 .stat-icon-wrapper { width: 45px; height: 45px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
 
 /* Chart Containers */
-.chart-container { background: white; border-radius: 12px; border: 1px solid var(--border); padding: 20px; margin-bottom: 25px; }
+.chart-container { background: var(--ui-bg-card); border-radius: 16px; border: 1px solid var(--ui-glass-border); padding: 20px; margin-bottom: 25px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
 .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-.chart-header h3 { font-size: 1rem; font-weight: 700; color: #1e293b; }
-.chart-export { background: none; border: none; color: #d4a017; font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+.chart-header h3 { font-size: 1rem; font-weight: 700; color: var(--ui-text-primary); }
+.chart-export { background: none; border: none; color: var(--ui-accent); font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: color 0.3s ease; }
+.chart-export:hover { color: var(--ui-accent-hover); }
 
-.chart-placeholder { background: #fcfcfc; border: 1px dashed #e2e8f0; border-radius: 8px; display: flex; align-items: center; justify-content: center; min-height: 250px; position: relative; }
+.chart-placeholder { background: var(--ui-glass-bg); border: 1px dashed var(--ui-glass-border); border-radius: 8px; display: flex; align-items: center; justify-content: center; min-height: 250px; position: relative; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
 
 .revenue-chart {
   min-height: 280px;
-  border: 1px dashed #d5c8b1;
+  border: 1px dashed var(--ui-glass-border);
   border-radius: 10px;
   padding: 14px;
-  background: linear-gradient(180deg, #fffdfa 0%, #fcf8f0 100%);
+  background: var(--ui-glass-bg);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .revenue-chart-svg {
@@ -39,12 +55,12 @@
 }
 
 .chart-grid-line {
-  stroke: #ddd4c4;
+  stroke: var(--ui-glass-border);
   stroke-width: 1;
 }
 
 .chart-axis-label {
-  fill: #596b82;
+  fill: var(--ui-text-secondary);
   font-size: 11px;
   font-weight: 600;
 }
