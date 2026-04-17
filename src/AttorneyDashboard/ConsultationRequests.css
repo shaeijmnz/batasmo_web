@@ -1,0 +1,328 @@
+/* ── Consultation Requests Page ── */
+
+.cr-page {
+  min-height: 100vh;
+  background: #eef2f7;
+  display: flex;
+  flex-direction: column;
+  font-family: 'Segoe UI', 'Inter', sans-serif;
+}
+
+/* Topbar */
+.cr-topbar {
+  background: #1c1f2e;
+  height: 62px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 28px;
+  position: sticky; top: 0; z-index: 100;
+  box-shadow: 0 2px 10px rgba(0,0,0,.2);
+}
+.cr-topbar__left {
+  display: flex; align-items: center; gap: 14px;
+}
+.cr-back-btn {
+  background: none; border: none; cursor: pointer;
+  padding: 6px; border-radius: 8px;
+  display: flex; align-items: center;
+  transition: background .2s;
+}
+.cr-back-btn:hover { background: rgba(255,255,255,.08); }
+.cr-topbar__title h1 {
+  font-size: 1.1rem; font-weight: 800; color: #fff; margin: 0;
+}
+.cr-topbar__sub {
+  font-size: 0.68rem; font-weight: 600; color: #f5a623;
+  letter-spacing: 1px; text-transform: uppercase;
+}
+.cr-topbar__right {
+  display: flex; align-items: center; gap: 18px;
+}
+.cr-icon-btn {
+  background: none; border: none; cursor: pointer;
+  padding: 6px; border-radius: 8px;
+  display: flex; align-items: center;
+  transition: background .2s;
+}
+.cr-icon-btn:hover { background: rgba(255,255,255,.08); }
+
+/* Notification bell (dropdown UI: AttorneyNotificationDropdown.css) */
+.cr-notif-btn {
+  position: relative;
+}
+.cr-notif-badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 99px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 0.63rem;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  padding: 0 4px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  pointer-events: none;
+}
+
+/* Profile */
+.cr-profile {
+  display: flex; align-items: center; gap: 10px;
+}
+.cr-profile__info { text-align: right; }
+.cr-profile__name {
+  display: block; font-size: 0.88rem; font-weight: 700; color: #fff;
+}
+.cr-profile__status {
+  font-size: 0.68rem; font-weight: 700; color: #f59e0b;
+}
+.cr-avatar {
+  width: 38px; height: 38px; border-radius: 50%;
+  background: #7c3aed; color: #fff;
+  font-size: 0.8rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* Main */
+.cr-main {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 32px 28px 80px;
+  width: 100%;
+  display: flex; flex-direction: column; gap: 24px;
+}
+
+/* Card */
+.cr-card {
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 2px 16px rgba(0,0,0,.06);
+  overflow: hidden;
+}
+.cr-card__top {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 24px 28px 20px;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.cr-card__left {
+  display: flex; align-items: center; gap: 16px;
+  flex: 1; min-width: 0;
+}
+.cr-card__avatar {
+  width: 48px; height: 48px; border-radius: 50%;
+  background: #1c1f2e; color: #fff;
+  font-size: 0.9rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.cr-card__info {
+  display: flex; flex-direction: column; gap: 6px;
+  min-width: 0;
+}
+.cr-card__name-row {
+  display: flex; align-items: center; gap: 10px;
+}
+.cr-card__name {
+  font-size: 1.05rem; font-weight: 700; color: #1a1a2e;
+}
+
+/* Status badges */
+.cr-status {
+  font-size: 0.7rem; font-weight: 700; padding: 3px 10px;
+  border-radius: 20px; letter-spacing: 0.3px;
+}
+.cr-status--pending { background: #fef3c7; color: #92400e; }
+.cr-status--approved { background: #d1fae5; color: #065f46; }
+.cr-status--rejected { background: #fee2e2; color: #991b1b; }
+.cr-status--rescheduled { background: #dbeafe; color: #1e40af; }
+
+/* Meta */
+.cr-card__meta {
+  display: flex; align-items: center; gap: 16px;
+  flex-wrap: wrap;
+}
+.cr-card__meta span {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 0.82rem; color: #6b7280;
+}
+.cr-card__paid {
+  color: #10b981 !important; font-weight: 600;
+}
+
+/* Action buttons */
+.cr-card__actions {
+  display: flex; gap: 10px; flex-shrink: 0;
+}
+.cr-action-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 20px; border-radius: 8px; border: 1.5px solid;
+  font-size: 0.85rem; font-weight: 600;
+  cursor: pointer; transition: all .2s;
+  background: #fff;
+}
+.cr-action-btn--accept {
+  border-color: #d1d5db; color: #1a1a2e;
+}
+.cr-action-btn--accept:hover {
+  background: #f0fdf4; border-color: #10b981; color: #065f46;
+}
+.cr-action-btn--resched {
+  border-color: #d1d5db; color: #1a1a2e;
+}
+.cr-action-btn--resched:hover {
+  background: #eff6ff; border-color: #3b82f6; color: #1e40af;
+}
+.cr-action-btn--reject {
+  border-color: #fecaca; color: #dc2626; background: #fff;
+}
+.cr-action-btn--reject:hover {
+  background: #fef2f2; border-color: #ef4444;
+}
+
+/* Enter consultation button */
+.cr-enter-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 12px 28px; border: none; border-radius: 8px;
+  background: #1c1f2e; color: #fff;
+  font-size: 0.88rem; font-weight: 700; letter-spacing: 0.3px;
+  cursor: pointer; transition: all .2s;
+}
+.cr-enter-btn:hover {
+  background: #2d3148;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0,0,0,.18);
+}
+
+/* Concern section */
+.cr-card__concern {
+  padding: 0 28px 24px;
+}
+.cr-card__concern-label {
+  display: block;
+  font-size: 0.72rem; font-weight: 700; color: #f5a623;
+  letter-spacing: 0.8px; text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.cr-card__concern-text {
+  background: #f8f9fb;
+  border-radius: 10px;
+  padding: 16px 20px;
+  font-size: 0.9rem; color: #374151;
+  font-style: italic;
+  line-height: 1.6;
+}
+
+/* ── Modals ── */
+.cr-modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.5);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 500;
+  animation: cr-fade-in .2s ease;
+}
+@keyframes cr-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.cr-modal {
+  background: #fff;
+  border-radius: 16px;
+  padding: 36px 32px 28px;
+  width: 100%; max-width: 440px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.2);
+  animation: cr-slide-up .25s ease;
+  display: flex; flex-direction: column; align-items: center;
+  text-align: center;
+}
+@keyframes cr-slide-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.cr-modal__icon {
+  width: 56px; height: 56px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 18px;
+}
+.cr-modal__icon--green { background: #d1fae5; color: #059669; }
+.cr-modal__icon--red { background: #fee2e2; color: #dc2626; }
+.cr-modal__icon--blue { background: #dbeafe; color: #2563eb; }
+.cr-modal__icon svg { width: 24px; height: 24px; }
+
+.cr-modal h3 {
+  font-size: 1.2rem; font-weight: 800; color: #1a1a2e;
+  margin-bottom: 10px;
+}
+.cr-modal p {
+  font-size: 0.9rem; color: #6b7280; line-height: 1.6; margin: 0 0 8px;
+}
+.cr-modal__note {
+  font-size: 0.82rem; color: #9ca3af; font-style: italic;
+  margin-top: 8px;
+}
+.cr-modal__textarea {
+  width: 100%; border: 1.5px solid #e5e7eb; border-radius: 10px;
+  padding: 12px 16px; font-size: 0.9rem; color: #1a1a2e;
+  resize: vertical; margin-top: 14px;
+  font-family: inherit;
+  transition: border-color .2s;
+}
+.cr-modal__textarea:focus {
+  outline: none; border-color: #1e3a8a;
+  box-shadow: 0 0 0 3px rgba(30,58,138,.08);
+}
+.cr-modal__textarea::placeholder { color: #9ca3af; }
+
+.cr-modal__fields {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  width: 100%; margin-top: 14px;
+}
+.cr-modal__field {
+  display: flex; flex-direction: column; gap: 5px; text-align: left;
+}
+.cr-modal__field label {
+  font-size: 0.82rem; font-weight: 600; color: #374151;
+}
+.cr-modal__field input {
+  border: 1.5px solid #e5e7eb; border-radius: 8px;
+  padding: 10px 12px; font-size: 0.9rem; color: #1a1a2e;
+  transition: border-color .2s;
+}
+.cr-modal__field input:focus {
+  outline: none; border-color: #1e3a8a;
+  box-shadow: 0 0 0 3px rgba(30,58,138,.08);
+}
+
+.cr-modal__actions {
+  display: flex; gap: 12px; width: 100%; margin-top: 22px;
+}
+.cr-modal-btn {
+  flex: 1; padding: 12px; border-radius: 10px; border: none;
+  font-size: 0.92rem; font-weight: 700; cursor: pointer;
+  transition: all .2s;
+}
+.cr-modal-btn--cancel {
+  background: #f3f4f6; color: #6b7280;
+}
+.cr-modal-btn--cancel:hover { background: #e5e7eb; }
+.cr-modal-btn--confirm { color: #fff; }
+.cr-modal-btn--green { background: #10b981; }
+.cr-modal-btn--green:hover { background: #059669; }
+.cr-modal-btn--red { background: #ef4444; }
+.cr-modal-btn--red:hover { background: #dc2626; }
+.cr-modal-btn--blue { background: #2563eb; }
+.cr-modal-btn--blue:hover { background: #1d4ed8; }
+.cr-modal-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Responsive */
+@media (max-width: 700px) {
+  .cr-card__top { flex-direction: column; align-items: flex-start; }
+  .cr-card__actions { width: 100%; }
+  .cr-action-btn { flex: 1; justify-content: center; }
+}
+@media (max-width: 500px) {
+  .cr-modal { margin: 0 16px; padding: 28px 20px 22px; }
+  .cr-modal__fields { grid-template-columns: 1fr; }
+}

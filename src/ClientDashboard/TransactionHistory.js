@@ -1,0 +1,417 @@
+import { useEffect, useMemo, useState } from 'react';
+import './TransactionHistory.css';
+import { fetchClientTransactions } from '../lib/userApi';
+
+/* ── Icons ── */
+const ScalesIcon = ({ size = 24, color = '#f5a623' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="12" y1="3" x2="12" y2="21" /><path d="M5 21h14" /><path d="M3 6l9-3 9 3" />
+    <path d="M3 6l3 9H0L3 6z" /><path d="M21 6l3 9h-6l3-9z" />
+  </svg>
+);
+const MenuIcon = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
+  </svg>
+);
+const BellIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
+  </svg>
+);
+const MessageIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+  </svg>
+);
+const ThDashboardIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+  </svg>
+);
+const ThCalIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+  </svg>
+);
+const ThMyApptIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><polyline points="9 16 11 18 15 14"/>
+  </svg>
+);
+const ThNotarialIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+  </svg>
+);
+const ThAnnouncementIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+  </svg>
+);
+const ThTransactionIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+  </svg>
+);
+const ThProfileIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+  </svg>
+);
+
+const SearchIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+  </svg>
+);
+
+const ReceiptIcon = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f5a623" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 2v20l3-2 3 2 3-2 3 2 3-2 3 2V2l-3 2-3-2-3 2-3-2-3 2-3-2z" /><line x1="8" y1="8" x2="16" y2="8" /><line x1="8" y1="12" x2="16" y2="12" /><line x1="8" y1="16" x2="12" y2="16" />
+  </svg>
+);
+
+/* Helpers */
+const getTypeIcon = (type) => {
+  if (type === 'consultation') {
+    return (
+      <div className="th-txn__icon th-txn__icon--consultation">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+      </div>
+    );
+  }
+  return (
+    <div className="th-txn__icon th-txn__icon--notarial">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f5a623" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/>
+      </svg>
+    </div>
+  );
+};
+
+const getStatusStyle = (status) => {
+  switch (status) {
+    case 'completed': return { bg: '#d1fae5', color: '#065f46', label: 'Completed' };
+    case 'refunded': return { bg: '#fef3c7', color: '#92400e', label: 'Refunded' };
+    case 'forfeited': return { bg: '#fee2e2', color: '#991b1b', label: 'Forfeited' };
+    case 'failed': return { bg: '#fef2f2', color: '#dc2626', label: 'Failed' };
+    default: return { bg: '#f3f4f6', color: '#6b7280', label: status };
+  }
+};
+
+const getMethodIcon = (method) => {
+  if (method === 'GCash') {
+    return <span className="th-method-badge th-method-badge--gcash">G</span>;
+  }
+  return <span className="th-method-badge th-method-badge--maya">M</span>;
+};
+
+function TransactionHistory({ onNavigate, profile }) {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [allTransactions, setAllTransactions] = useState([]);
+  const [activeFilter, setActiveFilter] = useState('All');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [expandedId, setExpandedId] = useState(null);
+  const [loadError, setLoadError] = useState('');
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadTransactions = async () => {
+      if (!profile?.id) {
+        if (isMounted) setAllTransactions([]);
+        return;
+      }
+
+      try {
+        const rows = await fetchClientTransactions(profile.id);
+        if (!isMounted) return;
+        setAllTransactions(rows);
+        setLoadError('');
+      } catch (error) {
+        if (!isMounted) return;
+        setAllTransactions([]);
+        setLoadError(error?.message || 'Unable to load transaction history right now. Please try again in a moment.');
+      }
+    };
+
+    loadTransactions();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [profile?.id]);
+
+  const filters = ['All', 'Consultation', 'Notarial'];
+
+  const filtered = useMemo(() => {
+    const normalizedSearch = searchQuery.toLowerCase();
+    return allTransactions.filter(txn => {
+      const matchesFilter = activeFilter === 'All' || txn.type === activeFilter.toLowerCase();
+      const matchesSearch = !normalizedSearch ||
+        txn.description.toLowerCase().includes(normalizedSearch) ||
+        txn.detail.toLowerCase().includes(normalizedSearch) ||
+        txn.id.toLowerCase().includes(normalizedSearch) ||
+        txn.refNo.toLowerCase().includes(normalizedSearch);
+      return matchesFilter && matchesSearch;
+    });
+  }, [allTransactions, activeFilter, searchQuery]);
+
+  const { totalSpent, consultationCount, notarialCount, typeCounts } = useMemo(() => {
+    const consultation = allTransactions.filter(t => t.type === 'consultation').length;
+    const notarial = allTransactions.filter(t => t.type === 'notarial').length;
+    const paidStatuses = new Set(['paid', 'completed']);
+
+    return {
+      totalSpent: allTransactions
+        .filter(t => paidStatuses.has(String(t.status || '').toLowerCase()))
+        .reduce((sum, t) => sum + Number(t.amountValue || 0), 0),
+      consultationCount: consultation,
+      notarialCount: notarial,
+      typeCounts: {
+        consultation,
+        notarial,
+      },
+    };
+  }, [allTransactions]);
+
+  return (
+    <div className="th-page">
+      {/* Sidebar overlay */}
+      {sidebarOpen && <div className="th-sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
+
+      {/* Sidebar */}
+      <aside className={`th-sidebar ${sidebarOpen ? 'th-sidebar--open' : ''}`}>
+        <div className="th-sidebar__logo">
+          <ScalesIcon size={26} color="#f5a623" />
+          <span>BatasMo</span>
+        </div>
+        <nav className="th-sidebar__nav">
+          {[
+            { label: 'Dashboard',           icon: <ThDashboardIcon />,    nav: 'home-logged' },
+            { label: 'Book Appointment',    icon: <ThCalIcon />,          nav: 'book-appointment' },
+            { label: 'My Appointments',     icon: <ThMyApptIcon />,       nav: 'my-appointments' },
+            { label: 'Notarial Requests',   icon: <ThNotarialIcon />,     nav: 'my-notarial-requests' },
+            { label: 'Announcements',       icon: <ThAnnouncementIcon />, nav: 'announcements' },
+            { label: 'Transaction History', icon: <ThTransactionIcon />,  nav: 'transaction-history' },
+            { label: 'Profile',             icon: <ThProfileIcon />,      nav: 'profile' },
+          ].map(item => (
+            <button
+              key={item.label}
+              className={`th-sidebar__item ${item.label === 'Transaction History' ? 'th-sidebar__item--active' : ''}`}
+              onClick={() => { setSidebarOpen(false); if (item.nav) onNavigate(item.nav); }}
+            >
+              <span className="th-sidebar__item-icon">{item.icon}</span>
+              {item.label}
+            </button>
+          ))}
+        </nav>
+      </aside>
+
+      {/* Topbar */}
+      <header className="th-topbar">
+        <div className="th-topbar__left">
+          <button className="th-icon-btn" onClick={() => setSidebarOpen(!sidebarOpen)}><MenuIcon /></button>
+          <div className="th-breadcrumb">
+            <span className="th-breadcrumb__current">Transaction History</span>
+          </div>
+        </div>
+        <div className="th-topbar__right">
+          <button className="th-icon-btn" onClick={() => onNavigate('chat-room')} title="Message Admin">
+            <MessageIcon />
+          </button>
+          <button className="th-icon-btn th-bell" onClick={() => onNavigate('announcements')} title="Announcements">
+            <BellIcon />
+            <span className="th-bell__dot" />
+          </button>
+          <div className="th-profile" onClick={() => onNavigate('profile')} style={{ cursor: 'pointer' }}>
+            <div className="th-profile__info">
+              <span className="th-profile__name">{profile?.full_name || 'Client'}</span>
+            </div>
+            <div className="th-avatar">{(profile?.full_name || 'CL').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()}</div>
+          </div>
+        </div>
+      </header>
+
+      {/* Main */}
+      <main className="th-main">
+        <div className="th-container">
+          {loadError ? <p>{loadError}</p> : null}
+          {/* Header */}
+          <div className="th-header">
+            <div className="th-header__text">
+              <div className="th-header__title-row">
+                <ReceiptIcon />
+                <h1>Transaction History</h1>
+              </div>
+              <p>View all your payment records and receipts</p>
+            </div>
+          </div>
+
+          {/* Summary Cards */}
+          <div className="th-summary">
+            <div className="th-summary-card">
+              <span className="th-summary-card__label">Total Spent</span>
+              <span className="th-summary-card__value th-summary-card__value--total">₱{totalSpent.toLocaleString('en-PH', { minimumFractionDigits: 2 })}</span>
+              <span className="th-summary-card__sub">{allTransactions.length} transactions</span>
+            </div>
+            <div className="th-summary-card">
+              <span className="th-summary-card__label">Consultations</span>
+              <span className="th-summary-card__value th-summary-card__value--consul">{consultationCount}</span>
+              <span className="th-summary-card__sub">Legal consultations paid</span>
+            </div>
+            <div className="th-summary-card">
+              <span className="th-summary-card__label">Notarial Services</span>
+              <span className="th-summary-card__value th-summary-card__value--notar">{notarialCount}</span>
+              <span className="th-summary-card__sub">Notarial fees paid</span>
+            </div>
+          </div>
+
+          {/* Filters & Search */}
+          <div className="th-toolbar">
+            <div className="th-filters">
+              {filters.map(f => (
+                <button
+                  key={f}
+                  className={`th-filter-btn ${activeFilter === f ? 'th-filter-btn--active' : ''}`}
+                  onClick={() => setActiveFilter(f)}
+                >
+                  {f}
+                  {f !== 'All' && (
+                    <span className="th-filter-count">
+                      {typeCounts[f.toLowerCase()] || 0}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+            <div className="th-search">
+              <SearchIcon />
+              <input
+                type="text"
+                placeholder="Search transactions..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Transaction List */}
+          <div className="th-list">
+            {/* Table Header */}
+            <div className="th-list__header">
+              <span className="th-list__col th-list__col--type">Type</span>
+              <span className="th-list__col th-list__col--desc">Description</span>
+              <span className="th-list__col th-list__col--date">Date</span>
+              <span className="th-list__col th-list__col--method">Method</span>
+              <span className="th-list__col th-list__col--amount">Amount</span>
+              <span className="th-list__col th-list__col--status">Status</span>
+            </div>
+
+            {filtered.length === 0 ? (
+              <div className="th-empty">
+                <ReceiptIcon />
+                <p>No transactions found</p>
+              </div>
+            ) : (
+              filtered.map(txn => {
+                const statusStyle = getStatusStyle(txn.status);
+                const isExpanded = expandedId === txn.id;
+                return (
+                  <div key={txn.id} className={`th-txn ${isExpanded ? 'th-txn--expanded' : ''}`}>
+                    <div className="th-txn__row" onClick={() => setExpandedId(isExpanded ? null : txn.id)}>
+                      <span className="th-list__col th-list__col--type">
+                        {getTypeIcon(txn.type)}
+                      </span>
+                      <span className="th-list__col th-list__col--desc">
+                        <span className="th-txn__desc">{txn.description}</span>
+                        <span className="th-txn__detail">{txn.detail}</span>
+                      </span>
+                      <span className="th-list__col th-list__col--date">
+                        <span className="th-txn__date">{txn.date}</span>
+                        <span className="th-txn__time">{txn.time}</span>
+                      </span>
+                      <span className="th-list__col th-list__col--method">
+                        {getMethodIcon(txn.method)}
+                        <span className="th-txn__method-name">{txn.method}</span>
+                      </span>
+                      <span className="th-list__col th-list__col--amount">
+                        <span className={`th-txn__amount ${txn.status === 'refunded' ? 'th-txn__amount--refund' : ''} ${txn.status === 'forfeited' ? 'th-txn__amount--forfeited' : ''}`}>
+                          {txn.status === 'refunded' ? '+' : '-'}{txn.amount}
+                        </span>
+                      </span>
+                      <span className="th-list__col th-list__col--status">
+                        <span className="th-txn__status" style={{ background: statusStyle.bg, color: statusStyle.color }}>
+                          {statusStyle.label}
+                        </span>
+                      </span>
+                      <span className="th-txn__chevron">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                          style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform .2s' }}>
+                          <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                      </span>
+                    </div>
+
+                    {/* Expanded Receipt */}
+                    {isExpanded && (
+                      <div className="th-txn__receipt">
+                        <div className="th-receipt">
+                          <div className="th-receipt__header">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f5a623" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M4 2v20l3-2 3 2 3-2 3 2 3-2 3 2V2l-3 2-3-2-3 2-3-2-3 2-3-2z"/>
+                            </svg>
+                            <span>Payment Receipt</span>
+                          </div>
+                          <div className="th-receipt__body">
+                            <div className="th-receipt__row">
+                              <span>Transaction ID</span>
+                              <span className="th-receipt__value th-receipt__value--mono">{txn.id}</span>
+                            </div>
+                            <div className="th-receipt__row">
+                              <span>Reference No.</span>
+                              <span className="th-receipt__value th-receipt__value--mono">{txn.refNo}</span>
+                            </div>
+                            <div className="th-receipt__row">
+                              <span>Service</span>
+                              <span className="th-receipt__value">{txn.description}</span>
+                            </div>
+                            <div className="th-receipt__row">
+                              <span>Attorney / Provider</span>
+                              <span className="th-receipt__value">{txn.detail.replace('Consultation with ', '').replace('Notarization by ', '')}</span>
+                            </div>
+                            <div className="th-receipt__row">
+                              <span>Date & Time</span>
+                              <span className="th-receipt__value">{txn.date} at {txn.time}</span>
+                            </div>
+                            <div className="th-receipt__row">
+                              <span>Payment Method</span>
+                              <span className="th-receipt__value">{txn.method}</span>
+                            </div>
+                            <div className="th-receipt__divider" />
+                            <div className="th-receipt__row th-receipt__row--total">
+                              <span>
+                                Amount {txn.status === 'refunded' ? 'Refunded' : txn.status === 'forfeited' ? 'Forfeited' : 'Paid'}
+                              </span>
+                              <span className="th-receipt__value">{txn.amount}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+export default TransactionHistory;

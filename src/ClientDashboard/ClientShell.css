@@ -1,0 +1,1476 @@
+:root {
+  --client-shell-bg-0: #050b12;
+  --client-shell-bg-1: #091321;
+  --client-shell-bg-2: #102035;
+  --client-shell-text-0: #eef4ff;
+  --client-shell-text-1: #abbedc;
+  --client-shell-accent-blue: #2f6fdb;
+  --client-shell-accent-teal: #1a9f92;
+  --client-shell-accent-gold: #d4af37;
+  --client-shell-shadow: 0 22px 50px rgba(2, 7, 15, 0.55);
+}
+
+.client-shell-app {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  height: 100dvh;
+  min-height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+  color: var(--client-shell-text-0);
+  background:
+    radial-gradient(1300px circle at -10% -20%, rgba(45, 106, 196, 0.2), transparent 45%),
+    radial-gradient(980px circle at 110% -10%, rgba(24, 96, 168, 0.2), transparent 44%),
+    radial-gradient(920px circle at 100% 120%, rgba(212, 175, 55, 0.08), transparent 42%),
+    linear-gradient(165deg, var(--client-shell-bg-0), var(--client-shell-bg-1) 52%, var(--client-shell-bg-2));
+}
+
+.client-shell-mesh {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(900px circle at 8% 10%, rgba(59, 130, 246, 0.15), transparent 52%),
+    radial-gradient(1100px circle at 88% 20%, rgba(17, 83, 148, 0.2), transparent 54%),
+    radial-gradient(720px circle at 50% 112%, rgba(212, 175, 55, 0.08), transparent 58%);
+  z-index: 0;
+}
+
+.client-shell-orb {
+  position: absolute;
+  width: 320px;
+  height: 320px;
+  border-radius: 999px;
+  filter: blur(42px);
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.3;
+}
+
+.client-shell-orb-a {
+  top: -120px;
+  right: 8%;
+  background: #2f7bf0;
+}
+
+.client-shell-orb-b {
+  bottom: -140px;
+  left: 16%;
+  background: #0fae9f;
+}
+
+.client-shell-sidebar {
+  width: 280px;
+  margin: 16px;
+  margin-right: 10px;
+  height: calc(100dvh - 32px);
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(8, 15, 25, 0.84), rgba(7, 12, 21, 0.78));
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(20px);
+  box-shadow: var(--client-shell-shadow);
+  display: flex;
+  flex-direction: column;
+  transition: width 0.25s ease;
+  z-index: 2;
+}
+
+.client-shell-sidebar.collapsed {
+  width: 86px;
+}
+
+.client-shell-sidebar-header {
+  padding: 16px;
+  border-bottom: 1px solid rgba(184, 210, 246, 0.14);
+}
+
+.client-shell-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: var(--client-shell-accent-gold);
+}
+
+.client-shell-brand-logo {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  background: rgba(212, 175, 55, 0.2);
+}
+
+.client-shell-brand-text {
+  font-size: 0.84rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.client-shell-nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+}
+
+.client-shell-nav-item {
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--client-shell-text-1);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 12px;
+  cursor: pointer;
+  transition: transform 0.18s ease, background 0.25s ease, color 0.25s ease;
+}
+
+.client-shell-nav-item:hover,
+.client-shell-nav-item.active {
+  color: #fff;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.22), rgba(20, 184, 166, 0.14));
+}
+
+.client-shell-nav-item:hover {
+  transform: translateX(2px);
+}
+
+.client-shell-nav-icon {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+}
+
+.client-shell-nav-icon svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.client-shell-nav-label {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.client-shell-sidebar-footer {
+  padding: 14px;
+  border-top: 1px solid rgba(184, 210, 246, 0.14);
+}
+
+.client-shell-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.client-shell-user-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 0;
+  background: linear-gradient(145deg, #2f7bf0, #1f56cc);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.client-shell-user-meta p {
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+.client-shell-user-meta button {
+  margin-top: 2px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #ffcd75;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.client-shell-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  margin: 16px 16px 16px 6px;
+  height: calc(100dvh - 32px);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(8, 14, 24, 0.56);
+  backdrop-filter: blur(14px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+}
+
+.client-shell-topbar {
+  padding: 14px 24px;
+  border-bottom: 1px solid rgba(184, 210, 246, 0.14);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.client-shell-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.client-shell-notif-wrap {
+  position: relative;
+}
+
+.client-shell-notif-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  border: 1px solid rgba(128, 176, 255, 0.4);
+  background: rgba(25, 43, 70, 0.75);
+  color: #dce8ff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+}
+
+.client-shell-notif-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.client-shell-notif-dot {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 2px solid rgba(8, 14, 24, 0.95);
+  background: #ef4444;
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+}
+
+.client-shell-notif-backdrop {
+  position: fixed;
+  inset: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  z-index: 4;
+}
+
+.client-shell-notif-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(90vw, 360px);
+  border-radius: 12px;
+  border: 1px solid rgba(128, 176, 255, 0.34);
+  background: linear-gradient(165deg, rgba(12, 23, 39, 0.98), rgba(9, 18, 32, 0.98));
+  box-shadow: 0 20px 45px rgba(2, 7, 15, 0.52);
+  z-index: 5;
+  overflow: hidden;
+}
+
+.client-shell-notif-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(128, 176, 255, 0.18);
+  color: #e5edfb;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.client-shell-notif-panel__header button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #84b5ff;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.client-shell-notif-panel__list {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.client-shell-notif-panel__empty,
+.client-shell-notif-panel__error {
+  margin: 0;
+  padding: 10px;
+  font-size: 0.8rem;
+  color: #a7bedf;
+}
+
+.client-shell-notif-panel__error {
+  color: #fca5a5;
+}
+
+.client-shell-notif-item {
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(8, 18, 34, 0.45);
+  border: 1px solid rgba(128, 176, 255, 0.12);
+  color: #e8f0ff;
+  text-align: left;
+  padding: 10px 10px 11px;
+  display: block;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.client-shell-notif-item:hover {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(132, 181, 255, 0.35);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.15);
+}
+
+.client-shell-notif-item:focus-visible {
+  outline: 2px solid rgba(132, 181, 255, 0.9);
+  outline-offset: 2px;
+}
+
+.client-shell-notif-item--unread {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.18), rgba(20, 184, 166, 0.08));
+  border-color: rgba(132, 181, 255, 0.28);
+}
+
+.client-shell-notif-item__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.client-shell-notif-item__glyph {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #dce8ff;
+}
+
+.client-shell-notif-item__glyph--consultation {
+  background: linear-gradient(145deg, rgba(212, 175, 55, 0.25), rgba(245, 166, 35, 0.12));
+  color: #ffd78a;
+  border: 1px solid rgba(245, 166, 35, 0.35);
+}
+
+.client-shell-notif-item__glyph--booking {
+  background: rgba(59, 130, 246, 0.22);
+  color: #9ec5ff;
+  border: 1px solid rgba(96, 165, 250, 0.35);
+}
+
+.client-shell-notif-item__glyph--payment {
+  background: rgba(16, 185, 129, 0.18);
+  color: #6ee7b7;
+  border: 1px solid rgba(52, 211, 153, 0.35);
+}
+
+.client-shell-notif-item__glyph--reschedule {
+  background: rgba(99, 102, 241, 0.2);
+  color: #c4b5fd;
+  border: 1px solid rgba(129, 140, 248, 0.35);
+}
+
+.client-shell-notif-item__glyph--reminder {
+  background: rgba(251, 191, 36, 0.14);
+  color: #fcd34d;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.client-shell-notif-item__glyph--default {
+  background: rgba(148, 163, 184, 0.12);
+  color: #cbd5e1;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+.client-shell-notif-item__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.client-shell-notif-item__title {
+  font-size: 0.84rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #f1f6ff;
+  line-height: 1.25;
+}
+
+.client-shell-notif-item__desc {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: #b3c9e6;
+}
+
+.client-shell-notif-item__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-top: 2px;
+}
+
+.client-shell-notif-item__time {
+  font-size: 0.7rem;
+  color: #8ea4c2;
+  font-variant-numeric: tabular-nums;
+}
+
+.client-shell-notif-item__cta {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #84b5ff;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.client-shell-notif-item__cta-arrow {
+  margin-left: 4px;
+  display: inline-block;
+  transition: transform 0.18s ease;
+}
+
+.client-shell-notif-item:hover .client-shell-notif-item__cta-arrow {
+  transform: translateX(3px);
+}
+
+.client-shell-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.client-shell-title-wrap h1 {
+  margin: 0;
+  font-size: 1.95rem;
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  background: linear-gradient(90deg, #f2f7ff 20%, #9ac2ff 58%, #73e0c7 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.client-shell-title-wrap p {
+  margin: 4px 0 0;
+  color: var(--client-shell-text-1);
+  font-size: 0.92rem;
+}
+
+.client-shell-menu-toggle {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid rgba(128, 176, 255, 0.42);
+  background: rgba(59, 130, 246, 0.16);
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.14);
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.client-shell-menu-toggle span {
+  width: 16px;
+  height: 2px;
+  border-radius: 999px;
+  background: #dce8ff;
+}
+
+.client-shell-menu-toggle.is-open {
+  background: rgba(26, 62, 118, 0.28);
+}
+
+.client-shell-profile-chip {
+  border: 1px solid rgba(128, 176, 255, 0.34);
+  border-radius: 999px;
+  background: rgba(19, 33, 54, 0.72);
+  color: #dce8ff;
+  padding: 4px 6px 4px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.client-shell-profile-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(145deg, #2f7bf0, #1f56cc);
+  color: #fff;
+}
+
+.client-shell-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 24px 24px;
+}
+
+.client-shell-content--chat {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  padding: 0;
+  flex: 1;
+}
+
+.client-shell-content--chat > .client-shell-body--chat {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+}
+
+.client-shell-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.client-shell-content::-webkit-scrollbar-thumb {
+  background: rgba(127, 158, 207, 0.35);
+  border-radius: 8px;
+}
+
+.client-shell-body {
+  min-height: 100%;
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+  line-height: 1.5;
+}
+
+/* Hide visible scrollbars across client dashboard while preserving scroll */
+.client-shell-body,
+.client-shell-body * {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.client-shell-body::-webkit-scrollbar,
+.client-shell-body *::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+.client-shell-body--chat {
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  display: flex;
+  align-items: stretch;
+}
+
+.client-shell-backdrop {
+  display: none;
+}
+
+.client-shell-notary-modal__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 10, 20, 0.68);
+  backdrop-filter: blur(4px);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.client-shell-notary-modal {
+  width: min(92vw, 520px);
+  border-radius: 18px;
+  padding: 24px;
+  border: 1px solid rgba(123, 176, 255, 0.35);
+  background:
+    radial-gradient(640px circle at 12% -10%, rgba(56, 122, 229, 0.2), transparent 50%),
+    radial-gradient(560px circle at 96% 8%, rgba(18, 160, 146, 0.12), transparent 54%),
+    linear-gradient(160deg, rgba(10, 20, 34, 0.98), rgba(9, 17, 30, 0.98));
+  box-shadow: 0 28px 70px rgba(2, 7, 15, 0.58);
+}
+
+.client-shell-notary-modal__badge {
+  display: inline-flex;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  background: rgba(212, 175, 55, 0.12);
+  color: #ffdd87;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.client-shell-notary-modal h2 {
+  margin: 12px 0 8px;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  color: #f4f8ff;
+}
+
+.client-shell-notary-modal p {
+  margin: 0;
+  color: #a9bdd9;
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+.client-shell-notary-modal__features {
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.client-shell-notary-modal__features span {
+  border: 1px solid rgba(123, 176, 255, 0.3);
+  background: rgba(59, 130, 246, 0.14);
+  color: #dbeafe;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.client-shell-notary-modal__actions {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.client-shell-notary-modal__btn {
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.client-shell-notary-modal__btn--ghost {
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  background: rgba(15, 23, 42, 0.65);
+  color: #d7e3f8;
+}
+
+.client-shell-notary-modal__btn--primary {
+  border: 1px solid rgba(47, 111, 219, 0.45);
+  background: linear-gradient(135deg, #2f7bf0, #2057ce);
+  color: #fff;
+}
+
+/* Hide legacy duplicated nav/topbars and let each page render content-only inside shell */
+.client-shell-body .hp-sidebar,
+.client-shell-body .ba-sidebar,
+.client-shell-body .ma-sidebar,
+.client-shell-body .mnr-sidebar,
+.client-shell-body .nr-sidebar,
+.client-shell-body .ann-sidebar,
+.client-shell-body .th-sidebar,
+.client-shell-body .pp-sidebar,
+.client-shell-body .hp-topbar,
+.client-shell-body .ba-topbar,
+.client-shell-body .ma-topbar,
+.client-shell-body .mnr-topbar,
+.client-shell-body .nr-topbar,
+.client-shell-body .ann-topbar,
+.client-shell-body .th-topbar,
+.client-shell-body .pp-topbar,
+.client-shell-body .cr-header,
+.client-shell-body .hp-sidebar-overlay,
+.client-shell-body .ba-sidebar-overlay,
+.client-shell-body .ma-sidebar-overlay,
+.client-shell-body .mnr-sidebar-overlay,
+.client-shell-body .nr-sidebar-overlay,
+.client-shell-body .ann-sidebar-overlay,
+.client-shell-body .th-sidebar-overlay,
+.client-shell-body .pp-sidebar-overlay {
+  display: none !important;
+}
+
+.client-shell-body .hp-page,
+.client-shell-body .ba-page,
+.client-shell-body .ma-page,
+.client-shell-body .mnr-page,
+.client-shell-body .nr-page,
+.client-shell-body .ann-page,
+.client-shell-body .th-page,
+.client-shell-body .pp-page,
+.client-shell-body .pp-page {
+  min-height: auto !important;
+  height: auto !important;
+  background: transparent !important;
+  font-family: inherit !important;
+}
+
+.client-shell-body .cr-page {
+  min-height: 0 !important;
+  height: 100% !important;
+  width: 100% !important;
+  background: transparent !important;
+  font-family: inherit !important;
+}
+
+.client-shell-body .hp-main,
+.client-shell-body .ba-main,
+.client-shell-body .ma-main,
+.client-shell-body .mnr-main,
+.client-shell-body .nr-main,
+.client-shell-body .ann-main,
+.client-shell-body .th-main,
+.client-shell-body .pp-main {
+  width: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  max-width: none !important;
+}
+
+.client-shell-body .cr-chat-area {
+  height: 100% !important;
+  min-height: 0 !important;
+  max-width: none !important;
+  margin: 0 !important;
+}
+
+/* Cross-page type + spacing rhythm */
+.client-shell-body .hp-header,
+.client-shell-body .ba-header,
+.client-shell-body .ma-header,
+.client-shell-body .th-header,
+.client-shell-body .ann-header,
+.client-shell-body .mnr-header,
+.client-shell-body .nr-header,
+.client-shell-body .pp-heading {
+  margin-bottom: 24px !important;
+}
+
+.client-shell-body .hp-header h1,
+.client-shell-body .ba-header h1,
+.client-shell-body .ma-header h1,
+.client-shell-body .th-header h1,
+.client-shell-body .ann-header h1,
+.client-shell-body .mnr-header h1,
+.client-shell-body .nr-header h1,
+.client-shell-body .pp-heading h1,
+.client-shell-body .hp-welcome h1,
+.client-shell-body .th-header__text h1 {
+  font-family: 'Inter', 'Segoe UI', sans-serif !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.015em !important;
+  line-height: 1.2 !important;
+}
+
+.client-shell-body .hp-header p,
+.client-shell-body .ba-header p,
+.client-shell-body .ma-header p,
+.client-shell-body .th-header p,
+.client-shell-body .ann-header p,
+.client-shell-body .mnr-header p,
+.client-shell-body .nr-header p,
+.client-shell-body .pp-heading p,
+.client-shell-body .th-header__text p,
+.client-shell-body .hp-welcome p {
+  font-size: 0.94rem !important;
+  line-height: 1.55 !important;
+  margin-top: 6px !important;
+}
+
+.client-shell-body .hp-actions,
+.client-shell-body .th-summary,
+.client-shell-body .th-toolbar,
+.client-shell-body .ma-filters,
+.client-shell-body .ma-appointments-list,
+.client-shell-body .ann-list,
+.client-shell-body .mnr-grid,
+.client-shell-body .nr-services-grid {
+  margin-bottom: 20px !important;
+}
+
+/* Dark theme normalization for legacy client page styles */
+.client-shell-body .hp-welcome h1,
+.client-shell-body .hp-welcome p,
+.client-shell-body .hp-queue-card__header h2,
+.client-shell-body .hp-queue-subtitle,
+.client-shell-body .hp-view-all,
+.client-shell-body .ba-header h1,
+.client-shell-body .ba-header p,
+.client-shell-body .ba-form-label,
+.client-shell-body .ma-header h1,
+.client-shell-body .ma-header p,
+.client-shell-body .th-header__text h1,
+.client-shell-body .th-header__text p,
+.client-shell-body .ann-header__text h1,
+.client-shell-body .ann-header__text p,
+.client-shell-body .pp-heading h1,
+.client-shell-body .pp-heading p,
+.client-shell-body .pp-form-card__header h2,
+.client-shell-body .pp-form-card__header p,
+.client-shell-body .mnr-header h1,
+.client-shell-body .mnr-header p,
+.client-shell-body .nr-header h1,
+.client-shell-body .nr-header p {
+  color: #e8f0ff !important;
+}
+
+.client-shell-body .hp-queue-card,
+.client-shell-body .ba-card,
+.client-shell-body .ma-appointment-card,
+.client-shell-body .th-summary-card,
+.client-shell-body .th-list,
+.client-shell-body .pp-form-card,
+.client-shell-body .mnr-card,
+.client-shell-body .nr-container,
+.client-shell-body .ann-card {
+  background: linear-gradient(145deg, rgba(14, 27, 45, 0.86), rgba(12, 31, 54, 0.72)) !important;
+  border: 1px solid rgba(184, 210, 246, 0.18) !important;
+  box-shadow: inset 0.75px 0.75px 0 rgba(255, 255, 255, 0.12) !important;
+}
+
+.client-shell-body .ba-card__name,
+.client-shell-body .ba-card__price,
+.client-shell-body .ma-attorney-name,
+.client-shell-body .ma-fee,
+.client-shell-body .th-summary-card__value,
+.client-shell-body .th-summary-card__value--total,
+.client-shell-body .th-summary-card__value--consul,
+.client-shell-body .th-summary-card__value--notar,
+.client-shell-body .th-txn__desc,
+.client-shell-body .pp-form-card h2,
+.client-shell-body .pp-avatar-card h3,
+.client-shell-body .mnr-card__service,
+.client-shell-body .ann-card__title,
+.client-shell-body .nr-section-title {
+  color: #f2f7ff !important;
+}
+
+.client-shell-body .ba-card__specialty,
+.client-shell-body .ba-card__exp,
+.client-shell-body .ba-card__rating,
+.client-shell-body .ma-specialty,
+.client-shell-body .ma-status-message p,
+.client-shell-body .th-summary-card__label,
+.client-shell-body .th-summary-card__sub,
+.client-shell-body .th-txn__detail,
+.client-shell-body .pp-avatar-card p,
+.client-shell-body .pp-field label,
+.client-shell-body .mnr-card__message,
+.client-shell-body .ann-card__message,
+.client-shell-body .nr-service-desc {
+  color: #b9cbe3 !important;
+}
+
+.client-shell-body .ba-form-input,
+.client-shell-body .ba-booking-modal,
+.client-shell-body .ba-modal,
+.client-shell-body .ma-container,
+.client-shell-body .th-container,
+.client-shell-body .ann-container,
+.client-shell-body .pp-avatar-card,
+.client-shell-body .mnr-container,
+.client-shell-body .nr-section,
+.client-shell-body .nr-service-card {
+  background: rgba(14, 27, 45, 0.78) !important;
+  color: #e6f0ff !important;
+  border-color: rgba(184, 210, 246, 0.2) !important;
+}
+
+.client-shell-body .ba-form-input option {
+  color: #e6f0ff !important;
+  background: #12233a !important;
+}
+
+.client-shell-body .ba-modal {
+  border: 1px solid rgba(128, 176, 255, 0.34) !important;
+  box-shadow: 0 24px 60px rgba(2, 7, 15, 0.62) !important;
+}
+
+.client-shell-body .ba-modal__header {
+  background: linear-gradient(160deg, rgba(12, 24, 40, 0.98), rgba(14, 27, 45, 0.95)) !important;
+  border-bottom: 1px solid rgba(128, 176, 255, 0.26) !important;
+}
+
+.client-shell-body .ba-modal__header h2,
+.client-shell-body .ba-profile-name,
+.client-shell-body .ba-profile-section-title,
+.client-shell-body .ba-profile-fee-label,
+.client-shell-body .ba-profile-fee-amount {
+  color: #f2f7ff !important;
+}
+
+.client-shell-body .ba-modal__close {
+  color: #dbeafe !important;
+}
+
+.client-shell-body .ba-modal__close:hover {
+  color: #ffffff !important;
+}
+
+.client-shell-body .ba-modal__content {
+  padding: 26px 26px 24px !important;
+}
+
+.client-shell-body .ba-profile-header {
+  gap: 18px !important;
+  margin-bottom: 22px !important;
+  align-items: flex-start !important;
+}
+
+.client-shell-body .ba-profile-photo {
+  border: 2px solid rgba(128, 176, 255, 0.5) !important;
+  box-shadow: 0 10px 22px rgba(7, 15, 28, 0.45) !important;
+}
+
+.client-shell-body .ba-profile-specialty,
+.client-shell-body .ba-profile-exp,
+.client-shell-body .ba-profile-bio,
+.client-shell-body .ba-profile-details,
+.client-shell-body .ba-profile-fee-desc {
+  color: #b9cbe3 !important;
+}
+
+.client-shell-body .ba-profile-rating {
+  color: #ffd166 !important;
+}
+
+.client-shell-body .ba-profile-section {
+  margin-bottom: 20px !important;
+  padding: 16px 16px 14px !important;
+  border-radius: 12px !important;
+  background: rgba(13, 26, 43, 0.58) !important;
+  border: 1px solid rgba(128, 176, 255, 0.18) !important;
+}
+
+.client-shell-body .ba-profile-bio,
+.client-shell-body .ba-profile-details {
+  line-height: 1.65 !important;
+}
+
+.client-shell-body .ba-profile-fee {
+  background: linear-gradient(145deg, rgba(18, 36, 60, 0.88), rgba(13, 28, 48, 0.82)) !important;
+  border: 1px solid rgba(128, 176, 255, 0.22) !important;
+}
+
+.client-shell-body .ba-profile-actions {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 10px !important;
+}
+
+.client-shell-body .ba-profile-btn-secondary {
+  color: #d6e3f8 !important;
+  border-color: rgba(128, 176, 255, 0.34) !important;
+  background: rgba(20, 36, 60, 0.62) !important;
+}
+
+.client-shell-body .ba-profile-btn-secondary:hover {
+  background: rgba(30, 53, 84, 0.82) !important;
+}
+
+.client-shell-body .ba-booking-header {
+  background: linear-gradient(160deg, rgba(12, 24, 40, 0.98), rgba(14, 27, 45, 0.95)) !important;
+  border-bottom: 1px solid rgba(128, 176, 255, 0.26) !important;
+}
+
+.client-shell-body .ba-booking-header h2 {
+  color: #f2f7ff !important;
+}
+
+.client-shell-body .ba-booking-content {
+  background: transparent !important;
+}
+
+.client-shell-body .ba-booking-attorney-info {
+  background: linear-gradient(145deg, rgba(17, 33, 55, 0.88), rgba(13, 28, 47, 0.82)) !important;
+  border-left: 3px solid rgba(47, 111, 219, 0.82) !important;
+  border: 1px solid rgba(128, 176, 255, 0.22) !important;
+  box-shadow: inset 0.75px 0.75px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+.client-shell-body .ba-booking-info-item {
+  border-bottom: 1px solid rgba(128, 176, 255, 0.16) !important;
+}
+
+.client-shell-body .ba-booking-label {
+  color: #9eb6d6 !important;
+}
+
+.client-shell-body .ba-booking-value {
+  color: #e6f0ff !important;
+}
+
+.client-shell-body .ba-booking-price {
+  color: #ffd166 !important;
+}
+
+.client-shell-body .ba-form-label {
+  color: #dce8ff !important;
+}
+
+.client-shell-body .ba-form-input,
+.client-shell-body .ba-form-textarea {
+  border: 1px solid rgba(128, 176, 255, 0.34) !important;
+  background: rgba(10, 20, 33, 0.78) !important;
+  color: #e6f0ff !important;
+}
+
+.client-shell-body .ba-form-input:focus,
+.client-shell-body .ba-form-textarea:focus {
+  border-color: #5b95ee !important;
+  box-shadow: 0 0 0 3px rgba(47, 111, 219, 0.24) !important;
+  background: rgba(10, 20, 33, 0.86) !important;
+}
+
+.client-shell-body .ba-form-textarea::placeholder {
+  color: #8ea7c6 !important;
+}
+
+.client-shell-body .ba-file-upload-label {
+  border: 1.5px dashed rgba(128, 176, 255, 0.34) !important;
+  background: rgba(16, 31, 52, 0.76) !important;
+}
+
+.client-shell-body .ba-file-upload-label:hover {
+  border-color: rgba(128, 176, 255, 0.52) !important;
+  background: rgba(22, 42, 70, 0.86) !important;
+}
+
+.client-shell-body .ba-upload-text {
+  color: #c7d8ef !important;
+}
+
+.client-shell-body .ba-time-slot {
+  border: 1px solid rgba(128, 176, 255, 0.28) !important;
+  background: rgba(17, 33, 55, 0.74) !important;
+  color: #dce8ff !important;
+}
+
+.client-shell-body .ba-time-slot:hover {
+  border-color: rgba(128, 176, 255, 0.52) !important;
+  background: rgba(24, 46, 76, 0.9) !important;
+}
+
+.client-shell-body .ba-time-slot--selected {
+  background: linear-gradient(135deg, rgba(47, 111, 219, 0.88), rgba(31, 86, 204, 0.84)) !important;
+  border-color: rgba(96, 165, 250, 0.75) !important;
+  color: #ffffff !important;
+  box-shadow: 0 10px 24px rgba(15, 41, 84, 0.42) !important;
+}
+
+.client-shell-body .ba-payment-note {
+  background: linear-gradient(145deg, rgba(17, 33, 55, 0.78), rgba(13, 28, 47, 0.76)) !important;
+  border-left: 3px solid rgba(47, 111, 219, 0.8) !important;
+  border: 1px solid rgba(128, 176, 255, 0.2) !important;
+}
+
+.client-shell-body .ba-note-text {
+  color: #b9cbe3 !important;
+}
+
+.client-shell-body .ba-booking-btn--submit {
+  background: linear-gradient(135deg, #2f6fdb, #214ea8) !important;
+  box-shadow: 0 8px 20px rgba(15, 41, 84, 0.42) !important;
+}
+
+.client-shell-body .ba-booking-btn--cancel {
+  background: rgba(20, 36, 60, 0.8) !important;
+  color: #dce8ff !important;
+  border: 1px solid rgba(128, 176, 255, 0.34) !important;
+}
+
+.client-shell-body .ba-booking-btn--cancel:hover {
+  background: rgba(30, 53, 84, 0.84) !important;
+  border-color: rgba(128, 176, 255, 0.45) !important;
+}
+
+.client-shell-body .ma-filter-btn,
+.client-shell-body .ann-filter-btn,
+.client-shell-body .th-filter-btn,
+.client-shell-body .mnr-filter-btn {
+  background: rgba(20, 36, 60, 0.74) !important;
+  color: #d7e5fb !important;
+  border: 1px solid rgba(128, 176, 255, 0.3) !important;
+}
+
+.client-shell-body .ma-filter-btn--active,
+.client-shell-body .ann-filter-btn--active,
+.client-shell-body .th-filter-btn--active,
+.client-shell-body .mnr-filter-btn--active {
+  background: linear-gradient(135deg, rgba(47, 111, 219, 0.7), rgba(30, 78, 170, 0.7)) !important;
+  color: #ffffff !important;
+  border-color: rgba(96, 165, 250, 0.7) !important;
+}
+
+.client-shell-body .ma-filters,
+.client-shell-body .ann-filters,
+.client-shell-body .th-toolbar,
+.client-shell-body .mnr-filters {
+  background: transparent !important;
+}
+
+.client-shell-body .ma-status-message,
+.client-shell-body .th-list__header,
+.client-shell-body .th-txn__row,
+.client-shell-body .hp-queue-item,
+.client-shell-body .ann-empty,
+.client-shell-body .mnr-empty,
+.client-shell-body .ma-empty-state {
+  background: rgba(17, 32, 53, 0.7) !important;
+  color: #c7d8ef !important;
+  border-color: rgba(184, 210, 246, 0.14) !important;
+}
+
+.client-shell-body .ma-summary,
+.client-shell-body .ma-reschedule-note,
+.client-shell-body .ma-appointment-card--queue {
+  background: linear-gradient(145deg, rgba(14, 27, 45, 0.9), rgba(11, 29, 52, 0.82)) !important;
+  border: 1px solid rgba(148, 189, 240, 0.22) !important;
+  box-shadow: inset 0.75px 0.75px 0 rgba(255, 255, 255, 0.1) !important;
+}
+
+.client-shell-body .ma-summary__label {
+  color: rgba(221, 235, 255, 0.82) !important;
+}
+
+.client-shell-body .ma-summary__meta,
+.client-shell-body .ma-reschedule-note__text,
+.client-shell-body .ma-queue-card__area {
+  color: #b9cbe3 !important;
+}
+
+.client-shell-body .ma-summary__refresh {
+  background: linear-gradient(135deg, rgba(47, 111, 219, 0.34), rgba(30, 78, 170, 0.3)) !important;
+  color: #eaf3ff !important;
+  border: 1px solid rgba(128, 176, 255, 0.38) !important;
+}
+
+.client-shell-body .ma-summary__refresh:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(47, 111, 219, 0.44), rgba(30, 78, 170, 0.4)) !important;
+}
+
+.client-shell-body .ma-reschedule-note__title {
+  color: #d7e8ff !important;
+}
+
+.client-shell-body .ma-queue-section__header {
+  border-bottom: 1px solid rgba(148, 189, 240, 0.24) !important;
+}
+
+.client-shell-body .ma-queue-section__header::before {
+  background: linear-gradient(90deg, rgba(96, 165, 250, 0.95), rgba(45, 212, 191, 0.75), transparent) !important;
+}
+
+.client-shell-body .ma-queue-card__schedule,
+.client-shell-body .ma-queue-card__schedule svg {
+  color: #8ec5ff !important;
+}
+
+.client-shell-body .ma-btn--queue-secondary,
+.client-shell-body .ma-btn--queue-primary {
+  border-radius: 12px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.055em !important;
+}
+
+.client-shell-body .ma-btn--queue-secondary {
+  background: rgba(20, 36, 60, 0.78) !important;
+  color: #dce8ff !important;
+  border: 1px solid rgba(128, 176, 255, 0.34) !important;
+}
+
+.client-shell-body .ma-btn--queue-secondary:hover:not(:disabled) {
+  background: rgba(30, 53, 84, 0.84) !important;
+  border-color: rgba(128, 176, 255, 0.5) !important;
+  color: #f2f7ff !important;
+}
+
+.client-shell-body .ma-btn--queue-primary {
+  background: linear-gradient(135deg, #2f6fdb, #214ea8) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(96, 165, 250, 0.5) !important;
+  box-shadow: 0 8px 20px rgba(15, 41, 84, 0.4) !important;
+}
+
+.client-shell-body .ma-btn--queue-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #3b82f6, #2b63cb) !important;
+  border-color: rgba(147, 197, 253, 0.72) !important;
+}
+
+.client-shell-body .hp-queue-item:hover {
+  background: rgba(23, 41, 67, 0.82) !important;
+}
+
+.client-shell-body .hp-queue-item--today {
+  background: linear-gradient(90deg, rgba(34, 66, 112, 0.78) 0%, rgba(18, 36, 60, 0.9) 60%) !important;
+  border-left: 3px solid rgba(212, 175, 55, 0.9) !important;
+}
+
+.client-shell-body .hp-queue-item--today:hover {
+  background: linear-gradient(90deg, rgba(40, 74, 122, 0.82) 0%, rgba(21, 41, 69, 0.94) 60%) !important;
+}
+
+.client-shell-body .hp-welcome {
+  background:
+    radial-gradient(460px circle at 88% 10%, rgba(47, 123, 240, 0.2), transparent 54%),
+    radial-gradient(420px circle at 76% 108%, rgba(26, 159, 146, 0.16), transparent 58%),
+    linear-gradient(135deg, rgba(20, 42, 73, 0.94), rgba(24, 55, 98, 0.9)) !important;
+  border: 1px solid rgba(128, 176, 255, 0.24) !important;
+  box-shadow: inset 0.75px 0.75px 0 rgba(255, 255, 255, 0.1) !important;
+}
+
+.client-shell-body .hp-welcome::before {
+  background: rgba(59, 130, 246, 0.1) !important;
+}
+
+.client-shell-body .hp-welcome::after {
+  background: rgba(20, 184, 166, 0.1) !important;
+}
+
+.client-shell-body .hp-action-card {
+  background: linear-gradient(145deg, rgba(14, 27, 45, 0.86), rgba(12, 31, 54, 0.72)) !important;
+  border: 1px solid rgba(184, 210, 246, 0.18) !important;
+  box-shadow: inset 0.75px 0.75px 0 rgba(255, 255, 255, 0.12) !important;
+}
+
+.client-shell-body .hp-action-card__icon {
+  background: linear-gradient(135deg, rgba(47, 111, 219, 0.22), rgba(26, 159, 146, 0.22)) !important;
+  border: 1px solid rgba(128, 176, 255, 0.28) !important;
+}
+
+.client-shell-body .hp-action-card__icon svg {
+  stroke: #8ec5ff !important;
+}
+
+.client-shell-body .hp-queue-card {
+  border-left: 3px solid rgba(47, 111, 219, 0.8) !important;
+}
+
+.client-shell-body .hp-view-all {
+  color: #8ec5ff !important;
+}
+
+.client-shell-body .hp-view-all:hover {
+  color: #b7dbff !important;
+}
+
+.client-shell-body .hp-queue-number,
+.client-shell-body .hp-queue-item__date-block {
+  background: rgba(19, 33, 54, 0.9) !important;
+  color: #dbe8fd !important;
+}
+
+.client-shell-body .hp-queue-month,
+.client-shell-body .hp-queue-day,
+.client-shell-body .hp-queue-item__name,
+.client-shell-body .hp-queue-item__area,
+.client-shell-body .hp-queue-item__time,
+.client-shell-body .hp-queue-item__status-text,
+.client-shell-body .hp-queue-item__status-text--past {
+  color: #d6e3f8 !important;
+}
+
+.client-shell-body .hp-badge--approved {
+  background: rgba(47, 111, 219, 0.28) !important;
+  color: #dbeafe !important;
+  border: 1px solid rgba(96, 165, 250, 0.5) !important;
+}
+
+.client-shell-body .hp-badge--pending {
+  background: rgba(245, 166, 35, 0.22) !important;
+  color: #ffe3a8 !important;
+  border: 1px solid rgba(245, 166, 35, 0.42) !important;
+}
+
+.client-shell-body .hp-badge--paid {
+  background: rgba(16, 185, 129, 0.2) !important;
+  color: #b9f8df !important;
+  border: 1px solid rgba(52, 211, 153, 0.42) !important;
+}
+
+.client-shell-body .hp-badge--unpaid {
+  background: rgba(239, 68, 68, 0.22) !important;
+  color: #fecaca !important;
+  border: 1px solid rgba(248, 113, 113, 0.45) !important;
+}
+
+.client-shell-body .th-list__col,
+.client-shell-body .th-txn__date,
+.client-shell-body .th-txn__time,
+.client-shell-body .th-txn__method-name,
+.client-shell-body .th-txn__amount,
+.client-shell-body .ann-filter-count,
+.client-shell-body .ma-filter-btn,
+.client-shell-body .mnr-filter-count {
+  color: #d6e3f8 !important;
+}
+
+.client-shell-body .th-search input,
+.client-shell-body .pp-input-wrap,
+.client-shell-body .pp-input-wrap input,
+.client-shell-body .nr-date-input,
+.client-shell-body .nr-notes-textarea,
+.client-shell-body .mnr-search input {
+  background: rgba(10, 20, 33, 0.78) !important;
+  color: #e6f0ff !important;
+  border-color: rgba(128, 176, 255, 0.3) !important;
+}
+
+.client-shell-body .th-search {
+  background: rgba(10, 20, 33, 0.78) !important;
+  border-color: rgba(128, 176, 255, 0.3) !important;
+}
+
+.client-shell-body .th-search input::placeholder,
+.client-shell-body .pp-input-wrap input::placeholder,
+.client-shell-body .nr-notes-textarea::placeholder,
+.client-shell-body .mnr-search input::placeholder {
+  color: #8ea7c6 !important;
+}
+
+.client-shell-body .ba-btn--ghost,
+.client-shell-body .ba-btn--dark,
+.client-shell-body .ma-btn--tertiary,
+.client-shell-body .ma-btn--secondary,
+.client-shell-body .mnr-new-request-btn,
+.client-shell-body .ann-mark-all-btn,
+.client-shell-body .nr-btn--cancel {
+  background: rgba(20, 36, 60, 0.8) !important;
+  color: #dce8ff !important;
+  border-color: rgba(128, 176, 255, 0.34) !important;
+}
+
+.client-shell-body .pp-tab-side,
+.client-shell-body .pp-tab-side--active,
+.client-shell-body .pp-tab-side--signout {
+  border-color: rgba(128, 176, 255, 0.25) !important;
+}
+
+.client-shell-body .pp-tab-side {
+  background: rgba(20, 36, 60, 0.6) !important;
+  color: #cfe0fb !important;
+}
+
+.client-shell-body .pp-tab-side--active {
+  background: linear-gradient(135deg, rgba(47, 111, 219, 0.76), rgba(30, 78, 170, 0.74)) !important;
+  color: #fff !important;
+}
+
+.client-shell-body .pp-form-actions .pp-saved,
+.client-shell-body .ma-confirm-title,
+.client-shell-body .nr-confirmation-title,
+.client-shell-body .nr-error-title {
+  color: #f2f7ff !important;
+}
+
+@media (max-width: 1100px) {
+  .client-shell-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    height: auto;
+    margin: 0;
+    border-radius: 0 18px 18px 0;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+  }
+
+  .client-shell-sidebar.open {
+    transform: translateX(0);
+  }
+
+  .client-shell-main {
+    margin: 0;
+    height: 100dvh;
+    border-radius: 0;
+    border: 0;
+  }
+
+  .client-shell-backdrop {
+    position: fixed;
+    inset: 0;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    background: rgba(4, 8, 14, 0.38);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    z-index: 1;
+    display: block;
+  }
+
+  .client-shell-backdrop.show {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .client-shell-title-wrap h1 {
+    font-size: 1.65rem;
+  }
+
+  .client-shell-profile-chip span:first-child {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .client-shell-body .ba-profile-actions {
+    grid-template-columns: 1fr !important;
+  }
+}

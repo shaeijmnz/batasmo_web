@@ -1,0 +1,297 @@
+/* Attorney Analytics Page */
+
+.aa-page {
+  min-height: 100vh;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+}
+
+.aa-sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 150;
+}
+
+.aa-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  width: 240px;
+  background: #1c1f2e;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(-100%);
+  transition: transform 0.25s ease;
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.3);
+}
+
+.aa-sidebar--open {
+  transform: translateX(0);
+}
+
+.aa-sidebar__logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 22px 20px 20px;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #fff;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 10px;
+}
+
+.aa-sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+}
+
+.aa-sidebar__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-radius: 10px;
+  border: none;
+  background: none;
+  color: #9ca3af;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: background 0.2s, color 0.2s;
+}
+
+.aa-sidebar__item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+}
+
+.aa-sidebar__item-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.aa-topbar {
+  background: #1c1f2e;
+  height: 62px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.aa-topbar__left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.aa-topbar__right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.aa-menu-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  transition: background 0.2s;
+}
+
+.aa-menu-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.aa-notif-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  transition: background 0.2s;
+}
+
+.aa-notif-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.aa-topbar__logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.aa-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.aa-profile__name {
+  color: #e5e7eb;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.aa-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #357ad9, #1d5bc0);
+  color: #fff;
+  font-size: 0.76rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.aa-main {
+  flex: 1;
+  padding: 28px 36px;
+  max-width: 1100px;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+.aa-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(240px, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.aa-summary-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 18px;
+}
+
+.aa-summary-card__label {
+  margin: 0 0 8px;
+  font-size: 0.72rem;
+  letter-spacing: 1px;
+  color: #6b7280;
+  font-weight: 700;
+}
+
+.aa-summary-card__value {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #111827;
+}
+
+.aa-summary-card__value--type {
+  font-size: 1.1rem;
+  line-height: 1.3;
+}
+
+.aa-chart-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 18px;
+}
+
+.aa-chart-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.aa-chart-card__header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #111827;
+}
+
+.aa-chart-card__header span {
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.aa-bar-chart {
+  display: grid;
+  gap: 12px;
+}
+
+.aa-bar-row__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 5px;
+  gap: 10px;
+}
+
+.aa-bar-row__label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.aa-bar-row__count {
+  font-size: 0.86rem;
+  color: #4b5563;
+  font-weight: 700;
+}
+
+.aa-bar-track {
+  height: 10px;
+  border-radius: 999px;
+  background: #edf2f7;
+  overflow: hidden;
+}
+
+.aa-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #1d4ed8, #10b981);
+}
+
+.aa-empty {
+  margin: 0;
+  color: #6b7280;
+}
+
+@media (max-width: 900px) {
+  .aa-main {
+    padding: 18px 14px;
+  }
+
+  .aa-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .aa-profile__name {
+    display: none;
+  }
+}
