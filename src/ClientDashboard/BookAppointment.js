@@ -4,8 +4,10 @@ import {
   createAppointmentBooking,
   fetchClientAttorneyActiveBookingCount,
   fetchBookableAttorneys,
+  getAppointmentPaymentStatus,
   getAvailability,
   invalidateAvailabilityCache,
+  payForAppointment,
   subscribeToAvailabilitySlots,
 } from '../lib/userApi';
 
@@ -379,7 +381,7 @@ function BookAppointment({ onNavigate, profile }) {
         }
       }
 
-      await createAppointmentBooking({
+      const bookingResult = await createAppointmentBooking({
         clientId: profile.id,
         attorneyId: bookingAttorney.id,
         title: `Consultation - ${bookingAttorney.specialty || 'General'}`,
@@ -398,6 +400,45 @@ function BookAppointment({ onNavigate, profile }) {
           duration_minutes: 60,
         },
       });
+
+      const appointmentId = bookingResult?.appointmentId || null;
+      if (!appointmentId) {
+        throw new Error('Appointment was created but payment session could not start. Please try again.');
+      }
+
+      const session = await payForAppointment({
+        appointmentId,
+        clientId: profile.id,
+        attorneyId: bookingAttorney.id,
+        amount: bookingAttorney.amount || 2000,
+        method: paymentMethod,
+      });
+
+      if (session?.checkoutUrl) {
+        window.open(session.checkoutUrl, '_blank', 'noopener,noreferrer');
+      }
+
+      const startedAt = Date.now();
+      const timeoutMs = 5 * 60 * 1000;
+      let paid = false;
+
+      while (Date.now() - startedAt < timeoutMs) {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        const statusResult = await getAppointmentPaymentStatus(session.transactionId);
+        const status = String(statusResult?.status || 'pending').toLowerCase();
+
+        if (status === 'paid') {
+          paid = true;
+          break;
+        }
+        if (status === 'failed') {
+          throw new Error('Payment failed. Please try again.');
+        }
+      }
+
+      if (!paid) {
+        throw new Error('Payment is still pending. Complete checkout, then try again in a few seconds.');
+      }
 
       const parsedDate = new Date(`${selectedDate}T00:00:00`);
       setConfirmedSlot({
