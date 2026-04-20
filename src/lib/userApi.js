@@ -1410,14 +1410,9 @@ export function isReactAppBypassChatWindowEnabled() {
     if (v === 'true' || v === '1' || v === 'yes') return true
     return false
   }
-  if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined') {
-    try {
-      return window.localStorage?.getItem('batasmo_bypass_chat_window') === '1'
-    } catch {
-      return false
-    }
-  }
-  return false
+  // Testing default: if env is not configured, keep consultation chat window open.
+  // Set REACT_APP_BYPASS_CHAT_WINDOW=false in Vercel to restore strict schedule gating.
+  return true
 }
 
 export const isConsultationChatWindowOpen = ({
