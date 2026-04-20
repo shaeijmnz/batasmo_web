@@ -13,10 +13,12 @@ import {
   isValidPhoneNumber,
   isStrongPassword,
   sanitizePhoneInput,
-  VALID_EMAIL_MESSAGE,
-  VALID_PHONE_MESSAGE,
   VALID_PASSWORD_MESSAGE,
 } from '../lib/validators';
+
+const GMAIL_REQUIRED_MESSAGE = 'Please enter a valid Gmail address ending with @gmail.com.';
+const PH_MOBILE_REQUIRED_MESSAGE = 'Please enter a valid 11-digit Philippine mobile number (example: 09XXXXXXXXX).';
+const NUMBERS_ONLY_MESSAGE = 'Contact number must contain numbers only.';
 
 const PersonIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -86,6 +88,10 @@ function SignUp({ onNavigate, onEmailChange }) {
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [hasInvalidPhoneInput, setHasInvalidPhoneInput] = useState({
+    contact: false,
+    guardianContact: false,
+  });
 
   const validateForm = (values) => {
     const nextErrors = {};
@@ -94,18 +100,21 @@ function SignUp({ onNavigate, onEmailChange }) {
       nextErrors.fullName = 'Full name is required.';
     }
 
-    if (!values.email.trim()) {
+    const normalizedEmail = String(values.email || '').trim().toLowerCase();
+    if (!normalizedEmail) {
       nextErrors.email = 'Email is required.';
-    } else if (!isValidEmail(values.email)) {
-      nextErrors.email = VALID_EMAIL_MESSAGE;
+    } else if (!isValidEmail(normalizedEmail) || !normalizedEmail.endsWith('@gmail.com')) {
+      nextErrors.email = GMAIL_REQUIRED_MESSAGE;
     }
 
     if (values.sex !== 'male' && values.sex !== 'female' && values.sex !== 'others') {
       nextErrors.sex = 'Please select your gender.';
     }
 
-    if (!isValidPhoneNumber(values.contact)) {
-      nextErrors.contact = VALID_PHONE_MESSAGE;
+    if (hasInvalidPhoneInput.contact) {
+      nextErrors.contact = NUMBERS_ONLY_MESSAGE;
+    } else if (!isValidPhoneNumber(values.contact) || !/^09\d{9}$/.test(String(values.contact || ''))) {
+      nextErrors.contact = PH_MOBILE_REQUIRED_MESSAGE;
     }
 
     if (!values.password) {
@@ -133,13 +142,18 @@ function SignUp({ onNavigate, onEmailChange }) {
       if (!values.guardianName.trim()) {
         nextErrors.guardianName = 'Guardian name is required for minors.';
       }
-      if (!isValidPhoneNumber(values.guardianContact)) {
-        nextErrors.guardianContact = 'Please enter a valid guardian contact number.';
+      if (hasInvalidPhoneInput.guardianContact) {
+        nextErrors.guardianContact = NUMBERS_ONLY_MESSAGE;
+      } else if (
+        !isValidPhoneNumber(values.guardianContact) ||
+        !/^09\d{9}$/.test(String(values.guardianContact || ''))
+      ) {
+        nextErrors.guardianContact = 'Please enter a valid 11-digit guardian mobile number (09XXXXXXXXX).';
       }
     }
 
     if (otpDelivery === 'sms' && !isValidPhoneNumber(values.contact)) {
-      nextErrors.contact = 'SMS verification requires a valid 11-digit mobile number.';
+      nextErrors.contact = PH_MOBILE_REQUIRED_MESSAGE;
     }
 
     if (!agreedToTerms) {
@@ -152,8 +166,13 @@ function SignUp({ onNavigate, onEmailChange }) {
   const handleChange = (e) => {
     const { name, value } = e.target;
     if (name === 'contact' || name === 'guardianContact') {
+      const hasNonDigitCharacters = /[^0-9]/.test(String(value || ''));
       setForm({ ...form, [name]: sanitizePhoneInput(value) });
-      setErrors((prev) => ({ ...prev, [name]: '' }));
+      setHasInvalidPhoneInput((prev) => ({ ...prev, [name]: hasNonDigitCharacters }));
+      setErrors((prev) => ({
+        ...prev,
+        [name]: hasNonDigitCharacters ? NUMBERS_ONLY_MESSAGE : '',
+      }));
       return;
     }
     setForm({ ...form, [name]: value });
