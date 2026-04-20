@@ -1464,14 +1464,6 @@ export async function fetchClientAppointmentsData(userId) {
   )
 
   return (appointmentsRes.data || [])
-    .filter((item) =>
-      isUpcomingAppointmentSchedule({
-        scheduledAt: item.scheduled_at,
-        slotDate: item.slot_date,
-        slotTime: item.slot_time,
-        nowMs,
-      }),
-    )
     .map((item) => {
     const datetime = formatDateTime(item.scheduled_at)
     const parsedSchedule = new Date(item.scheduled_at)
@@ -1524,6 +1516,16 @@ export async function fetchClientAppointmentsData(userId) {
               ? 'This request was declined or cancelled.'
               : 'Your request is still under review.'),
     }
+    })
+    .filter((item) => {
+      const isUpcoming = isUpcomingAppointmentSchedule({
+        scheduledAt: item.scheduledAt,
+        nowMs,
+      })
+      // Keep currently chat-eligible/ongoing consultations visible even after exact schedule time.
+      // This prevents "disappearing at refresh" when the appointment just started.
+      if (isUpcoming) return true
+      return Boolean(item.chatAccessible)
     })
 }
 
@@ -3529,14 +3531,22 @@ export async function fetchAttorneyUpcomingAppointments(userId, options = {}) {
 
   const filtered = forAttorney.filter((item) => {
     const status = String(item.status || '').toLowerCase()
+    const isOpenStatus =
+      status === 'pending' ||
+      status === 'confirmed' ||
+      status === 'rescheduled' ||
+      status === 'started' ||
+      status === 'in_progress' ||
+      status === 'in-progress' ||
+      status === 'active'
     return (
-      isUpcomingAppointmentSchedule({
+      (isUpcomingAppointmentSchedule({
         scheduledAt: item.scheduled_value,
         slotDate: item.slot_date,
         slotTime: item.slot_time,
         nowMs,
-      }) &&
-      (status === 'pending' || status === 'confirmed' || status === 'rescheduled')
+      }) || isConsultationChatActiveStatus(status)) &&
+      isOpenStatus
     )
   })
 
