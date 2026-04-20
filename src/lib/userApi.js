@@ -2514,6 +2514,7 @@ export async function createAppointmentBooking({
   const activeBookingCount = await fetchClientAttorneyActiveBookingCount({
     clientId: resolvedClientId,
     attorneyId: normalizedPayload.attorney_id,
+    scheduledAt: scheduledIso,
   })
 
   if (activeBookingCount >= 2) {
@@ -2771,8 +2772,8 @@ export async function createAppointmentBooking({
   return { success: true, appointmentId, payload: normalizedPayload }
 }
 
-export async function fetchClientAttorneyActiveBookingCount({ clientId, attorneyId }) {
-  if (!clientId || !attorneyId) return 0
+export async function fetchClientAttorneyActiveBookingCount({ clientId, attorneyId, scheduledAt }) {
+  if (!clientId || !attorneyId || !scheduledAt) return 0
 
   const ACTIVE_LIMIT_STATUSES = new Set([
     'pending',
@@ -2785,15 +2786,31 @@ export async function fetchClientAttorneyActiveBookingCount({ clientId, attorney
     'approved',
   ])
 
+  const targetDate = new Date(scheduledAt)
+  if (Number.isNaN(targetDate.getTime())) return 0
+
+  const toDateKey = (value) => {
+    const parsed = new Date(value)
+    if (Number.isNaN(parsed.getTime())) return null
+    return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`
+  }
+
+  const targetDateKey = toDateKey(scheduledAt)
+  if (!targetDateKey) return 0
+
   const { data, error } = await supabase
     .from('appointments')
-    .select('id, status')
+    .select('id, status, scheduled_at')
     .eq('client_id', clientId)
     .eq('attorney_id', attorneyId)
 
   if (error) throw error
 
-  return (data || []).filter((item) => ACTIVE_LIMIT_STATUSES.has(String(item?.status || '').toLowerCase())).length
+  return (data || []).filter((item) => {
+    const normalizedStatus = String(item?.status || '').toLowerCase()
+    if (!ACTIVE_LIMIT_STATUSES.has(normalizedStatus)) return false
+    return toDateKey(item?.scheduled_at) === targetDateKey
+  }).length
 }
 
 async function getOrCreateConsultationRoom(appointmentId) {
