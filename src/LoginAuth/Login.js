@@ -4,6 +4,9 @@ import { OTP_RESUME_LOGIN_KEY, PENDING_OTP_CHANNEL_KEY, signInWithEmail } from '
 import { normalizeRole, pageFromRole } from '../lib/userApi';
 import { isValidEmail, VALID_EMAIL_MESSAGE } from '../lib/validators';
 
+const ADMIN_FALLBACK_EMAIL = String(process.env.REACT_APP_ADMIN_LOGIN_EMAIL || 'admin@batasmo.local').trim().toLowerCase();
+const ADMIN_FALLBACK_PASSWORD = String(process.env.REACT_APP_ADMIN_LOGIN_PASSWORD || 'Admin@12345').trim();
+
 const MailIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
@@ -66,6 +69,27 @@ function Login({ onNavigate, onAuthSuccess }) {
 
     if (!isValidEmail(form.email)) {
       setErrorText(VALID_EMAIL_MESSAGE);
+      return;
+    }
+
+    const normalizedEmail = form.email.trim().toLowerCase();
+    if (normalizedEmail === ADMIN_FALLBACK_EMAIL && form.password === ADMIN_FALLBACK_PASSWORD) {
+      const adminProfile = {
+        id: 'local-admin-fallback',
+        full_name: 'BatasMo Admin',
+        email: normalizedEmail,
+        phone: '',
+        address: '',
+        role: 'Admin',
+        age: null,
+        guardian_name: '',
+        guardian_contact: '',
+        guardian_details: '',
+        updated_at: new Date().toISOString(),
+      };
+
+      if (onAuthSuccess) onAuthSuccess(adminProfile);
+      onNavigate(pageFromRole('Admin'));
       return;
     }
 
