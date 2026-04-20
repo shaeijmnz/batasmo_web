@@ -16,6 +16,7 @@ import {
   subscribeToAppointmentMessages,
   subscribeToConsultationRoomStatus,
   getOrCreateVideoMeeting,
+  getVideoSdkToken,
   clearVideoMeetingId,
 } from '../lib/userApi';
 import VideoCallModal from '../components/VideoCallModal';
@@ -233,6 +234,17 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
         setMessages((response.messages || []).map(mapMessage));
         setIsClosed(Boolean(response.isClosed));
 
+        if (response.videoMeetingId && response.roomId && !videoCallRef.current) {
+          try {
+            await openIncomingByMeetingId({
+              meetingId: response.videoMeetingId,
+              roomId: response.roomId,
+            });
+          } catch {
+            // Keep chat usable; user can still join from fallback button.
+          }
+        }
+
         if (response.isClosed) {
           await syncClosedSessionFeedbackState(activeAppointmentId);
           if (!isMounted) return;
@@ -250,7 +262,7 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
     return () => {
       isMounted = false;
     };
-  }, [activeAppointmentId]);
+  }, [activeAppointmentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!activeAppointmentId || !isClosed) return;
@@ -269,8 +281,11 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
       // Auto-open video call when attorney starts one (video_meeting_id just appeared)
       if (videoMeetingId && !videoCallRef.current) {
         try {
-          const { meetingId, roomId, token } = await getOrCreateVideoMeeting(activeAppointmentId);
-          await tryOpenIncomingCall({ meetingId, roomId, token });
+          const response = await fetchAppointmentMessages(activeAppointmentId);
+          await openIncomingByMeetingId({
+            meetingId: videoMeetingId,
+            roomId: response.roomId,
+          });
         } catch (error) {
           setVideoCallError(
             error?.message || 'Incoming call is ready. Tap "Join Incoming Call" to connect.',
@@ -622,6 +637,12 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
     openVideoCall(callData);
   };
 
+  const openIncomingByMeetingId = async ({ meetingId, roomId }) => {
+    if (!meetingId || !roomId) return;
+    const token = await getVideoSdkToken();
+    await tryOpenIncomingCall({ meetingId, roomId, token });
+  };
+
   const handleStartVideoCall = async () => {
     if (!activeAppointmentId || videoCallLoading) return;
     setVideoCallLoading(true);
@@ -659,6 +680,11 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
       setVideoCallLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!activeAppointmentId || isClosed || videoCall) return;
+    warmupMediaPermissions();
+  }, [activeAppointmentId, isClosed, videoCall]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="cr-page">

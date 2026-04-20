@@ -2894,6 +2894,7 @@ export async function fetchAppointmentMessages(appointmentId) {
       `
       id,
       is_closed,
+      video_meeting_id,
       messages (
         id,
         sender_id,
@@ -2914,7 +2915,7 @@ export async function fetchAppointmentMessages(appointmentId) {
 
   if (error || !data) {
     await getOrCreateConsultationRoom(appointmentId)
-    return { messages: [], isClosed: false }
+    return { messages: [], isClosed: false, videoMeetingId: null }
   }
 
   const sorted = (data.messages || [])
@@ -2923,7 +2924,12 @@ export async function fetchAppointmentMessages(appointmentId) {
 
   const mapped = sorted.map((row) => mapRoomMessage(row, data.id, Boolean(data.is_closed), user.id))
 
-  return { messages: mapped, isClosed: Boolean(data.is_closed), roomId: data.id }
+  return {
+    messages: mapped,
+    isClosed: Boolean(data.is_closed),
+    roomId: data.id,
+    videoMeetingId: data.video_meeting_id || null,
+  }
 }
 
 export async function sendAppointmentMessage(appointmentId, messageText) {
