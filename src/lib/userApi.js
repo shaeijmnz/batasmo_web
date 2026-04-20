@@ -1867,53 +1867,56 @@ export async function fetchClientConsultationLogs(userId) {
 
 export async function payForAppointment({ appointmentId, clientId, attorneyId, amount, method }) {
   const paymentMethod = normalizeDigitalPaymentMethod(method)
-  const now = new Date().toISOString()
-  const { error: txError } = await supabase.from('transactions').insert({
-    appointment_id: appointmentId,
-    client_id: clientId,
-    attorney_id: attorneyId,
-    amount: Number(amount || 0),
-    payment_status: 'paid',
-    payment_method: paymentMethod,
-    created_at: now,
-    updated_at: now,
+  if (!PAYMENT_BACKEND_URL) {
+    throw new Error('Payment backend URL is not configured.')
+  }
+
+  const response = await fetch(`${PAYMENT_BACKEND_URL}/payments/appointments/create-session`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      appointmentId,
+      clientId,
+      attorneyId,
+      amount: Number(amount || 0),
+      method: paymentMethod.toLowerCase(),
+    }),
   })
 
-  if (txError) throw txError
+  const payload = await response.json().catch(() => null)
+  if (!response.ok) {
+    throw new Error(payload?.error || `Unable to initialize payment (${response.status})`)
+  }
 
-  const { error: appointmentError } = await supabase
-    .from('appointments')
-    .update({ status: 'confirmed', updated_at: now })
-    .eq('id', appointmentId)
+  if (!payload?.checkoutUrl || !payload?.transactionId) {
+    throw new Error('Payment provider returned an invalid session payload.')
+  }
 
-  if (appointmentError) throw appointmentError
+  return {
+    transactionId: payload.transactionId,
+    checkoutUrl: payload.checkoutUrl,
+    status: payload.status || 'pending',
+    checkoutSessionId: payload.checkoutSessionId || null,
+  }
+}
 
-  try {
-    const { data: appointmentMeta } = await supabase
-      .from('appointments')
-      .select('title, scheduled_at')
-      .eq('id', appointmentId)
-      .maybeSingle()
+export async function getAppointmentPaymentStatus(transactionId) {
+  if (!transactionId) throw new Error('transactionId is required')
+  if (!PAYMENT_BACKEND_URL) throw new Error('Payment backend URL is not configured.')
 
-    const scheduled = normalizeDateTimeForUi(appointmentMeta?.scheduled_at)
-    const amountValue = Number(amount || 0)
-
-    const { error: clientNotificationError } = await supabase
-      .from('notifications')
-      .insert({
-        user_id: clientId,
-        title: 'Payment Confirmed',
-        body: `Your payment${amountValue > 0 ? ` of PHP ${amountValue.toLocaleString()}` : ''} for ${appointmentMeta?.title || 'your consultation'} has been received${scheduled.date !== 'TBD' ? ` (${scheduled.date} at ${scheduled.time})` : ''}.`,
-        type: 'payment',
-        is_read: false,
-        created_at: now,
-      })
-
-    if (clientNotificationError) {
-      console.warn('[payment] failed to create client payment notification', clientNotificationError)
-    }
-  } catch (clientNotificationFailure) {
-    console.warn('[payment] client payment notification step failed', clientNotificationFailure)
+  const response = await fetch(
+    `${PAYMENT_BACKEND_URL}/payments/appointments/status/${encodeURIComponent(transactionId)}`,
+    { method: 'GET' },
+  )
+  const payload = await response.json().catch(() => null)
+  if (!response.ok) {
+    throw new Error(payload?.error || `Unable to check payment status (${response.status})`)
+  }
+  return {
+    transactionId: payload?.transactionId || transactionId,
+    appointmentId: payload?.appointmentId || null,
+    status: String(payload?.status || 'pending').toLowerCase(),
+    referenceNo: payload?.referenceNo || null,
   }
 }
 
@@ -4016,7 +4019,8 @@ export async function fetchAttorneyAnnouncementsData(userId) {
 
 // ─── VideoSDK helpers ────────────────────────────────────────────────────────
 
-const VIDEOSDK_BACKEND_URL = process.env.REACT_APP_CHATBOT_API_URL || 'http://localhost:4000'
+const PAYMENT_BACKEND_URL = process.env.REACT_APP_PAYMENT_API_URL || process.env.REACT_APP_CHATBOT_API_URL || 'http://localhost:4000'
+const VIDEOSDK_BACKEND_URL = PAYMENT_BACKEND_URL
 
 let cachedVideoSdkToken = null
 

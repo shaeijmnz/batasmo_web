@@ -10,6 +10,11 @@ const app = express()
 const PORT = process.env.PORT || 4000
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || 'http://localhost:3000'
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY
+const SUPABASE_URL = String(process.env.SUPABASE_URL || '').trim()
+const SUPABASE_SERVICE_ROLE_KEY = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
+const PAYMONGO_SECRET_KEY = String(process.env.PAYMONGO_SECRET_KEY || '').trim()
+const PAYMENT_SUCCESS_URL = String(process.env.PAYMENT_SUCCESS_URL || `${ALLOWED_ORIGIN}/transaction-history`).trim()
+const PAYMENT_CANCEL_URL = String(process.env.PAYMENT_CANCEL_URL || `${ALLOWED_ORIGIN}/my-appointments`).trim()
 const GEMINI_MODEL_CANDIDATES = [
   'gemini-2.5-flash',
   'gemini-2.5-pro',
@@ -477,6 +482,219 @@ app.use(
 app.use(express.json({ limit: '10mb' }))
 
 // ============================================================================
+// PAYMENT HELPERS (PAYMONGO + SUPABASE)
+// ============================================================================
+
+const isPaymentMethodSupported = (method) => {
+  const normalized = String(method || '').trim().toLowerCase()
+  return normalized === 'gcash' || normalized === 'paymaya'
+}
+
+const normalizePaymentMethod = (method) => String(method || '').trim().toLowerCase()
+
+const requirePaymentConfig = () => {
+  if (!PAYMONGO_SECRET_KEY) {
+    throw new Error('PAYMONGO_SECRET_KEY is not configured.')
+  }
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error('SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY are not configured.')
+  }
+}
+
+const supabaseRestHeaders = () => ({
+  apikey: SUPABASE_SERVICE_ROLE_KEY,
+  Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+  'Content-Type': 'application/json',
+  Prefer: 'return=representation',
+})
+
+const paymongoAuthHeader = () =>
+  `Basic ${Buffer.from(`${PAYMONGO_SECRET_KEY}:`).toString('base64')}`
+
+const mapPaymongoToInternalStatus = (attributes = {}) => {
+  const checkoutStatus = String(attributes?.payment_intent?.attributes?.status || '').toLowerCase()
+  if (checkoutStatus === 'succeeded') return 'paid'
+  if (checkoutStatus === 'awaiting_next_action' || checkoutStatus === 'awaiting_payment_method') return 'pending'
+  if (checkoutStatus === 'processing') return 'pending'
+  if (checkoutStatus === 'canceled' || checkoutStatus === 'cancelled') return 'failed'
+
+  const firstPaymentStatus = String(attributes?.payments?.[0]?.attributes?.status || '').toLowerCase()
+  if (firstPaymentStatus === 'paid' || firstPaymentStatus === 'succeeded') return 'paid'
+  if (firstPaymentStatus === 'failed') return 'failed'
+  if (firstPaymentStatus === 'pending') return 'pending'
+
+  return 'pending'
+}
+
+const supabaseSelectSingle = async ({ table, query }) => {
+  const endpoint = `${SUPABASE_URL}/rest/v1/${table}?${query}&select=*`
+  const response = await fetch(endpoint, {
+    method: 'GET',
+    headers: supabaseRestHeaders(),
+  })
+  const payload = await response.json().catch(() => [])
+  if (!response.ok) {
+    throw new Error(payload?.message || payload?.error || `Supabase select failed (${response.status})`)
+  }
+  return Array.isArray(payload) ? payload[0] || null : null
+}
+
+const supabaseInsertTransaction = async ({
+  appointmentId,
+  clientId,
+  attorneyId,
+  amount,
+  paymentMethod,
+  referenceNo,
+}) => {
+  const endpoint = `${SUPABASE_URL}/rest/v1/transactions`
+  const body = {
+    appointment_id: appointmentId,
+    client_id: clientId,
+    attorney_id: attorneyId,
+    amount: Number(amount || 0),
+    currency: 'PHP',
+    payment_status: 'pending',
+    payment_method: paymentMethod,
+    reference_no: referenceNo,
+    provider_reference: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: supabaseRestHeaders(),
+    body: JSON.stringify(body),
+  })
+  const payload = await response.json().catch(() => null)
+  if (!response.ok || !Array.isArray(payload) || !payload[0]?.id) {
+    throw new Error(payload?.message || payload?.error || `Failed to create pending transaction (${response.status})`)
+  }
+  return payload[0]
+}
+
+const supabaseUpdateTransactionStatus = async ({ transactionId, paymentStatus, providerReference }) => {
+  const query = new URLSearchParams({ id: `eq.${transactionId}` }).toString()
+  const endpoint = `${SUPABASE_URL}/rest/v1/transactions?${query}`
+  const body = {
+    payment_status: paymentStatus,
+    updated_at: new Date().toISOString(),
+  }
+  if (providerReference) {
+    body.provider_reference = providerReference
+  }
+
+  const response = await fetch(endpoint, {
+    method: 'PATCH',
+    headers: supabaseRestHeaders(),
+    body: JSON.stringify(body),
+  })
+  const payload = await response.json().catch(() => null)
+  if (!response.ok) {
+    throw new Error(payload?.message || payload?.error || `Failed to update transaction (${response.status})`)
+  }
+  return Array.isArray(payload) ? payload[0] || null : null
+}
+
+const supabaseConfirmAppointment = async ({ appointmentId }) => {
+  const query = new URLSearchParams({ id: `eq.${appointmentId}` }).toString()
+  const endpoint = `${SUPABASE_URL}/rest/v1/appointments?${query}`
+  const response = await fetch(endpoint, {
+    method: 'PATCH',
+    headers: supabaseRestHeaders(),
+    body: JSON.stringify({
+      status: 'confirmed',
+      updated_at: new Date().toISOString(),
+    }),
+  })
+  const payload = await response.json().catch(() => null)
+  if (!response.ok) {
+    throw new Error(payload?.message || payload?.error || `Failed to confirm appointment (${response.status})`)
+  }
+}
+
+const createPaymongoCheckoutSession = async ({
+  amount,
+  appointmentId,
+  transactionId,
+  paymentMethod,
+}) => {
+  const lineAmount = Math.max(1, Math.round(Number(amount || 0) * 100))
+  const method = normalizePaymentMethod(paymentMethod)
+
+  const body = {
+    data: {
+      attributes: {
+        billing: {
+          name: 'BatasMo Client',
+        },
+        send_email_receipt: false,
+        show_description: true,
+        show_line_items: true,
+        line_items: [
+          {
+            currency: 'PHP',
+            amount: lineAmount,
+            name: 'BatasMo Consultation Booking',
+            quantity: 1,
+          },
+        ],
+        payment_method_types: [method],
+        description: `Consultation payment for appointment ${appointmentId}`,
+        success_url: `${PAYMENT_SUCCESS_URL}?payment=success&tx=${transactionId}&appointmentId=${appointmentId}`,
+        cancel_url: `${PAYMENT_CANCEL_URL}?payment=cancelled&tx=${transactionId}&appointmentId=${appointmentId}`,
+        metadata: {
+          appointment_id: String(appointmentId),
+          transaction_id: String(transactionId),
+        },
+      },
+    },
+  }
+
+  const response = await fetch('https://api.paymongo.com/v1/checkout_sessions', {
+    method: 'POST',
+    headers: {
+      Authorization: paymongoAuthHeader(),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+  const payload = await response.json().catch(() => null)
+  if (!response.ok) {
+    const detail = payload?.errors?.[0]?.detail || payload?.error || `PayMongo create session failed (${response.status})`
+    throw new Error(detail)
+  }
+  const data = payload?.data
+  if (!data?.id || !data?.attributes?.checkout_url) {
+    throw new Error('PayMongo returned an invalid checkout session response.')
+  }
+  return {
+    checkoutSessionId: data.id,
+    checkoutUrl: data.attributes.checkout_url,
+  }
+}
+
+const fetchPaymongoCheckoutStatus = async (checkoutSessionId) => {
+  const response = await fetch(`https://api.paymongo.com/v1/checkout_sessions/${encodeURIComponent(checkoutSessionId)}`, {
+    method: 'GET',
+    headers: {
+      Authorization: paymongoAuthHeader(),
+      'Content-Type': 'application/json',
+    },
+  })
+  const payload = await response.json().catch(() => null)
+  if (!response.ok) {
+    const detail = payload?.errors?.[0]?.detail || payload?.error || `PayMongo status fetch failed (${response.status})`
+    throw new Error(detail)
+  }
+  const attributes = payload?.data?.attributes || {}
+  return {
+    raw: attributes,
+    mappedStatus: mapPaymongoToInternalStatus(attributes),
+  }
+}
+
+// ============================================================================
 // SYSTEM PROMPT FOR GEMINI
 // ============================================================================
 
@@ -683,6 +901,111 @@ app.post('/videosdk-create-room', async (req, res) => {
   } catch (err) {
     console.error('[videosdk] /videosdk-create-room error:', err)
     res.status(500).json({ error: err.message })
+  }
+})
+
+// ── Real GCash/Maya payment session (PayMongo) ───────────────────────────────
+app.post('/payments/appointments/create-session', async (req, res) => {
+  try {
+    requirePaymentConfig()
+
+    const appointmentId = String(req.body?.appointmentId || '').trim()
+    const clientId = String(req.body?.clientId || '').trim()
+    const attorneyId = String(req.body?.attorneyId || '').trim()
+    const amount = Number(req.body?.amount || 0)
+    const paymentMethod = normalizePaymentMethod(req.body?.method || 'gcash')
+
+    if (!appointmentId || !clientId || !attorneyId) {
+      return res.status(400).json({ error: 'appointmentId, clientId, and attorneyId are required.' })
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ error: 'amount must be greater than 0.' })
+    }
+    if (!isPaymentMethodSupported(paymentMethod)) {
+      return res.status(400).json({ error: 'Only gcash or paymaya are supported.' })
+    }
+
+    const txReference = `TX-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`
+    const pendingTx = await supabaseInsertTransaction({
+      appointmentId,
+      clientId,
+      attorneyId,
+      amount,
+      paymentMethod: paymentMethod === 'gcash' ? 'GCash' : 'Maya',
+      referenceNo: txReference,
+    })
+
+    const session = await createPaymongoCheckoutSession({
+      amount,
+      appointmentId,
+      transactionId: pendingTx.id,
+      paymentMethod,
+    })
+
+    await supabaseUpdateTransactionStatus({
+      transactionId: pendingTx.id,
+      paymentStatus: 'pending',
+      providerReference: session.checkoutSessionId,
+    })
+
+    return res.status(200).json({
+      transactionId: pendingTx.id,
+      checkoutSessionId: session.checkoutSessionId,
+      checkoutUrl: session.checkoutUrl,
+      status: 'pending',
+    })
+  } catch (error) {
+    return res.status(500).json({ error: error?.message || 'Unable to create payment session.' })
+  }
+})
+
+// ── Payment status sync (polling fallback if webhook not yet integrated) ─────
+app.get('/payments/appointments/status/:transactionId', async (req, res) => {
+  try {
+    requirePaymentConfig()
+    const transactionId = String(req.params?.transactionId || '').trim()
+    if (!transactionId) {
+      return res.status(400).json({ error: 'transactionId is required.' })
+    }
+
+    const tx = await supabaseSelectSingle({
+      table: 'transactions',
+      query: new URLSearchParams({ id: `eq.${transactionId}` }).toString(),
+    })
+
+    if (!tx) {
+      return res.status(404).json({ error: 'Transaction not found.' })
+    }
+
+    const checkoutSessionId = String(tx.provider_reference || '').trim()
+    let effectiveStatus = String(tx.payment_status || 'pending').toLowerCase()
+
+    if (checkoutSessionId) {
+      const checkout = await fetchPaymongoCheckoutStatus(checkoutSessionId)
+      effectiveStatus = checkout.mappedStatus
+
+      if (effectiveStatus !== String(tx.payment_status || '').toLowerCase()) {
+        await supabaseUpdateTransactionStatus({
+          transactionId: tx.id,
+          paymentStatus: effectiveStatus,
+          providerReference: checkoutSessionId,
+        })
+      }
+
+      if (effectiveStatus === 'paid' && tx.appointment_id) {
+        await supabaseConfirmAppointment({ appointmentId: tx.appointment_id })
+      }
+    }
+
+    return res.status(200).json({
+      transactionId: tx.id,
+      appointmentId: tx.appointment_id || null,
+      status: effectiveStatus,
+      referenceNo: tx.reference_no || null,
+      providerReference: tx.provider_reference || null,
+    })
+  } catch (error) {
+    return res.status(500).json({ error: error?.message || 'Unable to check payment status.' })
   }
 })
 

@@ -3,12 +3,12 @@ import './MyAppointments.css';
 import {
   fetchClientAppointmentsData,
   fetchClientForfeitedRescheduleAlerts,
+  getAppointmentPaymentStatus,
   getAvailability,
   normalizeSlotTimeLabel,
   payForAppointment,
   rescheduleClientAppointment,
 } from '../lib/userApi';
-import { isValidPhoneNumber, VALID_PHONE_MESSAGE } from '../lib/validators';
 
 const MenuIcon = () => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -352,20 +352,12 @@ function MyAppointments({ onNavigate, profile }) {
       setPaymentError('Please select a payment method');
       return;
     }
-    if (!isValidPhoneNumber(phoneNumber)) {
-      setPaymentError(VALID_PHONE_MESSAGE);
-      return;
-    }
-    if (!paymentCode || paymentCode.length < 4) {
-      setPaymentError('Please enter a valid payment code (at least 4 digits)');
-      return;
-    }
 
     setPaymentError('');
     setPaymentProcessing(true);
 
     try {
-      await payForAppointment({
+      const session = await payForAppointment({
         appointmentId: selectedAppointmentForPayment.id,
         clientId: profile?.id,
         attorneyId: selectedAppointmentForPayment.attorneyId,
@@ -373,18 +365,40 @@ function MyAppointments({ onNavigate, profile }) {
         method: selectedPaymentMethod,
       });
 
-      setPaymentProcessing(false);
+      if (session?.checkoutUrl) {
+        window.open(session.checkoutUrl, '_blank', 'noopener,noreferrer');
+      }
+
+      const startedAt = Date.now();
+      const timeoutMs = 5 * 60 * 1000;
+      let paid = false;
+
+      while (Date.now() - startedAt < timeoutMs) {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        const statusResult = await getAppointmentPaymentStatus(session.transactionId);
+        const status = String(statusResult?.status || 'pending').toLowerCase();
+
+        if (status === 'paid') {
+          paid = true;
+          break;
+        }
+        if (status === 'failed') {
+          throw new Error('Payment failed. Please try again.');
+        }
+      }
+
+      if (!paid) {
+        throw new Error('Payment is still pending. Complete checkout, then try again in a few seconds.');
+      }
+
+      await loadAppointments();
       setShowPaymentModal(false);
       setShowPaymentConfirmation(true);
-      setAppointments(prev => prev.map(a => 
-        a.id === selectedAppointmentForPayment.id 
-          ? { ...a, payment: 'PAID', status: 'APPROVED', message: 'Payment Completed', description: 'Your appointment has been confirmed. Please arrive 10 minutes early.' } 
-          : a
-      ));
       setLoadError('');
     } catch (error) {
-      setPaymentProcessing(false);
       setPaymentError(error.message || 'Payment failed. Please try again.');
+    } finally {
+      setPaymentProcessing(false);
     }
   };
 
