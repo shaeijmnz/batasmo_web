@@ -76,6 +76,7 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
   const [videoCall, setVideoCall] = useState(null);
   const [videoCallLoading, setVideoCallLoading] = useState(false);
   const [videoCallError, setVideoCallError] = useState('');
+  const [incomingCallData, setIncomingCallData] = useState(null);
   const videoCallRef = useRef(null);
   const messagesEndRef = useRef(null);
   const imagePickerRef = useRef(null);
@@ -269,9 +270,11 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
       if (videoMeetingId && !videoCallRef.current) {
         try {
           const { meetingId, roomId, token } = await getOrCreateVideoMeeting(activeAppointmentId);
-          openVideoCall({ meetingId, roomId, token });
-        } catch {
-          // silently ignore — client can still click the button manually
+          await tryOpenIncomingCall({ meetingId, roomId, token });
+        } catch (error) {
+          setVideoCallError(
+            error?.message || 'Incoming call is ready. Tap "Join Incoming Call" to connect.',
+          );
         }
       }
     });
@@ -600,6 +603,23 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
   const openVideoCall = (callData) => {
     videoCallRef.current = callData;
     setVideoCall(callData);
+    setIncomingCallData(null);
+  };
+
+  const warmupMediaPermissions = async () => {
+    if (!navigator?.mediaDevices?.getUserMedia) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      stream.getTracks().forEach((track) => track.stop());
+    } catch {
+      // Keep call flow working even when prompt is dismissed.
+    }
+  };
+
+  const tryOpenIncomingCall = async (callData) => {
+    setIncomingCallData(callData);
+    await warmupMediaPermissions();
+    openVideoCall(callData);
   };
 
   const handleStartVideoCall = async () => {
@@ -608,6 +628,7 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
     setVideoCallError('');
     try {
       const { meetingId, roomId, token } = await getOrCreateVideoMeeting(activeAppointmentId);
+      await warmupMediaPermissions();
       openVideoCall({ meetingId, roomId, token });
     } catch (err) {
       setVideoCallError(err.message || 'Failed to start video call.');
@@ -622,6 +643,21 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
     }
     videoCallRef.current = null;
     setVideoCall(null);
+  };
+
+  const handleJoinIncomingCall = async () => {
+    if (!incomingCallData || videoCallLoading) return;
+    setVideoCallLoading(true);
+    setVideoCallError('');
+    try {
+      await tryOpenIncomingCall(incomingCallData);
+    } catch (error) {
+      setVideoCallError(
+        error?.message || 'Unable to connect yet. Please check internet and try joining again.',
+      );
+    } finally {
+      setVideoCallLoading(false);
+    }
   };
 
   return (
@@ -676,6 +712,18 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
         </div>
         {videoCallError ? (
           <div className="cr-video-error">{videoCallError}</div>
+        ) : null}
+        {incomingCallData && !videoCall ? (
+          <div className="cr-video-incoming">
+            <button
+              type="button"
+              className="cr-video-call-btn"
+              onClick={handleJoinIncomingCall}
+              disabled={videoCallLoading}
+            >
+              {videoCallLoading ? 'Connecting…' : 'Join Incoming Call'}
+            </button>
+          </div>
         ) : null}
 
         <div className="cr-messages">

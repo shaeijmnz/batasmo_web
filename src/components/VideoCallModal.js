@@ -178,6 +178,7 @@ function MeetingView({ meetingId, onLeave }) {
   const [joinError, setJoinError] = useState('');
   const hasJoinedRef = useRef(false);
   const timeoutRef = useRef(null);
+  const retryCountRef = useRef(0);
 
   const {
     join,
@@ -190,11 +191,25 @@ function MeetingView({ meetingId, onLeave }) {
   } = useMeeting({
     onMeetingJoined: () => {
       clearTimeout(timeoutRef.current);
+      retryCountRef.current = 0;
       setJoinState('JOINED');
     },
     onMeetingLeft: onLeave,
     onError: (error) => {
       clearTimeout(timeoutRef.current);
+      if (retryCountRef.current < 1) {
+        retryCountRef.current += 1;
+        setJoinState('JOINING');
+        setJoinError('');
+        setTimeout(() => {
+          try {
+            join();
+          } catch {
+            // Fall through to user-visible error state below.
+          }
+        }, 1200);
+        return;
+      }
       setJoinError(
         (error && (error.message || error.code))
           ? String(error.message || error.code)
@@ -213,6 +228,15 @@ function MeetingView({ meetingId, onLeave }) {
     timeoutRef.current = setTimeout(() => {
       setJoinState((prev) => {
         if (prev === 'JOINING') {
+          if (retryCountRef.current < 1) {
+            retryCountRef.current += 1;
+            try {
+              join();
+              return 'JOINING';
+            } catch {
+              // Continue to error state below.
+            }
+          }
           setJoinError('Connection timed out. Please check your internet and try again.');
           return 'ERROR';
         }
