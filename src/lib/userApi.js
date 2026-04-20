@@ -2511,16 +2511,6 @@ export async function createAppointmentBooking({
     throw new Error('Missing appointment payload details.')
   }
 
-  const activeBookingCount = await fetchClientAttorneyActiveBookingCount({
-    clientId: resolvedClientId,
-    attorneyId: normalizedPayload.attorney_id,
-    scheduledAt: scheduledIso,
-  })
-
-  if (activeBookingCount >= 2) {
-    throw new Error('Booking limit reached. You can only keep up to 2 active bookings with the same attorney.')
-  }
-
   normalizedPayload.scheduled_at = scheduledIso
 
   let appointmentId = null
