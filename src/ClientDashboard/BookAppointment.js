@@ -350,9 +350,16 @@ function BookAppointment({ onNavigate, profile }) {
       return;
     }
 
+    let checkoutWindow = null;
+
     try {
       setIsPaying(true);
       setSubmitError('');
+      checkoutWindow = window.open('', '_blank');
+      if (checkoutWindow) {
+        checkoutWindow.document.title = 'BatasMo Payment';
+        checkoutWindow.document.body.innerHTML = '<p style="font-family: sans-serif; padding: 16px;">Preparing secure payment checkout...</p>';
+      }
 
       const scheduledAtIso = buildScheduledIso(selectedDate, selectedTime);
       const slotDateTime = new Date(scheduledAtIso);
@@ -391,8 +398,12 @@ function BookAppointment({ onNavigate, profile }) {
         method: paymentMethod,
       });
 
-      if (session?.checkoutUrl) {
+      if (session?.checkoutUrl && checkoutWindow) {
+        checkoutWindow.location.href = session.checkoutUrl;
+      } else if (session?.checkoutUrl) {
         window.open(session.checkoutUrl, '_blank', 'noopener,noreferrer');
+      } else {
+        throw new Error('Checkout URL is missing. Please try again.');
       }
 
       const startedAt = Date.now();
@@ -428,6 +439,9 @@ function BookAppointment({ onNavigate, profile }) {
       setShowBooking(false);
       setShowConfirmation(true);
     } catch (error) {
+      if (checkoutWindow && !checkoutWindow.closed) {
+        checkoutWindow.close();
+      }
       setSubmitError(error?.message || 'Unable to complete payment. Please try again.');
     } finally {
       setIsPaying(false);

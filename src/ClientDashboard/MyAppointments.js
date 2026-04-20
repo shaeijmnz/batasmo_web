@@ -356,7 +356,15 @@ function MyAppointments({ onNavigate, profile }) {
     setPaymentError('');
     setPaymentProcessing(true);
 
+    let checkoutWindow = null;
+
     try {
+      checkoutWindow = window.open('', '_blank');
+      if (checkoutWindow) {
+        checkoutWindow.document.title = 'BatasMo Payment';
+        checkoutWindow.document.body.innerHTML = '<p style="font-family: sans-serif; padding: 16px;">Preparing secure payment checkout...</p>';
+      }
+
       const session = await payForAppointment({
         appointmentId: selectedAppointmentForPayment.id,
         clientId: profile?.id,
@@ -365,8 +373,12 @@ function MyAppointments({ onNavigate, profile }) {
         method: selectedPaymentMethod,
       });
 
-      if (session?.checkoutUrl) {
+      if (session?.checkoutUrl && checkoutWindow) {
+        checkoutWindow.location.href = session.checkoutUrl;
+      } else if (session?.checkoutUrl) {
         window.open(session.checkoutUrl, '_blank', 'noopener,noreferrer');
+      } else {
+        throw new Error('Checkout URL is missing. Please try again.');
       }
 
       const startedAt = Date.now();
@@ -396,6 +408,9 @@ function MyAppointments({ onNavigate, profile }) {
       setShowPaymentConfirmation(true);
       setLoadError('');
     } catch (error) {
+      if (checkoutWindow && !checkoutWindow.closed) {
+        checkoutWindow.close();
+      }
       setPaymentError(error.message || 'Payment failed. Please try again.');
     } finally {
       setPaymentProcessing(false);
