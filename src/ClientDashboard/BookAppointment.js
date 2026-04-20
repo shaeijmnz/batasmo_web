@@ -362,6 +362,7 @@ function BookAppointment({ onNavigate, profile }) {
       const activeBookingCount = await fetchClientAttorneyActiveBookingCount({
         clientId: profile.id,
         attorneyId: bookingAttorney.id,
+        scheduledAt: scheduledAtIso,
       });
 
       if (activeBookingCount >= 2) {

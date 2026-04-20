@@ -2806,11 +2806,32 @@ export async function fetchClientAttorneyActiveBookingCount({ clientId, attorney
 
   if (error) throw error
 
-  return (data || []).filter((item) => {
+  const sameDayActiveAppointments = (data || []).filter((item) => {
     const normalizedStatus = String(item?.status || '').toLowerCase()
     if (!ACTIVE_LIMIT_STATUSES.has(normalizedStatus)) return false
     return toDateKey(item?.scheduled_at) === targetDateKey
-  }).length
+  })
+
+  if (!sameDayActiveAppointments.length) return 0
+
+  const appointmentIds = sameDayActiveAppointments.map((item) => item.id).filter(Boolean)
+  if (!appointmentIds.length) return 0
+
+  const { data: roomData, error: roomError } = await supabase
+    .from('consultation_rooms')
+    .select('appointment_id, is_closed')
+    .in('appointment_id', appointmentIds)
+
+  if (roomError) throw roomError
+
+  const closedAppointmentIds = new Set(
+    (roomData || [])
+      .filter((room) => Boolean(room?.is_closed))
+      .map((room) => room?.appointment_id)
+      .filter(Boolean),
+  )
+
+  return sameDayActiveAppointments.filter((item) => !closedAppointmentIds.has(item.id)).length
 }
 
 async function getOrCreateConsultationRoom(appointmentId) {
