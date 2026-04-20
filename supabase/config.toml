@@ -5,3 +5,7 @@ verify_jwt = false
 
 [functions.signup-sms-otp-verify]
 verify_jwt = false
+
+# Use header-forwarded auth + auth.getUser() inside function to avoid strict local JWT algorithm assumptions.
+[functions.informational-ai-assistant]
+verify_jwt = false
