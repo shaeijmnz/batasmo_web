@@ -58,6 +58,8 @@ export default function AttorneyAnalytics({ onNavigate, profile }) {
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [maxCount, setMaxCount] = useState(0);
+  const [genderRows, setGenderRows] = useState([]);
+  const [genderTotal, setGenderTotal] = useState(0);
   const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
@@ -71,12 +73,16 @@ export default function AttorneyAnalytics({ onNavigate, profile }) {
         setRows(data.rows || []);
         setTotal(Number(data.total || 0));
         setMaxCount(Number(data.maxCount || 0));
+        setGenderRows(data?.gender?.rows || []);
+        setGenderTotal(Number(data?.gender?.total || 0));
         setLoadError('');
       } catch (error) {
         if (!isMounted) return;
         setRows([]);
         setTotal(0);
         setMaxCount(0);
+        setGenderRows([]);
+        setGenderTotal(0);
         setLoadError(error.message || 'Unable to load analytics data.');
       }
     };
@@ -195,6 +201,31 @@ export default function AttorneyAnalytics({ onNavigate, profile }) {
             </div>
           ) : (
             <p className="aa-empty">No consultation records yet.</p>
+          )}
+        </section>
+
+        <section className="aa-chart-card aa-chart-card--gender">
+          <div className="aa-chart-card__header">
+            <h2>Client Registration by Gender</h2>
+            <span>Total {genderTotal}</span>
+          </div>
+
+          {genderRows.length ? (
+            <div className="aa-gender-chart">
+              {genderRows.map((row) => (
+                <div key={row.key} className="aa-gender-row">
+                  <div className="aa-gender-row__meta">
+                    <span className="aa-gender-row__label">{row.label}</span>
+                    <span className="aa-gender-row__count">{row.count} ({row.percent}%)</span>
+                  </div>
+                  <div className="aa-gender-track">
+                    <div className="aa-gender-fill" style={{ width: `${Math.max(row.percent, row.count > 0 ? 8 : 0)}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="aa-empty">No gender registration records yet.</p>
           )}
         </section>
       </main>

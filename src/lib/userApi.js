@@ -767,10 +767,18 @@ const normalizeConsultationTypeLabel = (title) => {
     .trim() || 'General Consultation'
 }
 
+const normalizeGenderLabel = (value) => {
+  const raw = String(value || '').trim().toLowerCase()
+  if (raw === 'male') return 'male'
+  if (raw === 'female') return 'female'
+  if (raw === 'others' || raw === 'other') return 'others'
+  return 'others'
+}
+
 export async function fetchAttorneyConsultationAnalyticsData(userId) {
   const { data, error } = await supabase
     .from('appointments')
-    .select('id, title, status, scheduled_at')
+    .select('id, title, status, scheduled_at, client_id')
     .eq('attorney_id', userId)
 
   if (error) throw error
@@ -793,10 +801,64 @@ export async function fetchAttorneyConsultationAnalyticsData(userId) {
   const total = rows.reduce((sum, item) => sum + Number(item.count || 0), 0)
   const maxCount = rows.length ? rows[0].count : 0
 
+  const baseGenderCounts = {
+    male: 0,
+    female: 0,
+    others: 0,
+  }
+
+  let genderProfiles = null
+  const { data: globalClientProfiles, error: globalClientProfilesError } = await supabase
+    .from('profiles')
+    .select('id, sex')
+    .eq('role', 'Client')
+
+  if (!globalClientProfilesError) {
+    genderProfiles = globalClientProfiles || []
+  } else {
+    const uniqueClientIds = Array.from(
+      new Set(
+        (data || [])
+          .map((item) => item?.client_id)
+          .filter(Boolean),
+      ),
+    )
+
+    if (uniqueClientIds.length) {
+      const { data: appointmentClientProfiles, error: appointmentClientProfilesError } = await supabase
+        .from('profiles')
+        .select('id, sex')
+        .in('id', uniqueClientIds)
+
+      if (!appointmentClientProfilesError) {
+        genderProfiles = appointmentClientProfiles || []
+      }
+    }
+  }
+
+  ;(genderProfiles || []).forEach((profileRow) => {
+    const key = normalizeGenderLabel(profileRow?.sex)
+    baseGenderCounts[key] = Number(baseGenderCounts[key] || 0) + 1
+  })
+
+  const genderTotal = Object.values(baseGenderCounts).reduce((sum, count) => sum + Number(count || 0), 0)
+  const genderRows = [
+    { key: 'male', label: 'Male', count: baseGenderCounts.male },
+    { key: 'female', label: 'Female', count: baseGenderCounts.female },
+    { key: 'others', label: 'Others', count: baseGenderCounts.others },
+  ].map((item) => ({
+    ...item,
+    percent: genderTotal > 0 ? Math.round((item.count / genderTotal) * 100) : 0,
+  }))
+
   return {
     rows,
     total,
     maxCount,
+    gender: {
+      total: genderTotal,
+      rows: genderRows,
+    },
   }
 }
 
