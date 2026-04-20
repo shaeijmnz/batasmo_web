@@ -387,8 +387,6 @@ function BookAppointment({ onNavigate, profile }) {
         title: `Consultation - ${bookingAttorney.specialty || 'General'}`,
         notes: reason.trim() || null,
         amount: bookingAttorney.amount || 2000,
-        paymentMethod,
-        paymentCode: null,
         payload: {
           attorney_id: bookingAttorney.id,
           title: `Consultation - ${bookingAttorney.specialty || 'General'}`,

@@ -545,7 +545,6 @@ const supabaseInsertTransaction = async ({
   attorneyId,
   amount,
   paymentMethod,
-  referenceNo,
 }) => {
   const endpoint = `${SUPABASE_URL}/rest/v1/transactions`
   const body = {
@@ -556,7 +555,6 @@ const supabaseInsertTransaction = async ({
     currency: 'PHP',
     payment_status: 'pending',
     payment_method: paymentMethod,
-    reference_no: referenceNo,
     provider_reference: null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -925,14 +923,12 @@ app.post('/payments/appointments/create-session', async (req, res) => {
       return res.status(400).json({ error: 'Only gcash or paymaya are supported.' })
     }
 
-    const txReference = `TX-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`
     const pendingTx = await supabaseInsertTransaction({
       appointmentId,
       clientId,
       attorneyId,
       amount,
       paymentMethod: paymentMethod === 'gcash' ? 'GCash' : 'Maya',
-      referenceNo: txReference,
     })
 
     const session = await createPaymongoCheckoutSession({
@@ -1001,7 +997,7 @@ app.get('/payments/appointments/status/:transactionId', async (req, res) => {
       transactionId: tx.id,
       appointmentId: tx.appointment_id || null,
       status: effectiveStatus,
-      referenceNo: tx.reference_no || null,
+      referenceNo: null,
       providerReference: tx.provider_reference || null,
     })
   } catch (error) {
