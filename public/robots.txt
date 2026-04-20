@@ -1,3 +1,8 @@
 # https://www.robotstxt.org/robotstxt.html
 User-agent: *
 Disallow:
+
+# Pag may permanent HTTPS URL na (Vercel o custom domain):
+# 1) Gumawa ng public/sitemap.xml (isang <url><loc>https://iyo-domain/</loc></url>).
+# 2) Idagdag dito: Sitemap: https://iyo-domain/sitemap.xml
+# 3) Google Search Console → Sitemaps → i-submit ang sitemap URL.

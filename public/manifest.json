@@ -1,6 +1,7 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "short_name": "BatasMo",
+  "name": "BatasMo — Legal consultations & client portal",
+  "description": "Book attorneys, notarial services, and manage appointments in the Philippines.",
   "icons": [
     {
       "src": "favicon.ico",
@@ -20,6 +21,7 @@
   ],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "theme_color": "#0f172a",
+  "background_color": "#ffffff",
+  "lang": "en-PH"
 }

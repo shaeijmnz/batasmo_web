@@ -337,16 +337,6 @@ function MyAppointments({ onNavigate, profile }) {
     );
   };
 
-  const openPaymentModal = (appointment) => {
-    setSelectedAppointmentForPayment(appointment);
-    setShowPaymentModal(true);
-    setSelectedPaymentMethod('');
-    setPhoneNumber('');
-    setPaymentCode('');
-    setPaymentError('');
-    setPaymentProcessing(false);
-  };
-
   const closePaymentModal = () => {
     setShowPaymentModal(false);
     setSelectedAppointmentForPayment(null);

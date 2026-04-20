@@ -17,7 +17,6 @@ import {
   subscribeToConsultationRoomStatus,
   getOrCreateVideoMeeting,
   clearVideoMeetingId,
-  getVideoSdkToken,
 } from '../lib/userApi';
 import VideoCallModal from '../components/VideoCallModal';
 
