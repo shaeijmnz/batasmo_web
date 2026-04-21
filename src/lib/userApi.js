@@ -277,6 +277,7 @@ async function fetchAttorneyAppointments(userId, options = {}) {
     return cached.data
   }
 
+  await ensureAppConfigLoaded()
   const { data, error } = await supabase
     .from('appointments')
     .select(
@@ -472,6 +473,9 @@ export async function signOutUser() {
 
 export async function fetchClientHomeData(userId) {
   const nowMs = Date.now()
+  // Make sure the admin toggles (double-booking, schedule window) are known
+  // before we compute chatAccessible per row.
+  await ensureAppConfigLoaded()
   const [appointmentsRes, notificationsRes, transactionsRes] = await Promise.all([
     supabase
       .from('appointments')
@@ -1523,6 +1527,13 @@ export const isConsultationChatWindowOpen = ({
 
   if (!isConsultationUnlockedForChat({ status, paymentStatus })) return false
 
+  // Admin setting: if the schedule window enforcement is OFF, anyone who
+  // passed the payment/status gate can enter the chat anytime. This is the
+  // "bypass" mode used for presentations/demos. Default: ON (enforce).
+  if (!coerceBoolValue(getCachedAppConfig('enforce_schedule_window', true), true)) {
+    return true
+  }
+
   const scheduled = parseChatScheduleDate({ scheduledAt, slotDate, slotTime })
   if (!scheduled) return true
 
@@ -1534,6 +1545,7 @@ export const isConsultationChatWindowOpen = ({
 
 export async function fetchClientAppointmentsData(userId) {
   const nowMs = Date.now()
+  await ensureAppConfigLoaded()
   const [appointmentsRes, transactionsRes] = await Promise.all([
     supabase
       .from('appointments')
@@ -2540,6 +2552,97 @@ export async function fetchPublicLandingData() {
   return { content, attorneys: gallery }
 }
 
+// ---------------------------------------------------------------------------
+// Admin-controlled app_config cache
+// ---------------------------------------------------------------------------
+// We keep the latest values in-memory so sync helpers like
+// isConsultationChatWindowOpen can check the schedule-window toggle
+// without needing an async round-trip on every call.
+//
+// The cache is refreshed:
+//   1. Lazily on first access (ensureAppConfigLoaded)
+//   2. When the admin toggles via setAppConfig in this tab
+//   3. On postgres_changes from the app_config realtime channel
+// ---------------------------------------------------------------------------
+
+const APP_CONFIG_DEFAULTS = {
+  prevent_double_booking: true,
+  enforce_schedule_window: true,
+}
+
+const appConfigCache = { ...APP_CONFIG_DEFAULTS }
+let appConfigLoadPromise = null
+let appConfigRealtimeChannel = null
+
+function coerceBoolValue(value, fallback) {
+  if (value === null || value === undefined) return fallback
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'number') return value !== 0
+  if (typeof value === 'string') {
+    const v = value.toLowerCase().trim()
+    if (v === 'true' || v === '1') return true
+    if (v === 'false' || v === '0') return false
+  }
+  return Boolean(value)
+}
+
+async function loadAppConfigCacheFromServer() {
+  try {
+    const [pdb, esw] = await Promise.all([
+      supabase.rpc('get_app_config', { p_key: 'prevent_double_booking' }),
+      supabase.rpc('get_app_config', { p_key: 'enforce_schedule_window' }),
+    ])
+    appConfigCache.prevent_double_booking = coerceBoolValue(
+      pdb?.data,
+      APP_CONFIG_DEFAULTS.prevent_double_booking,
+    )
+    appConfigCache.enforce_schedule_window = coerceBoolValue(
+      esw?.data,
+      APP_CONFIG_DEFAULTS.enforce_schedule_window,
+    )
+  } catch (error) {
+    console.warn('[app-config] cache refresh failed, keeping last values', error)
+  }
+}
+
+export async function ensureAppConfigLoaded() {
+  if (!appConfigLoadPromise) {
+    appConfigLoadPromise = loadAppConfigCacheFromServer()
+  }
+  return appConfigLoadPromise
+}
+
+export async function refreshAppConfigCache() {
+  appConfigLoadPromise = loadAppConfigCacheFromServer()
+  return appConfigLoadPromise
+}
+
+export function getCachedAppConfig(key, fallback) {
+  if (Object.prototype.hasOwnProperty.call(appConfigCache, key)) {
+    return appConfigCache[key]
+  }
+  return fallback
+}
+
+export function subscribeToAppConfigChanges() {
+  if (appConfigRealtimeChannel) return appConfigRealtimeChannel
+  try {
+    appConfigRealtimeChannel = supabase
+      .channel('app_config_live_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'app_config' },
+        () => {
+          refreshAppConfigCache()
+        },
+      )
+      .subscribe()
+  } catch (error) {
+    console.warn('[app-config] realtime subscribe failed', error)
+  }
+  return appConfigRealtimeChannel
+}
+
 export async function getAppConfig(key, fallback = null) {
   if (!key) return fallback
   try {
@@ -2563,16 +2666,24 @@ export async function setAppConfig(key, value) {
     p_value: value,
   })
   if (error) throw error
+  // Keep the local cache in sync immediately so this tab reacts without
+  // waiting for the realtime broadcast to arrive.
+  if (Object.prototype.hasOwnProperty.call(appConfigCache, key)) {
+    appConfigCache[key] = coerceBoolValue(value, appConfigCache[key])
+  }
   return data
 }
 
 export async function isDoubleBookingPreventionEnabled() {
   // Default true: if the flag is missing or the fetch fails we err on the
   // side of protecting the user from accidental double-bookings.
-  const value = await getAppConfig('prevent_double_booking', true)
-  if (typeof value === 'boolean') return value
-  if (typeof value === 'string') return value.toLowerCase() === 'true'
-  return Boolean(value)
+  await ensureAppConfigLoaded()
+  return coerceBoolValue(getCachedAppConfig('prevent_double_booking', true), true)
+}
+
+export async function isScheduleWindowEnforcementEnabled() {
+  await ensureAppConfigLoaded()
+  return coerceBoolValue(getCachedAppConfig('enforce_schedule_window', true), true)
 }
 
 async function assertNoActiveAppointmentForClient(clientId) {
@@ -2985,6 +3096,9 @@ export async function fetchClientAttorneyActiveBookingCount({ clientId, attorney
 }
 
 async function getOrCreateConsultationRoom(appointmentId) {
+  // Make sure the admin toggle is loaded so the sync checks below use the
+  // latest value instead of the conservative default.
+  await ensureAppConfigLoaded()
   const devBypass = isReactAppBypassChatWindowEnabled()
 
   // Some DBs only have scheduled_at (no slot_date/slot_time columns). Schedule logic uses scheduled_at via parseChatScheduleDate.

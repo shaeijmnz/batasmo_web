@@ -1,11 +1,13 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from './lib/supabaseClient';
 import {
+  ensureAppConfigLoaded,
   getCurrentSessionProfile,
   normalizeRole,
   pageFromRole,
   resetUserApiRuntimeState,
   signOutUser,
+  subscribeToAppConfigChanges,
 } from './lib/userApi';
 
 /* ── LandingPage ── */
@@ -258,6 +260,15 @@ function App() {
       console.log('[auth] runtime scope reset', { reason, ...details })
     }
   }, [])
+
+  useEffect(() => {
+    // Warm the admin-controlled feature flags cache (prevent_double_booking,
+    // enforce_schedule_window) and keep it in sync when the admin toggles.
+    // The realtime channel is module-scoped so it lives for the whole
+    // page lifetime; we do not tear it down on unmount.
+    ensureAppConfigLoaded();
+    subscribeToAppConfigChanges();
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
