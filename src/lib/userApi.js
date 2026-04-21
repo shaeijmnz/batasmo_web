@@ -775,6 +775,8 @@ const normalizeGenderLabel = (value) => {
   return 'others'
 }
 
+const isClientRole = (roleValue) => String(roleValue || '').trim().toLowerCase() === 'client'
+
 export async function fetchAttorneyConsultationAnalyticsData(userId) {
   const { data, error } = await supabase
     .from('appointments')
@@ -808,26 +810,57 @@ export async function fetchAttorneyConsultationAnalyticsData(userId) {
   }
 
   let genderProfiles = null
+  const uniqueClientIds = Array.from(
+    new Set(
+      (data || [])
+        .map((item) => item?.client_id)
+        .filter(Boolean),
+    ),
+  )
+
   const { data: globalClientProfiles, error: globalClientProfilesError } = await supabase
     .from('profiles')
-    .select('id, sex')
-    .eq('role', 'Client')
+    .select('id, sex, role')
+    .or('role.eq.Client,role.eq.client')
 
   if (!globalClientProfilesError) {
-    genderProfiles = globalClientProfiles || []
-  } else {
-    const uniqueClientIds = Array.from(
-      new Set(
-        (data || [])
-          .map((item) => item?.client_id)
-          .filter(Boolean),
-      ),
-    )
+    const globalRows = (globalClientProfiles || []).filter((row) => isClientRole(row?.role))
 
+    if (uniqueClientIds.length) {
+      const missingClientIds = uniqueClientIds.filter(
+        (clientId) => !globalRows.some((row) => String(row?.id) === String(clientId)),
+      )
+
+      if (missingClientIds.length) {
+        const { data: appointmentClientProfiles, error: appointmentClientProfilesError } = await supabase
+          .from('profiles')
+          .select('id, sex, role')
+          .in('id', missingClientIds)
+
+        if (!appointmentClientProfilesError) {
+          const merged = [...globalRows, ...(appointmentClientProfiles || [])]
+          genderProfiles = merged
+            .filter((row) => isClientRole(row?.role) || uniqueClientIds.includes(row?.id))
+            .reduce((acc, row) => {
+              if (!acc.some((existing) => String(existing?.id) === String(row?.id))) {
+                acc.push(row)
+              }
+              return acc
+            }, [])
+        } else {
+          genderProfiles = globalRows
+        }
+      } else {
+        genderProfiles = globalRows
+      }
+    } else {
+      genderProfiles = globalRows
+    }
+  } else {
     if (uniqueClientIds.length) {
       const { data: appointmentClientProfiles, error: appointmentClientProfilesError } = await supabase
         .from('profiles')
-        .select('id, sex')
+        .select('id, sex, role')
         .in('id', uniqueClientIds)
 
       if (!appointmentClientProfilesError) {
