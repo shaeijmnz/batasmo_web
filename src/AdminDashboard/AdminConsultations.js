@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import './AdminConsultations.css';
-import { clearTestBookings, fetchCompletedConsultations } from '../lib/adminApi';
+import { fetchCompletedConsultations } from '../lib/adminApi';
 
 const BackIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -12,49 +12,35 @@ function AdminConsultations({ onNavigate }) {
   const [consultations, setConsultations] = useState([]);
   const [searchText, setSearchText] = useState('');
   const [loading, setLoading] = useState(true);
-  const [clearing, setClearing] = useState(false);
   const [errorText, setErrorText] = useState('');
-  const [actionText, setActionText] = useState('');
   const [selectedTranscript, setSelectedTranscript] = useState(null);
 
-  const loadConsultations = async () => {
-    try {
-      const rows = await fetchCompletedConsultations();
-      setConsultations(rows);
-      setErrorText('');
-    } catch (error) {
-      setErrorText(error.message || 'Failed to load completed consultations.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
+    let isMounted = true;
+
+    const loadConsultations = async () => {
+      try {
+        const rows = await fetchCompletedConsultations();
+        if (isMounted) {
+          setConsultations(rows);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setErrorText(error.message || 'Failed to load completed consultations.');
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
     loadConsultations();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
-
-  const handleClearTestBookings = async () => {
-    const confirmed = window.confirm(
-      'Clear all consultation bookings for retesting? This removes bookings from client and attorney views.',
-    );
-    if (!confirmed) return;
-
-    setClearing(true);
-    setActionText('');
-    setErrorText('');
-    try {
-      const result = await clearTestBookings();
-      setActionText(
-        `Bookings cleared. Deleted ${Number(result?.deleted_appointments || 0)} appointment(s).`,
-      );
-      setConsultations([]);
-      await loadConsultations();
-    } catch (error) {
-      setErrorText(error.message || 'Failed to clear test bookings.');
-    } finally {
-      setClearing(false);
-    }
-  };
 
   const filteredConsultations = useMemo(() => {
     const keyword = searchText.trim().toLowerCase();
@@ -84,13 +70,6 @@ function AdminConsultations({ onNavigate }) {
         </div>
         <div className="adm-detail-actions">
           <button className="adm-detail-btn" onClick={() => onNavigate('admin-consultation-stats')}>Statistics</button>
-          <button
-            className="adm-detail-btn adm-detail-btn--danger"
-            onClick={handleClearTestBookings}
-            disabled={clearing}
-          >
-            {clearing ? 'Clearing...' : 'Clear Test Bookings'}
-          </button>
         </div>
       </header>
 
@@ -105,7 +84,6 @@ function AdminConsultations({ onNavigate }) {
               onChange={(event) => setSearchText(event.target.value)}
             />
           </div>
-          {actionText ? <p className="adm-detail-info">{actionText}</p> : null}
           {errorText ? <p>{errorText}</p> : null}
 
           <table className="adm-detail-table">

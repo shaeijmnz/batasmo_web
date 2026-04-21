@@ -210,25 +210,6 @@ export async function updateAppointmentStatus(id, status) {
   if (error) throw error
 }
 
-export async function clearTestBookings() {
-  const { data, error } = await withTimeout(
-    supabase.rpc('admin_clear_test_bookings'),
-    'Clear test bookings',
-  )
-
-  if (error) {
-    const message = String(error.message || '')
-    if (message.toLowerCase().includes('does not exist')) {
-      throw new Error(
-        'Missing database function "admin_clear_test_bookings". Run database/20260417_admin_clear_test_bookings_rpc.sql first.',
-      )
-    }
-    throw error
-  }
-
-  return data || { ok: true }
-}
-
 export async function fetchNotarialRequests(limit = 12) {
   const { data, error } = await withTimeout(
     supabase
