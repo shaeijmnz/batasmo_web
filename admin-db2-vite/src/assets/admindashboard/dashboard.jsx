@@ -865,9 +865,12 @@ const Dashboard = () => {
         <div className="scroll-content">
           {/* Welcome Section */}
           <section className="welcome-section">
-            <div className="welcome-card dark-blue">
-              <h1 className="welcome-title">Welcome Back, Admin</h1>
-              <p className="welcome-subtitle">Here's what's happening with your legal matters today.</p>
+            <div className="header-container">
+              <div className="header-content">
+                <h1>Welcome Back, Admin</h1>
+                <p>Here's what's happening with your legal matters today.</p>
+              </div>
+              <div className="header-overlay"></div>
             </div>
           </section>
 

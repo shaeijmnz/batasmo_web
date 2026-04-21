@@ -22,44 +22,8 @@
 
 .app-container { display: flex; height: 100vh; overflow: hidden; font-family: 'Inter', sans-serif; }
 
-/* Sidebar Logic */
-.sidebar {
-  background: var(--ui-bg-darker); color: var(--ui-text-primary);
-  transition: width 0.3s ease; flex-shrink: 0;
-  overflow: hidden;
-  display: flex; flex-direction: column;
-  border-right: 1px solid var(--ui-glass-border);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-}
-.sidebar.open { width: 260px; }
-.sidebar.closed { width: 0; }
-
-.sidebar-header { padding: 24px; display: flex; align-items: center; gap: 12px; }
-.logo-icon { background: linear-gradient(135deg, var(--ui-accent) 0%, var(--ui-accent-hover) 100%); color: white; padding: 5px; border-radius: 4px; display: flex; box-shadow: var(--ui-shadow-glow); }
-.logo-text { font-size: 1.2rem; font-weight: 700; }
-
-.sidebar-nav { flex: 1; padding: 10px 16px; }
-.nav-item {
-  display: flex; align-items: center; gap: 12px; padding: 12px;
-  border-radius: 8px; color: var(--ui-text-secondary); cursor: pointer; margin-bottom: 4px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 1px solid transparent;
-}
-.nav-item.active { background: linear-gradient(135deg, var(--ui-accent) 0%, var(--ui-accent-hover) 100%); color: white; font-weight: 600; box-shadow: var(--ui-shadow-glow); }
-.nav-item:hover:not(.active) { background: var(--ui-glass-bg); color: var(--ui-text-primary); border-color: var(--ui-glass-border); transform: translateX(4px); }
-
-.sidebar-footer { padding: 20px; border-top: 1px solid var(--ui-glass-border); }
-.profile-section { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; }
-.profile-avatar { width: 35px; height: 35px; background: linear-gradient(135deg, var(--ui-accent) 0%, var(--ui-accent-hover) 100%); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; box-shadow: var(--ui-shadow-glow); }
-.profile-info .name { font-size: 0.9rem; font-weight: 600; margin: 0; }
-.profile-info .email { font-size: 0.75rem; color: var(--ui-text-secondary); margin: 0; }
-.logout-btn { background: none; border: none; color: var(--ui-text-secondary); display: flex; align-items: center; gap: 10px; cursor: pointer; width: 100%; padding: 0; transition: color 0.3s ease; }
-.logout-btn:hover { color: var(--ui-accent); }
-
 /* Main Section */
 .main-content { flex: 1; display: flex; flex-direction: column; background: transparent; overflow: hidden; }
-.navbar { background: var(--ui-bg-darker); padding: 15px 25px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--ui-glass-border); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); box-shadow: var(--ui-shadow-premium); }
 .navbar-left { display: flex; align-items: center; gap: 15px; }
 .hamburger { background: none; border: none; cursor: pointer; color: var(--ui-text-primary); }
 .nav-title { font-size: 1.1rem; font-weight: 600; }
