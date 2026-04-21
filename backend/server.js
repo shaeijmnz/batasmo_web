@@ -611,6 +611,29 @@ const supabaseConfirmAppointment = async ({ appointmentId }) => {
   }
 }
 
+const supabaseInsertNotification = async ({ userId, title, body, type = 'general' }) => {
+  if (!userId) return
+  const endpoint = `${SUPABASE_URL}/rest/v1/notifications`
+  const payload = {
+    user_id: userId,
+    title: String(title || 'Notification'),
+    body: String(body || ''),
+    type: String(type || 'general'),
+    is_read: false,
+    created_at: new Date().toISOString(),
+  }
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: supabaseRestHeaders(),
+    body: JSON.stringify(payload),
+  })
+  const result = await response.json().catch(() => null)
+  if (!response.ok) {
+    throw new Error(result?.message || result?.error || `Failed to create notification (${response.status})`)
+  }
+}
+
 const createPaymongoCheckoutSession = async ({
   amount,
   appointmentId,
@@ -974,7 +997,8 @@ app.get('/payments/appointments/status/:transactionId', async (req, res) => {
     }
 
     const checkoutSessionId = String(tx.provider_reference || '').trim()
-    let effectiveStatus = String(tx.payment_status || 'pending').toLowerCase()
+    const previousStatus = String(tx.payment_status || 'pending').toLowerCase()
+    let effectiveStatus = previousStatus
 
     if (checkoutSessionId) {
       const checkout = await fetchPaymongoCheckoutStatus(checkoutSessionId)
@@ -990,6 +1014,19 @@ app.get('/payments/appointments/status/:transactionId', async (req, res) => {
 
       if (effectiveStatus === 'paid' && tx.appointment_id) {
         await supabaseConfirmAppointment({ appointmentId: tx.appointment_id })
+      }
+
+      if (effectiveStatus === 'paid' && previousStatus !== 'paid' && tx.client_id) {
+        try {
+          await supabaseInsertNotification({
+            userId: tx.client_id,
+            title: 'Payment Confirmed',
+            body: `Your consultation payment has been received successfully. Ref #${tx.id}`,
+            type: 'payment',
+          })
+        } catch (notificationError) {
+          console.warn('[payments] failed to create client payment notification', notificationError?.message || notificationError)
+        }
       }
     }
 

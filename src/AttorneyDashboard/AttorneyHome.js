@@ -77,17 +77,31 @@ const AnnouncementIcon = () => (
 );
 
 function AttorneyHome({ onNavigate, profile }) {
+  const markAllReadStorageKey = `attorney-notifications-read-cutoff:${profile?.id || 'unknown'}`;
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activePage, setActivePage] = useState('Dashboard');
   const [notifOpen, setNotifOpen] = useState(false);
   const [consultations, setConsultations] = useState([]);
   const [notifications, setNotifications] = useState([]);
-  const [locallyReadNotificationIds, setLocallyReadNotificationIds] = useState(new Set());
+  const [markAllReadCutoffIso, setMarkAllReadCutoffIso] = useState('');
   const [isMarkingNotificationsRead, setIsMarkingNotificationsRead] = useState(false);
   const [statsData, setStatsData] = useState({
     myAppointmentCount: 0,
   });
   const [loadError, setLoadError] = useState('');
+
+  useEffect(() => {
+    if (!profile?.id) {
+      setMarkAllReadCutoffIso('');
+      return;
+    }
+    try {
+      const storedValue = window.localStorage.getItem(markAllReadStorageKey) || '';
+      setMarkAllReadCutoffIso(storedValue);
+    } catch {
+      setMarkAllReadCutoffIso('');
+    }
+  }, [markAllReadStorageKey, profile?.id]);
 
   useEffect(() => {
     let isMounted = true;
@@ -99,16 +113,6 @@ function AttorneyHome({ onNavigate, profile }) {
         if (isMounted) {
           setConsultations(data.consultations);
           setNotifications(data.notifications);
-          setLocallyReadNotificationIds((prev) => {
-            const existingIds = new Set(data.notifications.map((item) => item.id));
-            const next = new Set();
-            prev.forEach((id) => {
-              if (existingIds.has(id)) {
-                next.add(id);
-              }
-            });
-            return next;
-          });
           setStatsData(data.stats);
         }
       } catch (error) {
@@ -141,7 +145,13 @@ function AttorneyHome({ onNavigate, profile }) {
 
   const sortedConsultations = [...consultations].sort((a, b) => new Date(a.date) - new Date(b.date));
   const upcomingCount = sortedConsultations.length;
-  const unreadCount = notifications.filter((n) => n.unread && !locallyReadNotificationIds.has(n.id)).length;
+  const cutoffTime = markAllReadCutoffIso ? new Date(markAllReadCutoffIso).getTime() : 0;
+  const displayNotifications = notifications.map((n) => {
+    const notificationTime = new Date(n.createdAt || 0).getTime() || 0;
+    const unread = Boolean(n.unread) && notificationTime > cutoffTime;
+    return { ...n, unread };
+  });
+  const unreadCount = displayNotifications.filter((n) => n.unread).length;
   const nextConsultation = sortedConsultations[0] || null;
 
   const handleMarkAllNotificationsRead = async () => {
@@ -149,21 +159,24 @@ function AttorneyHome({ onNavigate, profile }) {
     if (!unreadIds.length || !profile?.id || isMarkingNotificationsRead) return;
 
     setIsMarkingNotificationsRead(true);
-    setLocallyReadNotificationIds((prev) => {
-      const next = new Set(prev);
-      unreadIds.forEach((id) => next.add(id));
-      return next;
-    });
+    const nowIso = new Date().toISOString();
+    setMarkAllReadCutoffIso(nowIso);
+    try {
+      window.localStorage.setItem(markAllReadStorageKey, nowIso);
+    } catch {
+      // Keep in-memory fallback when local storage is blocked.
+    }
     setNotifications((prev) => prev.map((item) => (item.unread ? { ...item, unread: false } : item)));
 
     try {
       await markAttorneyNotificationsAsRead(profile.id);
     } catch (error) {
-      setLocallyReadNotificationIds((prev) => {
-        const next = new Set(prev);
-        unreadIds.forEach((id) => next.delete(id));
-        return next;
-      });
+      setMarkAllReadCutoffIso('');
+      try {
+        window.localStorage.removeItem(markAllReadStorageKey);
+      } catch {
+        // Ignore local storage cleanup failures.
+      }
       setNotifications((prev) =>
         prev.map((item) => (unreadIds.includes(item.id) ? { ...item, unread: true } : item)),
       );
@@ -242,7 +255,7 @@ function AttorneyHome({ onNavigate, profile }) {
           <AttorneyNotificationDropdown
             open={notifOpen}
             onClose={() => setNotifOpen(false)}
-            notifications={notifications}
+            notifications={displayNotifications}
             onMarkAllRead={handleMarkAllNotificationsRead}
             isMarkingAllRead={isMarkingNotificationsRead}
           />

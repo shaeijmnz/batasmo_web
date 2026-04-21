@@ -565,10 +565,12 @@
 .client-shell-content--chat {
   display: flex;
   flex-direction: column;
+  justify-content: center;
+  align-items: center;
   min-height: 0;
   height: 100%;
   overflow: hidden;
-  padding: 0;
+  padding: 14px 18px;
   flex: 1;
 }
 
@@ -577,6 +579,7 @@
   min-height: 0;
   height: 100%;
   width: 100%;
+  max-width: 1120px;
 }
 
 .client-shell-content::-webkit-scrollbar {
@@ -613,7 +616,8 @@
   height: 100%;
   width: 100%;
   display: flex;
-  align-items: stretch;
+  align-items: center;
+  justify-content: center;
 }
 
 .client-shell-backdrop {
@@ -782,10 +786,16 @@
 }
 
 .client-shell-body .cr-chat-area {
-  height: 100% !important;
+  height: min(100%, 760px) !important;
   min-height: 0 !important;
   max-width: none !important;
   margin: 0 !important;
+}
+
+.client-shell-body--chat .cr-page {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 
 /* Cross-page type + spacing rhythm */
@@ -1466,6 +1476,30 @@
 
   .client-shell-profile-chip span:first-child {
     display: none;
+  }
+
+  .client-shell-content--chat {
+    justify-content: stretch;
+    align-items: stretch;
+    padding: 0;
+  }
+
+  .client-shell-content--chat > .client-shell-body--chat {
+    max-width: none;
+  }
+
+  .client-shell-body--chat {
+    align-items: stretch;
+    justify-content: stretch;
+  }
+
+  .client-shell-body .cr-chat-area {
+    height: 100% !important;
+  }
+
+  .client-shell-body--chat .cr-page {
+    align-items: stretch !important;
+    justify-content: stretch !important;
   }
 }
 
