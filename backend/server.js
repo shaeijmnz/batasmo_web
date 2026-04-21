@@ -9,12 +9,14 @@ dotenv.config()
 const app = express()
 const PORT = process.env.PORT || 4000
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || 'http://localhost:3000'
+const ALLOWED_ORIGIN_BASE = String(ALLOWED_ORIGIN).trim().replace(/\/+$/, '')
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').trim()
 const SUPABASE_SERVICE_ROLE_KEY = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
 const PAYMONGO_SECRET_KEY = String(process.env.PAYMONGO_SECRET_KEY || '').trim()
-const PAYMENT_SUCCESS_URL = String(process.env.PAYMENT_SUCCESS_URL || `${ALLOWED_ORIGIN}/transaction-history`).trim()
-const PAYMENT_CANCEL_URL = String(process.env.PAYMENT_CANCEL_URL || `${ALLOWED_ORIGIN}/my-appointments`).trim()
+// Root URL avoids deep-link + auth race (PayMongo "back to merchant" should land on client home, not login).
+const PAYMENT_SUCCESS_URL = String(process.env.PAYMENT_SUCCESS_URL || `${ALLOWED_ORIGIN_BASE}/`).trim()
+const PAYMENT_CANCEL_URL = String(process.env.PAYMENT_CANCEL_URL || `${ALLOWED_ORIGIN_BASE}/my-appointments`).trim()
 const GEMINI_MODEL_CANDIDATES = [
   'gemini-2.5-flash',
   'gemini-2.5-pro',

@@ -134,6 +134,18 @@ const RECOVERY_VERIFIED_KEY = 'batasmo_recovery_verified'
 const FORCE_LOGIN_REDIRECT_KEY = 'batasmo_force_login_redirect'
 const IS_DEV = process.env.NODE_ENV !== 'production'
 
+const readPaymongoReturnFromLocation = () => {
+  if (typeof window === 'undefined') return null
+  const params = new URLSearchParams(window.location.search || '')
+  const payment = String(params.get('payment') || '').toLowerCase()
+  if (payment !== 'success' && payment !== 'cancelled') return null
+  return {
+    payment,
+    tx: String(params.get('tx') || '').trim(),
+    appointmentId: String(params.get('appointmentId') || '').trim(),
+  }
+}
+
 const resolveInitialPage = () => {
   const forcedLogin = sessionStorage.getItem(FORCE_LOGIN_REDIRECT_KEY) === '1'
   if (forcedLogin) {
@@ -219,6 +231,7 @@ function App() {
   const [authScopeVersion, setAuthScopeVersion] = useState(0);
   const activeAuthUserIdRef = useRef(null);
   const previousRoleRef = useRef('');
+  const paymongoReturnHandledRef = useRef(false);
 
   const forceResetToLogin = useCallback((reason) => {
     console.error('[auth] forcing login reset', { reason })
@@ -356,6 +369,34 @@ function App() {
       }
     };
   }, [forceResetToLogin, resetRuntimeForAuthBoundary]);
+
+  useEffect(() => {
+    if (authLoading || paymongoReturnHandledRef.current) return undefined
+
+    const paymongoReturn = readPaymongoReturnFromLocation()
+    if (!paymongoReturn) return undefined
+
+    if (!currentProfile?.id) {
+      return undefined
+    }
+
+    const role = normalizeRole(currentProfile.role || '')
+    if (role !== 'Client') {
+      paymongoReturnHandledRef.current = true
+      window.history.replaceState({}, document.title, '/')
+      return undefined
+    }
+
+    paymongoReturnHandledRef.current = true
+    setPageParams((prev) => ({
+      ...(prev || {}),
+      paymongoReturn,
+    }))
+    setPage(paymongoReturn.payment === 'cancelled' ? 'my-appointments' : 'home-logged')
+    window.history.replaceState({}, document.title, '/')
+
+    return undefined
+  }, [authLoading, currentProfile?.id, currentProfile?.role])
 
   useEffect(() => {
     if (!currentProfile?.id) return undefined

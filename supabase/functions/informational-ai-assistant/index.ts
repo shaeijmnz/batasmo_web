@@ -14,6 +14,67 @@ const MAX_MESSAGE_LENGTH = 2000
 
 let cachedGenerateContentModels: { expiresAt: number; models: string[] } | null = null
 
+const isFreeProviderMode = (): boolean => {
+  const mode = String(Deno.env.get('CHATBOT_PROVIDER_MODE') || '').trim().toLowerCase()
+  return mode === 'free' || mode === 'presentation'
+}
+
+const DISCLAIMER =
+  'Ito ay pangkalahatang impormasyon lamang at hindi legal advice. Para sa sitwasyon mo, mag-book ng consultation sa BatasMo attorney.'
+
+const buildPresentationReply = (message: string): string => {
+  const trimmed = message.trim()
+  const q = trimmed.toLowerCase()
+
+  const isGreeting =
+    /^(hi|hello|hey)[\s,!?.]*$/i.test(trimmed) ||
+    /^(kamusta|kumusta)\b/i.test(q) ||
+    /^good (morning|afternoon|evening)\b/i.test(q)
+
+  if (isGreeting) {
+    return (
+      'Kumusta! Ako ang BatasMo Informational Assistant. Makakatulong ako sa pangkalahatang impormasyon tungkol sa batas at proseso sa Pilipinas. ' +
+      DISCLAIMER
+    )
+  }
+
+  if (q.includes('affidavit') || q.includes('salaysay') || q.includes('loss')) {
+    return (
+      'Karaniwan sa affidavit of loss sa Pilipinas: idinidetalye ang pagkawala ng dokumento, petsa/lugar, paglalarawan ng item, at deklarasyon na wala kang intensiyong manlinlang. ' +
+      'Ang eksaktong format at karagdagang rekisitos (notaryo, LGU, ahensya) depende sa tatanggap na opisina. ' +
+      DISCLAIMER
+    )
+  }
+
+  if (q.includes('notary') || q.includes('notarial') || q.includes('notaryo')) {
+    return (
+      'Ang notarial services sa Pilipinas ay karaniwang isinasagawa ng licensed notary public. Dala ang orihinal na dokumento at valid ID; ang notaryo magve-verify ng pagkakakilanlan at lagda. ' +
+      DISCLAIMER
+    )
+  }
+
+  if (q.includes('consult') || q.includes('book') || q.includes('appointment') || q.includes('abogado') || q.includes('attorney')) {
+    return (
+      'Maaari kang mag-book ng consultation sa app para makausap ang licensed BatasMo attorney tungkol sa konkretong kaso mo. Ang chatbot na ito ay para sa pangkalahatang impormasyon lamang. ' +
+      DISCLAIMER
+    )
+  }
+
+  if (q.includes('civil code') || q.includes('batas') || q.includes('law') || q.includes('legal')) {
+    return (
+      'Maraming aspeto ng karaniwang transaksyon sa Pilipinas ang nakasaad sa Civil Code (hal. kontrata, obligasyon, property). ' +
+      'Kung may partikular kang tanong, mas mainam na ilahad ito sa consultation. ' +
+      DISCLAIMER
+    )
+  }
+
+  return (
+    'Salamat sa tanong. Makapagbibigay ako ng pangkalahatang impormasyon tungkol sa proseso at konsepto sa ilalim ng Philippine law, pero hindi ako makapagbibigay ng legal advice o hatol kung panalo ka sa kaso. ' +
+    'Gamitin ang Book Consultation sa app para sa personal na sitwasyon. ' +
+    DISCLAIMER
+  )
+}
+
 const SYSTEM_PROMPT = `You are the BatasMo Informational Assistant, representing a local law firm in the Philippines.
 
 You must base all your answers strictly on Philippine Law, specifically the Civil Code of the Philippines and local legal procedures.
@@ -225,12 +286,13 @@ Deno.serve(async (req) => {
   const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
   const geminiApiKey = String(Deno.env.get('GEMINI_API_KEY') || '').trim()
   const geminiModel = String(Deno.env.get('GEMINI_MODEL') || DEFAULT_GEMINI_MODEL).trim() || DEFAULT_GEMINI_MODEL
+  const useFreePresentationMode = isFreeProviderMode()
 
   if (!supabaseUrl || !supabaseAnonKey) {
     return json({ error: 'Server misconfigured' }, 500)
   }
 
-  if (!geminiApiKey) {
+  if (!geminiApiKey && !useFreePresentationMode) {
     return json({ error: 'AI service unavailable' }, 500)
   }
 
@@ -263,6 +325,11 @@ Deno.serve(async (req) => {
     return json({ error: 'Message is required' }, 400)
   }
 
+  if (useFreePresentationMode) {
+    const reply = buildPresentationReply(message)
+    return json({ reply, kind: 'informational' }, 200)
+  }
+
   try {
     const reply = await generateInformationalReply({
       apiKey: geminiApiKey,
@@ -271,7 +338,7 @@ Deno.serve(async (req) => {
       history,
     })
 
-    return json({ reply }, 200)
+    return json({ reply, kind: 'answer' }, 200)
   } catch (error) {
     console.error('[informational-ai-assistant] Gemini error:', error)
     const detail = error instanceof Error ? error.message : 'Failed to generate assistant response'
