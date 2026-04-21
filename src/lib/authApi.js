@@ -237,8 +237,22 @@ export async function signInWithEmail({ email, password }) {
 
   if (data?.user) {
     const meta = data.user.user_metadata || {}
-    const dbRole = normalizeRole(meta.role || 'Client')
-    const dbName = meta.full_name || normalizedEmail
+    let dbRole = normalizeRole(meta.role || 'Client')
+    let dbName = meta.full_name || normalizedEmail
+
+    // Prefer `profiles.role` so Admin (and other roles) stay correct even if auth metadata is stale.
+    const { data: profileRow } = await supabase
+      .from('profiles')
+      .select('role, full_name')
+      .eq('id', data.user.id)
+      .maybeSingle()
+
+    if (profileRow?.role) {
+      dbRole = normalizeRole(profileRow.role)
+    }
+    if (profileRow?.full_name) {
+      dbName = String(profileRow.full_name).trim() || dbName
+    }
 
     // Update profile in background (don't wait)
     void Promise.resolve(
