@@ -184,6 +184,7 @@ function MeetingView({ meetingId, onLeave }) {
     join,
     leave,
     participants,
+    localParticipant,
     toggleMic,
     toggleWebcam,
     localMicOn,
@@ -270,17 +271,45 @@ function MeetingView({ meetingId, onLeave }) {
         </div>
       )}
 
-      {joinState === 'JOINED' && (
-        <div
-          className={`vc-grid ${[...participants.keys()].length <= 2 ? 'vc-grid--sm' : 'vc-grid--lg'}`}
-        >
-          {[...participants.keys()].map((pid) => (
-            <VideoErrorBoundary key={`eb-${pid}`}>
-              <ParticipantView key={pid} participantId={pid} />
-            </VideoErrorBoundary>
-          ))}
-        </div>
-      )}
+      {joinState === 'JOINED' && (() => {
+        const participantIds = [...participants.keys()];
+        const localParticipantId = localParticipant?.id || null;
+        const remoteParticipantIds = participantIds.filter((pid) => String(pid) !== String(localParticipantId));
+        const primaryParticipantId = remoteParticipantIds[0] || participantIds[0] || null;
+        const secondaryParticipantId =
+          localParticipantId && String(localParticipantId) !== String(primaryParticipantId)
+            ? localParticipantId
+            : remoteParticipantIds[1] || null;
+
+        if (participantIds.length <= 2 && primaryParticipantId) {
+          return (
+            <div className="vc-stage">
+              <div className="vc-stage__primary">
+                <VideoErrorBoundary key={`eb-primary-${primaryParticipantId}`}>
+                  <ParticipantView key={primaryParticipantId} participantId={primaryParticipantId} />
+                </VideoErrorBoundary>
+              </div>
+              {secondaryParticipantId ? (
+                <div className="vc-stage__pip">
+                  <VideoErrorBoundary key={`eb-secondary-${secondaryParticipantId}`}>
+                    <ParticipantView key={secondaryParticipantId} participantId={secondaryParticipantId} />
+                  </VideoErrorBoundary>
+                </div>
+              ) : null}
+            </div>
+          );
+        }
+
+        return (
+          <div className={`vc-grid ${participantIds.length <= 2 ? 'vc-grid--sm' : 'vc-grid--lg'}`}>
+            {participantIds.map((pid) => (
+              <VideoErrorBoundary key={`eb-${pid}`}>
+                <ParticipantView key={pid} participantId={pid} />
+              </VideoErrorBoundary>
+            ))}
+          </div>
+        );
+      })()}
 
       {joinState === 'JOINED' ? (
         <Controls
