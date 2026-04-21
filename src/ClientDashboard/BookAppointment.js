@@ -363,7 +363,7 @@ function BookAppointment({ onNavigate, profile }) {
       try {
         await assertNoActiveAppointmentForClient(profile.id);
       } catch (preCheckError) {
-        setSubmitError(preCheckError?.message || 'Hindi ka pa puwedeng mag-book ng bagong consultation.');
+        setSubmitError(preCheckError?.message || 'You cannot book a new consultation right now.');
         return;
       }
 

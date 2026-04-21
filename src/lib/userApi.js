@@ -2723,7 +2723,7 @@ export async function isScheduleWindowEnforcementEnabled() {
 // blocks a new booking. Anything NOT in this list is treated as "active"
 // so a stale pending booking (left behind by a cancelled PayMongo
 // checkout) still blocks a second booking.
-const DOUBLE_BOOKING_INACTIVE_STATUSES = [
+const DOUBLE_BOOKING_INACTIVE_STATUSES = new Set([
   'completed',
   'cancelled',
   'canceled',
@@ -2733,7 +2733,7 @@ const DOUBLE_BOOKING_INACTIVE_STATUSES = [
   'expired',
   'no_show',
   'noshow',
-]
+])
 
 export async function assertNoActiveAppointmentForClient(clientId) {
   if (!clientId) return
@@ -2743,41 +2743,51 @@ export async function assertNoActiveAppointmentForClient(clientId) {
     return
   }
 
+  // Fetch all of this client's appointments and decide activeness in JS so
+  // we don't have to fight PostgREST's NOT IN syntax for enum columns.
   const { data, error } = await supabase
     .from('appointments')
     .select('id, title, status, scheduled_at')
     .eq('client_id', clientId)
-    .not('status', 'in', `(${DOUBLE_BOOKING_INACTIVE_STATUSES.map((s) => `"${s}"`).join(',')})`)
     .order('scheduled_at', { ascending: true })
-    .limit(5)
+    .limit(200)
 
   if (error) {
     // Do NOT silently allow the booking if the check fails — fail closed.
     console.error('[booking] active-appointment check failed', error)
     const err = new Error(
-      'Hindi ma-verify kung may active appointment ka. Pakisubukan ulit mamaya.',
+      'Cannot verify your existing appointments right now. Please try again in a moment.',
     )
     err.code = 'DOUBLE_BOOKING_CHECK_FAILED'
     throw err
   }
 
-  if (Array.isArray(data) && data.length > 0) {
-    const existing = data[0]
+  const activeRows = (data || []).filter((row) => {
+    const normalized = String(row?.status || '').toLowerCase().trim()
+    if (!normalized) return true
+    return !DOUBLE_BOOKING_INACTIVE_STATUSES.has(normalized)
+  })
+
+  if (activeRows.length > 0) {
+    const existing = activeRows[0]
     console.warn('[booking] double-booking BLOCKED', {
       clientId,
       existingAppointmentId: existing.id,
       existingStatus: existing.status,
       existingTitle: existing.title,
-      totalActive: data.length,
+      totalActive: activeRows.length,
     })
     const err = new Error(
-      `Hindi ka pa puwedeng mag-book ng bagong consultation. May active appointment ka pa (${existing.title || 'Legal Consultation'}, status: ${existing.status || 'unknown'}). Tapusin o i-cancel muna ito.`,
+      `You cannot book a new consultation yet. You already have an active appointment (${existing.title || 'Legal Consultation'}, status: ${existing.status || 'unknown'}). Please finish or cancel it first.`,
     )
     err.code = 'DOUBLE_BOOKING_BLOCKED'
     throw err
   }
 
-  console.info('[booking] double-booking check passed -> no active appointment found')
+  console.info('[booking] double-booking check passed -> no active appointment found', {
+    totalFetched: (data || []).length,
+    activeCount: activeRows.length,
+  })
 }
 
 export async function createAppointmentBooking({

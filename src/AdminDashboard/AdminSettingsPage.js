@@ -166,8 +166,8 @@ const AdminSettingsPage = ({ onNavigate = () => {}, profile = {}, onSignOut = ()
       nextValue: !enforceScheduleWindow,
       setter: setEnforceScheduleWindow,
       labels: {
-        onToast: 'Consultation schedule window is now ENFORCED. Only opens at the booked time.',
-        offToast: 'Consultation schedule window enforcement is OFF. Paid clients can enter anytime.',
+        onToast: 'Consultation schedule window is now ENFORCED. Clients and attorneys can only enter at the booked time.',
+        offToast: 'Consultation schedule window enforcement is OFF. Paid clients and attorneys can enter anytime.',
       },
     });
   const navigate = (to) => {
@@ -266,7 +266,7 @@ const AdminSettingsPage = ({ onNavigate = () => {}, profile = {}, onSignOut = ()
             <ConfigToggle
               icon={<Clock size={18} />}
               title="Enforce Consultation Schedule Window"
-              onLabel="ON — Client at attorney can only enter the chatroom/video call once the booked date and time arrives."
+              onLabel="ON — Client and attorney can only enter the chatroom/video call once the booked date and time arrives."
               offLabel="OFF — Once paid, both client and attorney can enter the consultation anytime. (Bypass mode)"
               checked={enforceScheduleWindow}
               loading={loadingConfig}
