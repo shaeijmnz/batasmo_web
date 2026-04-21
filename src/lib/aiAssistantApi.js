@@ -128,6 +128,32 @@ const isLikelyAuthFailure = ({ statusCode, message }) => {
   );
 };
 
+const mapAssistantProviderFailureMessage = (message) => {
+  const normalized = String(message || '').toLowerCase();
+  if (!normalized) return '';
+
+  const isQuotaError =
+    normalized.includes('quota exceeded') ||
+    normalized.includes('rate limit') ||
+    normalized.includes('limit: 0') ||
+    normalized.includes('exceeded your current quota');
+
+  if (isQuotaError) {
+    return 'AI assistant is temporarily unavailable due to provider quota limits. Please try again in a minute.';
+  }
+
+  const isHighDemandError =
+    normalized.includes('high demand') ||
+    normalized.includes('temporarily unavailable') ||
+    normalized.includes('please try again later');
+
+  if (isHighDemandError) {
+    return 'AI assistant is currently experiencing high demand. Please try again shortly.';
+  }
+
+  return '';
+};
+
 const extractFunctionError = async (error) => {
   let detailedMessage =
     String(error?.details || '').trim() ||
@@ -147,6 +173,11 @@ const extractFunctionError = async (error) => {
 
   if (Number.isFinite(statusCode) && statusCode > 0) {
     detailedMessage = `Assistant request failed (${statusCode}): ${detailedMessage}`;
+  }
+
+  const providerFriendlyMessage = mapAssistantProviderFailureMessage(detailedMessage);
+  if (providerFriendlyMessage) {
+    detailedMessage = providerFriendlyMessage;
   }
 
   return {
