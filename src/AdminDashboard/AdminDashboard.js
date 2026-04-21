@@ -941,10 +941,13 @@ const Dashboard = ({ onNavigate, onSignOut, profile }) => {
             <section className="info-card">
               <div className="card-header">
                 <h4>Recent Requests</h4>
-                <a href="#" className="view-all" onClick={(event) => {
-                  event.preventDefault();
-                  navigate('/requests');
-                }}>View All</a>
+                <button
+                  type="button"
+                  className="view-all"
+                  onClick={() => navigate('/requests')}
+                >
+                  View All
+                </button>
               </div>
               <div className="list-stack">
                 {recentRequests.length === 0 ? (
@@ -960,10 +963,13 @@ const Dashboard = ({ onNavigate, onSignOut, profile }) => {
             <section className="info-card">
               <div className="card-header">
                 <h4>Top Attorneys</h4>
-                <a href="#" className="view-all" onClick={(event) => {
-                  event.preventDefault();
-                  navigate('/attorneys');
-                }}>View All</a>
+                <button
+                  type="button"
+                  className="view-all"
+                  onClick={() => navigate('/attorneys')}
+                >
+                  View All
+                </button>
               </div>
               <div className="list-stack">
                 {topAttorneys.length === 0 ? (
