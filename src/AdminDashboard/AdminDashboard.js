@@ -124,7 +124,7 @@ const mapAdminPathToPage = (path) => {
   if (path === '/requests') return 'admin-requests';
   if (path === '/consultations') return 'admin-consultations';
   if (path === '/reports') return 'admin-reports';
-  if (path === '/settings') return 'admin-profile';
+  if (path === '/settings') return 'admin-settings';
   return 'admin-home';
 };
 
@@ -879,25 +879,13 @@ const Dashboard = ({ onNavigate, onSignOut, profile }) => {
         <div className="scroll-content">
           {/* Welcome Section */}
           <section className="welcome-section">
-            <div className="header-container">
+            <div
+              className="header-container"
+              style={{ backgroundImage: `url(${process.env.PUBLIC_URL || ''}/lady-justice/lady-justice.jpg)` }}
+            >
               <div className="header-content">
                 <h1>Welcome Back, {profile?.full_name ? profile.full_name.split(' ')[0] : 'Admin'}</h1>
                 <p>Here's what's happening with your legal matters today.</p>
-              </div>
-              <div className="header-media" aria-hidden="true">
-                <img
-                  src="/lady-justice/lady-justice.jpg"
-                  alt=""
-                  className="header-image"
-                  onError={(event) => {
-                    event.currentTarget.style.display = 'none';
-                  }}
-                />
-                <button type="button" className="header-play-button" aria-label="Play intro" onClick={() => handleQuickAction('Intro video coming soon')}>
-                  <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
-                    <path d="M8 5v14l11-7z" fill="currentColor" />
-                  </svg>
-                </button>
               </div>
               <div className="header-overlay"></div>
             </div>

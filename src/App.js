@@ -46,16 +46,17 @@ const AttorneyProfile = lazy(() => import('./AttorneyDashboard/AttorneyProfile')
 const ManageAvailability = lazy(() => import('./AttorneyDashboard/ManageAvailability'));
 
 const AdminDashboard = lazy(() => import('./AdminDashboard/AdminDashboard'));
-const AdminClients = lazy(() => import('./AdminDashboard/AdminClients'));
-const AdminAttorneys = lazy(() => import('./AdminDashboard/AdminAttorneys'));
-const AdminRequests = lazy(() => import('./AdminDashboard/AdminRequests'));
-const AdminConsultations = lazy(() => import('./AdminDashboard/AdminConsultations'));
+const AdminClients = lazy(() => import('./AdminDashboard/AdminClientsPage'));
+const AdminAttorneys = lazy(() => import('./AdminDashboard/AdminAttorneysPage'));
+const AdminRequests = lazy(() => import('./AdminDashboard/AdminRequestsPage'));
+const AdminConsultations = lazy(() => import('./AdminDashboard/AdminConsultationsPage'));
+const AdminReports = lazy(() => import('./AdminDashboard/AdminReportsPage'));
+const AdminSettingsPage = lazy(() => import('./AdminDashboard/AdminSettingsPage'));
 const AdminConsultationStats = lazy(() => import('./AdminDashboard/AdminConsultationStats'));
 const AdminUsers = lazy(() => import('./AdminDashboard/AdminUsers'));
 const AdminAddUser = lazy(() => import('./AdminDashboard/AdminAddUser'));
 const AdminUserLogs = lazy(() => import('./AdminDashboard/AdminUserLogs'));
 const AdminNotarialRequests = lazy(() => import('./AdminDashboard/AdminNotarialRequests'));
-const AdminReports = lazy(() => import('./AdminDashboard/AdminReports'));
 const AdminProfile = lazy(() => import('./AdminDashboard/AdminProfile'));
 const AdminCMS = lazy(() => import('./AdminDashboard/AdminCMS'));
 
@@ -99,6 +100,7 @@ const ADMIN_PAGES = [
   'admin-reports',
   'admin-cms',
   'admin-profile',
+  'admin-settings',
 ]
 
 const canAccessPage = (role, targetPage) => {
@@ -621,15 +623,16 @@ function App() {
   if (page === 'manage-availability') return renderLazy(<ManageAvailability onNavigate={handleNavigate} profile={currentProfile} />);
   if (page === 'admin-home') return renderLazy(<AdminDashboard onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} />);
   if (page === 'admin-users') return renderLazy(<AdminUsers onNavigate={handleNavigate} />);
-  if (page === 'admin-clients') return renderLazy(<AdminClients onNavigate={handleNavigate} />);
-  if (page === 'admin-attorneys') return renderLazy(<AdminAttorneys onNavigate={handleNavigate} />);
+  if (page === 'admin-clients') return renderLazy(<AdminClients onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} />);
+  if (page === 'admin-attorneys') return renderLazy(<AdminAttorneys onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} />);
   if (page === 'admin-add-user') return renderLazy(<AdminAddUser onNavigate={handleNavigate} />);
   if (page === 'admin-user-logs') return renderLazy(<AdminUserLogs onNavigate={handleNavigate} />);
-  if (page === 'admin-requests') return renderLazy(<AdminRequests onNavigate={handleNavigate} />);
-  if (page === 'admin-consultations') return renderLazy(<AdminConsultations onNavigate={handleNavigate} />);
+  if (page === 'admin-requests') return renderLazy(<AdminRequests onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} />);
+  if (page === 'admin-consultations') return renderLazy(<AdminConsultations onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} />);
   if (page === 'admin-consultation-stats') return renderLazy(<AdminConsultationStats onNavigate={handleNavigate} />);
   if (page === 'admin-notarial') return renderLazy(<AdminNotarialRequests onNavigate={handleNavigate} />);
-  if (page === 'admin-reports') return renderLazy(<AdminReports onNavigate={handleNavigate} />);
+  if (page === 'admin-reports') return renderLazy(<AdminReports onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} />);
+  if (page === 'admin-settings') return renderLazy(<AdminSettingsPage onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} />);
   if (page === 'admin-cms') return renderLazy(<AdminCMS onNavigate={handleNavigate} />);
   if (page === 'admin-profile') return renderLazy(<AdminProfile onNavigate={handleNavigate} onSignOut={handleSignOut} />);
 
