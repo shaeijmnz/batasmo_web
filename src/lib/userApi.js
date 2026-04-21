@@ -3579,6 +3579,46 @@ export function subscribeToAttorneyAppointments(attorneyId, onChange) {
   }
 }
 
+export function subscribeToAttorneyNotifications(attorneyId, onChange) {
+  if (!attorneyId) {
+    return () => {}
+  }
+
+  const channel = supabase
+    .channel(`attorney-notifications:${attorneyId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'notifications',
+        filter: `user_id=eq.${attorneyId}`,
+      },
+      () => {
+        if (typeof onChange === 'function') {
+          onChange()
+        }
+      },
+    )
+    .subscribe()
+
+  return () => {
+    supabase.removeChannel(channel)
+  }
+}
+
+export async function markAttorneyNotificationsAsRead(attorneyId) {
+  if (!attorneyId) return
+
+  const { error } = await supabase
+    .from('notifications')
+    .update({ is_read: true })
+    .eq('user_id', attorneyId)
+    .eq('is_read', false)
+
+  if (error) throw error
+}
+
 export function subscribeToAvailabilitySlots(onChange) {
   const channel = supabase
     .channel('availability-slots:realtime')

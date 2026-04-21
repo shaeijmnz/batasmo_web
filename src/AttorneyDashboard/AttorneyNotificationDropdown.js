@@ -83,8 +83,15 @@ function typePillLabel(type) {
 /**
  * Shared attorney notification dropdown: hierarchy, type icons, readable body text.
  */
-export default function AttorneyNotificationDropdown({ open, onClose, notifications = [] }) {
+export default function AttorneyNotificationDropdown({
+  open,
+  onClose,
+  notifications = [],
+  onMarkAllRead,
+  isMarkingAllRead = false,
+}) {
   if (!open) return null;
+  const hasUnread = notifications.some((n) => n.unread);
 
   return (
     <>
@@ -92,9 +99,19 @@ export default function AttorneyNotificationDropdown({ open, onClose, notificati
       <div className="atty-notif-panel" role="dialog" aria-label="Notifications">
         <div className="atty-notif-panel__header">
           <span className="atty-notif-panel__title">Notifications</span>
-          <button type="button" className="atty-notif-panel__close" onClick={onClose}>
-            ✕
-          </button>
+          <div className="atty-notif-panel__header-actions">
+            <button
+              type="button"
+              className="atty-notif-panel__mark-read"
+              onClick={onMarkAllRead}
+              disabled={!hasUnread || isMarkingAllRead}
+            >
+              {isMarkingAllRead ? 'Marking...' : 'Mark all as read'}
+            </button>
+            <button type="button" className="atty-notif-panel__close" onClick={onClose}>
+              ✕
+            </button>
+          </div>
         </div>
         <div className="atty-notif-panel__list">
           {notifications.length === 0 ? (

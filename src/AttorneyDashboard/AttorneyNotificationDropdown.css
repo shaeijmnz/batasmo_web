@@ -42,6 +42,36 @@
   color: #f4f8ff;
 }
 
+.atty-notif-panel__header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.atty-notif-panel__mark-read {
+  border: 1px solid rgba(147, 197, 253, 0.38);
+  background: rgba(59, 130, 246, 0.16);
+  color: #cfe1ff;
+  border-radius: 7px;
+  padding: 4px 9px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.atty-notif-panel__mark-read:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.3);
+  border-color: rgba(147, 197, 253, 0.52);
+  color: #f6fbff;
+}
+
+.atty-notif-panel__mark-read:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .atty-notif-panel__close {
   border: 0;
   padding: 4px 8px;

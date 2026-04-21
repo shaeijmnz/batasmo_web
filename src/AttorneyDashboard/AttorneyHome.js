@@ -4,7 +4,9 @@ import './AttorneyHome.css';
 import {
   fetchAttorneyHomeData,
   isConsultationChatWindowOpen,
+  markAttorneyNotificationsAsRead,
   subscribeToAttorneyAppointments,
+  subscribeToAttorneyNotifications,
   calendarDaysFromTodayLocal,
 } from '../lib/userApi';
 import AttorneyNotificationDropdown from './AttorneyNotificationDropdown';
@@ -80,6 +82,8 @@ function AttorneyHome({ onNavigate, profile }) {
   const [notifOpen, setNotifOpen] = useState(false);
   const [consultations, setConsultations] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [locallyReadNotificationIds, setLocallyReadNotificationIds] = useState(new Set());
+  const [isMarkingNotificationsRead, setIsMarkingNotificationsRead] = useState(false);
   const [statsData, setStatsData] = useState({
     myAppointmentCount: 0,
   });
@@ -95,6 +99,16 @@ function AttorneyHome({ onNavigate, profile }) {
         if (isMounted) {
           setConsultations(data.consultations);
           setNotifications(data.notifications);
+          setLocallyReadNotificationIds((prev) => {
+            const existingIds = new Set(data.notifications.map((item) => item.id));
+            const next = new Set();
+            prev.forEach((id) => {
+              if (existingIds.has(id)) {
+                next.add(id);
+              }
+            });
+            return next;
+          });
           setStatsData(data.stats);
         }
       } catch (error) {
@@ -109,10 +123,14 @@ function AttorneyHome({ onNavigate, profile }) {
     const unsubscribe = subscribeToAttorneyAppointments(profile?.id, () => {
       loadData();
     });
+    const unsubscribeNotifications = subscribeToAttorneyNotifications(profile?.id, () => {
+      loadData();
+    });
 
     return () => {
       isMounted = false;
       unsubscribe();
+      unsubscribeNotifications();
     };
   }, [profile?.id]);
 
@@ -123,8 +141,37 @@ function AttorneyHome({ onNavigate, profile }) {
 
   const sortedConsultations = [...consultations].sort((a, b) => new Date(a.date) - new Date(b.date));
   const upcomingCount = sortedConsultations.length;
-  const unreadCount = notifications.filter((n) => n.unread).length;
+  const unreadCount = notifications.filter((n) => n.unread && !locallyReadNotificationIds.has(n.id)).length;
   const nextConsultation = sortedConsultations[0] || null;
+
+  const handleMarkAllNotificationsRead = async () => {
+    const unreadIds = notifications.filter((item) => item.unread).map((item) => item.id);
+    if (!unreadIds.length || !profile?.id || isMarkingNotificationsRead) return;
+
+    setIsMarkingNotificationsRead(true);
+    setLocallyReadNotificationIds((prev) => {
+      const next = new Set(prev);
+      unreadIds.forEach((id) => next.add(id));
+      return next;
+    });
+    setNotifications((prev) => prev.map((item) => (item.unread ? { ...item, unread: false } : item)));
+
+    try {
+      await markAttorneyNotificationsAsRead(profile.id);
+    } catch (error) {
+      setLocallyReadNotificationIds((prev) => {
+        const next = new Set(prev);
+        unreadIds.forEach((id) => next.delete(id));
+        return next;
+      });
+      setNotifications((prev) =>
+        prev.map((item) => (unreadIds.includes(item.id) ? { ...item, unread: true } : item)),
+      );
+      setLoadError(error.message || 'Failed to mark notifications as read.');
+    } finally {
+      setIsMarkingNotificationsRead(false);
+    }
+  };
 
   const formatShortDate = (dateStr) => {
     const date = new Date(dateStr);
@@ -196,6 +243,8 @@ function AttorneyHome({ onNavigate, profile }) {
             open={notifOpen}
             onClose={() => setNotifOpen(false)}
             notifications={notifications}
+            onMarkAllRead={handleMarkAllNotificationsRead}
+            isMarkingAllRead={isMarkingNotificationsRead}
           />
           <div className="att-profile" style={{ cursor: 'pointer' }} onClick={() => onNavigate('attorney-profile')}>
             <div className="att-profile__info">
