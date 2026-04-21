@@ -2540,6 +2540,69 @@ export async function fetchPublicLandingData() {
   return { content, attorneys: gallery }
 }
 
+export async function getAppConfig(key, fallback = null) {
+  if (!key) return fallback
+  try {
+    const { data, error } = await supabase.rpc('get_app_config', { p_key: key })
+    if (error) {
+      console.warn('[app-config] get failed, returning fallback', error)
+      return fallback
+    }
+    if (data === null || data === undefined) return fallback
+    return data
+  } catch (error) {
+    console.warn('[app-config] get crashed, returning fallback', error)
+    return fallback
+  }
+}
+
+export async function setAppConfig(key, value) {
+  if (!key) throw new Error('Missing config key')
+  const { data, error } = await supabase.rpc('set_app_config', {
+    p_key: key,
+    p_value: value,
+  })
+  if (error) throw error
+  return data
+}
+
+export async function isDoubleBookingPreventionEnabled() {
+  // Default true: if the flag is missing or the fetch fails we err on the
+  // side of protecting the user from accidental double-bookings.
+  const value = await getAppConfig('prevent_double_booking', true)
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'string') return value.toLowerCase() === 'true'
+  return Boolean(value)
+}
+
+async function assertNoActiveAppointmentForClient(clientId) {
+  if (!clientId) return
+  const enabled = await isDoubleBookingPreventionEnabled()
+  if (!enabled) return
+
+  const { data, error } = await supabase
+    .from('appointments')
+    .select('id, title, status, scheduled_at')
+    .eq('client_id', clientId)
+    .in('status', ['pending', 'confirmed', 'rescheduled', 'started', 'in_progress', 'active'])
+    .order('scheduled_at', { ascending: true })
+    .limit(1)
+
+  if (error) {
+    console.warn('[booking] active-appointment check failed', error)
+    return
+  }
+
+  if (Array.isArray(data) && data.length > 0) {
+    const existing = data[0]
+    const err = new Error(
+      `Hindi ka pa puwedeng mag-book ng bagong consultation. May active appointment ka pa (${existing.title || 'Legal Consultation'}). Tapusin o i-cancel muna ito.`,
+    )
+    err.code = 'DOUBLE_BOOKING_BLOCKED'
+    throw err
+  }
+}
+
 export async function createAppointmentBooking({
   clientId,
   attorneyId,
@@ -2560,6 +2623,8 @@ export async function createAppointmentBooking({
   }
 
   const resolvedClientId = user.id
+
+  await assertNoActiveAppointmentForClient(resolvedClientId)
   if (clientId && clientId !== resolvedClientId) {
     console.warn('[booking] client payload id mismatch, using authenticated id', {
       providedClientId: clientId,

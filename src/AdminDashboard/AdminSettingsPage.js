@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
-import { 
-  LayoutDashboard, Users, Scale, FileText, MessageSquare, 
+import React, { useEffect, useState } from 'react';
+import {
+  LayoutDashboard, Users, Scale, FileText, MessageSquare,
   BarChart3, Settings as SettingsIcon, LogOut, Menu, Bell,
-  User, Lock, BellRing, CreditCard, Save, Globe, Smartphone, Download
+  User, Lock, BellRing, CreditCard, Save, Globe, Smartphone, Download, ShieldCheck
 } from 'lucide-react';
+import { getAppConfig, setAppConfig } from '../lib/userApi';
+import { showWindowToast } from './adminUtils';
 import './settings.css';
 import './AdminTheme.css';
 
@@ -12,6 +14,43 @@ const handleQuickAction = (message) => window.alert(message);
 const AdminSettingsPage = ({ onNavigate = () => {}, profile = {}, onSignOut = () => {} }) => {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('Profile');
+  const [preventDoubleBooking, setPreventDoubleBooking] = useState(true);
+  const [loadingConfig, setLoadingConfig] = useState(true);
+  const [savingConfig, setSavingConfig] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      const current = await getAppConfig('prevent_double_booking', true);
+      if (!isMounted) return;
+      const enabled = typeof current === 'boolean' ? current : String(current).toLowerCase() === 'true';
+      setPreventDoubleBooking(enabled);
+      setLoadingConfig(false);
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const toggleDoubleBooking = async () => {
+    if (savingConfig) return;
+    const next = !preventDoubleBooking;
+    setPreventDoubleBooking(next);
+    setSavingConfig(true);
+    try {
+      await setAppConfig('prevent_double_booking', next);
+      showWindowToast(
+        next
+          ? 'Double-booking prevention is now ON. Clients cannot book while they have an active appointment.'
+          : 'Double-booking prevention is now OFF. Clients can book unlimited appointments.',
+      );
+    } catch (error) {
+      setPreventDoubleBooking(!next);
+      showWindowToast(error.message || 'Failed to update setting.');
+    } finally {
+      setSavingConfig(false);
+    }
+  };
   const navigate = (to) => {
     const map = {
           "/": "admin-home",
@@ -94,6 +133,85 @@ const AdminSettingsPage = ({ onNavigate = () => {}, profile = {}, onSignOut = ()
           </div>
 
           <div className="settings-content">
+            <div
+              className="card"
+              style={{
+                borderLeft: `4px solid ${preventDoubleBooking ? '#22c55e' : '#ef4444'}`,
+                marginBottom: 16,
+              }}
+            >
+              <h3 className="card-title">
+                <ShieldCheck size={18} /> Booking Rules
+              </h3>
+              <div
+                className="toggle-item"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 16,
+                  paddingTop: 8,
+                }}
+              >
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '1rem' }}>Prevent Client Double Booking</h4>
+                  <p style={{ margin: '4px 0 0', color: '#6B7280', fontSize: '0.85rem' }}>
+                    {preventDoubleBooking
+                      ? 'ON — Clients with an active appointment cannot book another one until it is finished or cancelled.'
+                      : 'OFF — Clients can book unlimited appointments even if they already have active ones. (Bypass mode)'}
+                  </p>
+                  {loadingConfig ? (
+                    <p style={{ margin: '4px 0 0', color: '#94a3b8', fontSize: '0.75rem' }}>
+                      Loading current setting...
+                    </p>
+                  ) : null}
+                </div>
+                <label
+                  style={{
+                    position: 'relative',
+                    display: 'inline-block',
+                    width: 56,
+                    height: 30,
+                    flexShrink: 0,
+                    cursor: savingConfig ? 'wait' : 'pointer',
+                    opacity: savingConfig ? 0.6 : 1,
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={preventDoubleBooking}
+                    onChange={toggleDoubleBooking}
+                    disabled={savingConfig || loadingConfig}
+                    style={{ opacity: 0, width: 0, height: 0 }}
+                  />
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      background: preventDoubleBooking ? '#22c55e' : '#cbd5e1',
+                      borderRadius: 999,
+                      transition: 'background 0.2s ease',
+                    }}
+                  />
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      position: 'absolute',
+                      top: 3,
+                      left: preventDoubleBooking ? 29 : 3,
+                      width: 24,
+                      height: 24,
+                      background: '#ffffff',
+                      borderRadius: '50%',
+                      transition: 'left 0.2s ease',
+                      boxShadow: '0 2px 6px rgba(15, 23, 42, 0.25)',
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
+
             {activeTab === 'Profile' && <ProfileSection />}
             {activeTab === 'Security' && <SecuritySection />}
             {activeTab === 'Notifications' && <NotificationsSection />}
