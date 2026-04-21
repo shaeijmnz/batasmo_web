@@ -1529,17 +1529,23 @@ export const isConsultationChatWindowOpen = ({
   nowValue,
   paymentStatus,
 } = {}) => {
-  // DEV/TEST: full bypass — skip payment/status + schedule checks (use only while testing).
-  if (isReactAppBypassChatWindowEnabled()) return true
-
   if (!isConsultationUnlockedForChat({ status, paymentStatus })) return false
 
-  // Admin setting: if the schedule window enforcement is OFF, anyone who
-  // passed the payment/status gate can enter the chat anytime. This is the
-  // "bypass" mode used for presentations/demos. Default: ON (enforce).
-  if (!coerceBoolValue(getCachedAppConfig('enforce_schedule_window', true), true)) {
-    return true
-  }
+  // Admin toggle is authoritative.
+  //   ON  -> enforce the schedule window, even if the legacy dev bypass
+  //          env var is turned on.
+  //   OFF -> paid clients/attorneys can enter anytime (demo bypass).
+  const adminEnforces = coerceBoolValue(
+    getCachedAppConfig('enforce_schedule_window', true),
+    true,
+  )
+
+  if (!adminEnforces) return true
+
+  // Legacy dev bypass (REACT_APP_BYPASS_CHAT_WINDOW) only helps when the
+  // admin toggle is unknown/unreachable. Since the admin explicitly
+  // enforces above, we intentionally ignore the dev flag here so the
+  // admin setting can never be undermined by a stale env var.
 
   const scheduled = parseChatScheduleDate({ scheduledAt, slotDate, slotTime })
   if (!scheduled) return true
@@ -1862,7 +1868,12 @@ async function fetchClientAppointmentsRowsForChat(userId) {
 }
 
 const clientChatRowPassesFilters = (item, paidIds) => {
-  if (isReactAppBypassChatWindowEnabled()) {
+  const adminEnforces = coerceBoolValue(
+    getCachedAppConfig('enforce_schedule_window', true),
+    true,
+  )
+  // Only honor the legacy dev bypass when the admin toggle is OFF.
+  if (!adminEnforces && isReactAppBypassChatWindowEnabled()) {
     const s = String(item.status || '').toLowerCase()
     return !['cancelled', 'rejected', 'completed'].includes(s)
   }
@@ -3175,7 +3186,11 @@ async function getOrCreateConsultationRoom(appointmentId) {
   // Make sure the admin toggle is loaded so the sync checks below use the
   // latest value instead of the conservative default.
   await ensureAppConfigLoaded()
-  const devBypass = isReactAppBypassChatWindowEnabled()
+  const adminEnforcesSchedule = coerceBoolValue(
+    getCachedAppConfig('enforce_schedule_window', true),
+    true,
+  )
+  const devBypass = !adminEnforcesSchedule && isReactAppBypassChatWindowEnabled()
 
   // Some DBs only have scheduled_at (no slot_date/slot_time columns). Schedule logic uses scheduled_at via parseChatScheduleDate.
   const { data: appointment, error: appointmentError } = await supabase
