@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { Suspense, lazy, useState, useRef, useEffect } from 'react';
 import './AttorneyMessages.css';
 import './AttorneyTheme.css';
 import {
@@ -18,7 +18,7 @@ import {
   clearVideoMeetingId,
   saveAttorneyConsultationSummary,
 } from '../lib/userApi';
-import VideoCallModal from '../components/VideoCallModal';
+const VideoCallModal = lazy(() => import('../components/VideoCallModal'));
 
 const CONSULTATION_TIMER_TOTAL_SECONDS = 60 * 60;
 
@@ -1000,12 +1000,14 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
       ) : null}
 
       {videoCall ? (
-        <VideoCallModal
-          meetingId={videoCall.meetingId}
-          token={videoCall.token || ''}
-          participantName={profile?.full_name || profile?.email || 'Attorney'}
-          onClose={handleCloseVideoCall}
-        />
+        <Suspense fallback={null}>
+          <VideoCallModal
+            meetingId={videoCall.meetingId}
+            token={videoCall.token || ''}
+            participantName={profile?.full_name || profile?.email || 'Attorney'}
+            onClose={handleCloseVideoCall}
+          />
+        </Suspense>
       ) : null}
     </div>
   );

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import './ChatRoom.css';
 import {
   deleteAppointmentMessage,
@@ -19,7 +19,7 @@ import {
   getVideoSdkToken,
   clearVideoMeetingId,
 } from '../lib/userApi';
-import VideoCallModal from '../components/VideoCallModal';
+const VideoCallModal = lazy(() => import('../components/VideoCallModal'));
 
 const ATTORNEY_AVATAR_BG = 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)';
 
@@ -949,12 +949,14 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
       ) : null}
 
       {videoCall ? (
-        <VideoCallModal
-          meetingId={videoCall.meetingId}
-          token={videoCall.token || ''}
-          participantName={profile?.full_name || profile?.email || 'Client'}
-          onClose={handleCloseVideoCall}
-        />
+        <Suspense fallback={null}>
+          <VideoCallModal
+            meetingId={videoCall.meetingId}
+            token={videoCall.token || ''}
+            participantName={profile?.full_name || profile?.email || 'Client'}
+            onClose={handleCloseVideoCall}
+          />
+        </Suspense>
       ) : null}
     </div>
   );

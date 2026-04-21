@@ -1,4 +1,4 @@
-import { Component, useEffect, useRef, useState } from 'react';
+import { Component, useCallback, useEffect, useRef, useState } from 'react';
 import { MeetingProvider, useMeeting, useParticipant } from '@videosdk.live/react-sdk';
 import './VideoCallModal.css';
 
@@ -46,26 +46,28 @@ function ParticipantView({ participantId }) {
   useEffect(() => {
     const el = micRef.current;
     if (!el) return;
-    if (micOn && micStream) {
-      const stream = new MediaStream([micStream.track]);
+    const track = micStream?.track;
+    if (micOn && track) {
+      const stream = new MediaStream([track]);
       el.srcObject = stream;
       el.play().catch(() => {});
     } else {
       el.srcObject = null;
     }
-  }, [micStream, micOn]);
+  }, [micOn, micStream, micStream?.track?.id]);
 
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
-    if (webcamOn && webcamStream) {
-      const stream = new MediaStream([webcamStream.track]);
+    const track = webcamStream?.track;
+    if (webcamOn && track) {
+      const stream = new MediaStream([track]);
       el.srcObject = stream;
       el.play().catch(() => {});
     } else {
       el.srcObject = null;
     }
-  }, [webcamStream, webcamOn]);
+  }, [webcamOn, webcamStream, webcamStream?.track?.id]);
 
   const initials = (displayName || '?')
     .split(' ')
@@ -172,14 +174,34 @@ function Controls({ onLeave, micOn, webcamOn, toggleMic, toggleWebcam }) {
 
 // ─── Meeting view ─────────────────────────────────────────────────────────────
 
-const JOIN_TIMEOUT_MS = 30_000;
+const JOIN_TIMEOUT_MS = 45_000;
+
+const buildTwoParticipantLayout = (participantIds, localParticipantId) => {
+  if (!Array.isArray(participantIds) || participantIds.length === 0) {
+    return { primary: null, secondary: null };
+  }
+  const remoteIds = participantIds.filter((pid) => String(pid) !== String(localParticipantId));
+  const ordered = [...remoteIds];
+  if (localParticipantId && participantIds.some((pid) => String(pid) === String(localParticipantId))) {
+    ordered.push(localParticipantId);
+  }
+  return {
+    primary: ordered[0] || null,
+    secondary: ordered[1] || null,
+  };
+};
 
 function MeetingView({ meetingId, onLeave }) {
   const [joinState, setJoinState] = useState('IDLE');
   const [joinError, setJoinError] = useState('');
+  const [participantLayoutEpoch, setParticipantLayoutEpoch] = useState(0);
   const hasJoinedRef = useRef(false);
   const timeoutRef = useRef(null);
   const retryCountRef = useRef(0);
+
+  const bumpParticipantLayout = useCallback(() => {
+    setParticipantLayoutEpoch((value) => value + 1);
+  }, []);
 
   const {
     join,
@@ -195,8 +217,24 @@ function MeetingView({ meetingId, onLeave }) {
       clearTimeout(timeoutRef.current);
       retryCountRef.current = 0;
       setJoinState('JOINED');
+      bumpParticipantLayout();
     },
     onMeetingLeft: onLeave,
+    onParticipantJoined: () => {
+      bumpParticipantLayout();
+    },
+    onParticipantLeft: () => {
+      bumpParticipantLayout();
+    },
+    onVideoStateChanged: () => {
+      bumpParticipantLayout();
+    },
+    onWebcamRequested: ({ accept }) => {
+      if (typeof accept === 'function') accept();
+    },
+    onMicRequested: ({ accept }) => {
+      if (typeof accept === 'function') accept();
+    },
     onError: (error) => {
       clearTimeout(timeoutRef.current);
       if (retryCountRef.current < 1) {
@@ -275,16 +313,14 @@ function MeetingView({ meetingId, onLeave }) {
       {joinState === 'JOINED' && (() => {
         const participantIds = [...participants.keys()];
         const localParticipantId = localParticipant?.id || null;
-        const remoteParticipantIds = participantIds.filter((pid) => String(pid) !== String(localParticipantId));
-        const primaryParticipantId = remoteParticipantIds[0] || participantIds[0] || null;
-        const secondaryParticipantId =
-          localParticipantId && String(localParticipantId) !== String(primaryParticipantId)
-            ? localParticipantId
-            : remoteParticipantIds[1] || null;
+        const { primary: primaryParticipantId, secondary: secondaryParticipantId } = buildTwoParticipantLayout(
+          participantIds,
+          localParticipantId,
+        );
 
         if (participantIds.length <= 2 && primaryParticipantId) {
           return (
-            <div className="vc-stage">
+            <div className="vc-stage" key={`vc-stage-${participantLayoutEpoch}-${participantIds.length}`}>
               <div className="vc-stage__primary">
                 <VideoErrorBoundary key={`eb-primary-${primaryParticipantId}`}>
                   <ParticipantView key={primaryParticipantId} participantId={primaryParticipantId} />
@@ -302,7 +338,10 @@ function MeetingView({ meetingId, onLeave }) {
         }
 
         return (
-          <div className={`vc-grid ${participantIds.length <= 2 ? 'vc-grid--sm' : 'vc-grid--lg'}`}>
+          <div
+            className={`vc-grid ${participantIds.length <= 2 ? 'vc-grid--sm' : 'vc-grid--lg'}`}
+            key={`vc-grid-${participantLayoutEpoch}-${participantIds.length}`}
+          >
             {participantIds.map((pid) => (
               <VideoErrorBoundary key={`eb-${pid}`}>
                 <ParticipantView key={pid} participantId={pid} />
