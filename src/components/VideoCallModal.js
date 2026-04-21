@@ -41,6 +41,7 @@ function ParticipantView({ participantId }) {
   const videoRef = useRef(null);
   const participant = useParticipant(participantId);
   const { webcamStream, micStream, webcamOn, micOn, isLocal, displayName } = participant || {};
+  const hasLiveVideo = Boolean(webcamOn && webcamStream?.track);
 
   useEffect(() => {
     const el = micRef.current;
@@ -84,10 +85,10 @@ function ParticipantView({ participantId }) {
         playsInline
         muted={isLocal}
         className="vc-participant__video"
-        style={{ display: webcamOn ? 'block' : 'none' }}
+        style={{ display: hasLiveVideo ? 'block' : 'none' }}
       />
 
-      {!webcamOn && (
+      {!hasLiveVideo && (
         <div className="vc-participant__avatar">{initials}</div>
       )}
 
