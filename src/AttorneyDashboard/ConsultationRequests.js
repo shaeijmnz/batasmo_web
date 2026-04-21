@@ -14,6 +14,13 @@ const BellIcon = () => (
     <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
   </svg>
 );
+
+const formatNotifBadgeCount = (count) => {
+  const safeCount = Number(count || 0);
+  if (safeCount <= 0) return '';
+  if (safeCount > 99) return '99+';
+  return String(safeCount);
+};
 // eslint-disable-next-line no-unused-vars
 const BackIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -236,7 +243,7 @@ function ConsultationRequests({ onNavigate, profile }) {
             aria-haspopup="dialog"
           >
             <BellIcon />
-            {unreadCount > 0 ? <span className="cr-notif-badge">{Math.min(unreadCount, 9)}</span> : null}
+            {unreadCount > 0 ? <span className="cr-notif-badge">{formatNotifBadgeCount(unreadCount)}</span> : null}
           </button>
           <AttorneyNotificationDropdown
             open={notifOpen}

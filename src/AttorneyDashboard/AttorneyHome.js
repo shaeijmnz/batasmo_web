@@ -76,6 +76,13 @@ const AnnouncementIcon = () => (
   </svg>
 );
 
+const formatNotifBadgeCount = (count) => {
+  const safeCount = Number(count || 0);
+  if (safeCount <= 0) return '';
+  if (safeCount > 99) return '99+';
+  return String(safeCount);
+};
+
 function AttorneyHome({ onNavigate, profile }) {
   const markAllReadStorageKey = `attorney-notifications-read-cutoff:${profile?.id || 'unknown'}`;
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -250,7 +257,7 @@ function AttorneyHome({ onNavigate, profile }) {
             aria-haspopup="dialog"
           >
             <BellIcon />
-            {unreadCount > 0 ? <span className="att-notif-badge">{Math.min(unreadCount, 9)}</span> : null}
+            {unreadCount > 0 ? <span className="att-notif-badge">{formatNotifBadgeCount(unreadCount)}</span> : null}
           </button>
           <AttorneyNotificationDropdown
             open={notifOpen}
