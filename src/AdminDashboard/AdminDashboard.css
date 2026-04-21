@@ -113,10 +113,6 @@ body { font-family: 'Inter', sans-serif; background: var(--bg-gray); color: var(
   padding: 40px;
   overflow: hidden;
   margin-bottom: 24px;
-  background-image: url('/lady-justice/lady justice.jpg');
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
 }
 
 /* TEXT */
