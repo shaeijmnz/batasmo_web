@@ -696,6 +696,9 @@ export async function fetchAttorneyHomeData(userId) {
   const consultFiltered = appointments
     .filter((a) => String(a.attorney_id) === String(userId))
     .filter((a) => {
+      // Consultation queue: upcoming/active schedules only. Exclude
+      // pending because those are orphaned bookings from cancelled
+      // PayMongo checkouts; the payment check below adds another layer.
       const status = String(a.status || '').toLowerCase()
       return isUpcomingAppointmentSchedule({
         scheduledAt: a.scheduled_value,
@@ -703,7 +706,6 @@ export async function fetchAttorneyHomeData(userId) {
         slotTime: a.slot_time,
         nowMs,
       }) && (
-        status === 'pending' ||
         status === 'confirmed' ||
         status === 'rescheduled' ||
         status === 'started' ||
@@ -724,18 +726,23 @@ export async function fetchAttorneyHomeData(userId) {
     paidConsultIds = new Set((txConsult || []).map((t) => t.appointment_id))
   }
 
-  const consultations = consultFiltered.map((a) => ({
-    id: a.id,
-    name: a.client_name || 'Client',
-    area: a.title || 'Consultation',
-    date: a.scheduled_value,
-    time: a.scheduled_value,
-    scheduledAt: a.scheduled_value,
-    slotDate: a.slot_date || null,
-    slotTime: a.slot_time || null,
-    status: a.status || 'pending',
-    paymentStatus: paidConsultIds.has(a.id) ? 'paid' : 'unpaid',
-  }))
+  // Only PAID consultations may surface to the attorney. A cancelled
+  // PayMongo checkout keeps the appointment row alive but without a
+  // matching paid transaction, so we exclude those here.
+  const consultations = consultFiltered
+    .filter((a) => paidConsultIds.has(a.id))
+    .map((a) => ({
+      id: a.id,
+      name: a.client_name || 'Client',
+      area: a.title || 'Consultation',
+      date: a.scheduled_value,
+      time: a.scheduled_value,
+      scheduledAt: a.scheduled_value,
+      slotDate: a.slot_date || null,
+      slotTime: a.slot_time || null,
+      status: a.status || 'confirmed',
+      paymentStatus: 'paid',
+    }))
 
   const myAppointmentCount = consultations.length
 
@@ -2244,7 +2251,33 @@ export async function fetchAttorneyConsultationRequests(userId, options = {}) {
   if (notificationsRes.error) throw notificationsRes.error
   if (paidTransactionsRes.error) throw paidTransactionsRes.error
 
+  // Build a set of appointment_ids that actually have a paid transaction
+  // so we hide unpaid / cancelled-payment appointments from the attorney.
+  const paidAppointmentIds = new Set(
+    (paidTransactionsRes.data || [])
+      .map((tx) => tx.appointment_id)
+      .filter(Boolean),
+  )
+
+  const attorneyAppointmentIds = appointments
+    .filter((item) => String(item.attorney_id) === String(userId))
+    .map((item) => item.id)
+    .filter(Boolean)
+
+  if (attorneyAppointmentIds.length) {
+    const { data: extraPaid } = await supabase
+      .from('transactions')
+      .select('appointment_id')
+      .in('appointment_id', attorneyAppointmentIds)
+      .eq('payment_status', 'paid')
+    ;(extraPaid || []).forEach((tx) => {
+      if (tx?.appointment_id) paidAppointmentIds.add(tx.appointment_id)
+    })
+  }
+
   const requests = appointments
+    .filter((item) => String(item.attorney_id) === String(userId))
+    .filter((item) => paidAppointmentIds.has(item.id))
     .filter((item) => {
       const status = String(item.status || '').toLowerCase()
       return (
@@ -2274,7 +2307,7 @@ export async function fetchAttorneyConsultationRequests(userId, options = {}) {
       area: item.title || 'Consultation',
       date: item.date_label,
       time: item.time_label,
-      payment: Number(item.amount || 0) > 0 ? 'Paid' : 'Unpaid',
+      payment: 'Paid',
       status: 'Approved',
       concern: item.notes || 'No additional notes provided.',
     }))
@@ -2686,32 +2719,65 @@ export async function isScheduleWindowEnforcementEnabled() {
   return coerceBoolValue(getCachedAppConfig('enforce_schedule_window', true), true)
 }
 
-async function assertNoActiveAppointmentForClient(clientId) {
+// Statuses that mean the appointment is already finished / no longer
+// blocks a new booking. Anything NOT in this list is treated as "active"
+// so a stale pending booking (left behind by a cancelled PayMongo
+// checkout) still blocks a second booking.
+const DOUBLE_BOOKING_INACTIVE_STATUSES = [
+  'completed',
+  'cancelled',
+  'canceled',
+  'rejected',
+  'declined',
+  'failed',
+  'expired',
+  'no_show',
+  'noshow',
+]
+
+export async function assertNoActiveAppointmentForClient(clientId) {
   if (!clientId) return
   const enabled = await isDoubleBookingPreventionEnabled()
-  if (!enabled) return
+  if (!enabled) {
+    console.info('[booking] double-booking prevention OFF -> skipping check')
+    return
+  }
 
   const { data, error } = await supabase
     .from('appointments')
     .select('id, title, status, scheduled_at')
     .eq('client_id', clientId)
-    .in('status', ['pending', 'confirmed', 'rescheduled', 'started', 'in_progress', 'active'])
+    .not('status', 'in', `(${DOUBLE_BOOKING_INACTIVE_STATUSES.map((s) => `"${s}"`).join(',')})`)
     .order('scheduled_at', { ascending: true })
-    .limit(1)
+    .limit(5)
 
   if (error) {
-    console.warn('[booking] active-appointment check failed', error)
-    return
+    // Do NOT silently allow the booking if the check fails — fail closed.
+    console.error('[booking] active-appointment check failed', error)
+    const err = new Error(
+      'Hindi ma-verify kung may active appointment ka. Pakisubukan ulit mamaya.',
+    )
+    err.code = 'DOUBLE_BOOKING_CHECK_FAILED'
+    throw err
   }
 
   if (Array.isArray(data) && data.length > 0) {
     const existing = data[0]
+    console.warn('[booking] double-booking BLOCKED', {
+      clientId,
+      existingAppointmentId: existing.id,
+      existingStatus: existing.status,
+      existingTitle: existing.title,
+      totalActive: data.length,
+    })
     const err = new Error(
-      `Hindi ka pa puwedeng mag-book ng bagong consultation. May active appointment ka pa (${existing.title || 'Legal Consultation'}). Tapusin o i-cancel muna ito.`,
+      `Hindi ka pa puwedeng mag-book ng bagong consultation. May active appointment ka pa (${existing.title || 'Legal Consultation'}, status: ${existing.status || 'unknown'}). Tapusin o i-cancel muna ito.`,
     )
     err.code = 'DOUBLE_BOOKING_BLOCKED'
     throw err
   }
+
+  console.info('[booking] double-booking check passed -> no active appointment found')
 }
 
 export async function createAppointmentBooking({

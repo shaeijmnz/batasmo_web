@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import './BookAppointment.css';
 import {
+  assertNoActiveAppointmentForClient,
   createAppointmentBooking,
   fetchBookableAttorneys,
   getAppointmentPaymentStatus,
@@ -355,6 +356,17 @@ function BookAppointment({ onNavigate, profile }) {
     try {
       setIsPaying(true);
       setSubmitError('');
+
+      // Pre-check before opening the PayMongo popup so the user sees a
+      // clean error instead of a "preparing..." window that flashes and
+      // closes when the backend throws.
+      try {
+        await assertNoActiveAppointmentForClient(profile.id);
+      } catch (preCheckError) {
+        setSubmitError(preCheckError?.message || 'Hindi ka pa puwedeng mag-book ng bagong consultation.');
+        return;
+      }
+
       checkoutWindow = window.open('', '_blank');
       if (checkoutWindow) {
         checkoutWindow.document.title = 'BatasMo Payment';
