@@ -4234,14 +4234,37 @@ export async function getOrCreateVideoMeeting(appointmentId) {
 
   const { roomId: newMeetingId, token: videoToken } = await createRes.json()
 
-  const { error: updateError } = await supabase
+  // Atomic claim: only set video_meeting_id when it is still null.
+  // This prevents attorney/client "double-create" race where each side joins different room IDs.
+  const { data: claimedRoom, error: claimError } = await supabase
     .from('consultation_rooms')
     .update({ video_meeting_id: newMeetingId })
     .eq('id', room.id)
+    .is('video_meeting_id', null)
+    .select('id, video_meeting_id')
+    .maybeSingle()
 
-  if (updateError) throw updateError
+  if (claimError) throw claimError
 
-  return { meetingId: newMeetingId, roomId: room.id, token: videoToken }
+  if (claimedRoom?.video_meeting_id) {
+    return { meetingId: claimedRoom.video_meeting_id, roomId: room.id, token: videoToken }
+  }
+
+  // Another participant already claimed/created the meeting ID first.
+  // Read and join that room instead so both users auto-connect to the same call.
+  const { data: latestRoom, error: latestRoomError } = await supabase
+    .from('consultation_rooms')
+    .select('id, video_meeting_id')
+    .eq('id', room.id)
+    .maybeSingle()
+
+  if (latestRoomError) throw latestRoomError
+  if (!latestRoom?.video_meeting_id) {
+    throw new Error('Video meeting is still initializing. Please tap Video Call again.')
+  }
+
+  const latestToken = await getVideoSdkToken()
+  return { meetingId: latestRoom.video_meeting_id, roomId: room.id, token: latestToken }
 }
 
 /**
