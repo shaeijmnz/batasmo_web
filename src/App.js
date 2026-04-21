@@ -619,7 +619,7 @@ function App() {
   if (page === 'attorney-announcements') return renderLazy(<AttorneyAnnouncements onNavigate={handleNavigate} profile={currentProfile} />);
   if (page === 'attorney-profile') return renderLazy(<AttorneyProfile onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} onProfileUpdated={setCurrentProfile} />);
   if (page === 'manage-availability') return renderLazy(<ManageAvailability onNavigate={handleNavigate} profile={currentProfile} />);
-  if (page === 'admin-home') return renderLazy(<AdminUsers onNavigate={handleNavigate} />);
+  if (page === 'admin-home') return renderLazy(<AdminDashboard onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} />);
   if (page === 'admin-users') return renderLazy(<AdminUsers onNavigate={handleNavigate} />);
   if (page === 'admin-clients') return renderLazy(<AdminClients onNavigate={handleNavigate} />);
   if (page === 'admin-attorneys') return renderLazy(<AdminAttorneys onNavigate={handleNavigate} />);
