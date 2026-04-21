@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { 
   LayoutDashboard, Users, Scale, FileText, MessageSquare, 
   BarChart3, Settings, LogOut, Menu, Star, Bell,
-  X, Send, Trash2, Eye, AlertCircle, CheckCircle, Calendar
+  X, Send, Trash2, Eye, AlertCircle, CheckCircle
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import './AdminDashboard.css';
@@ -888,20 +888,6 @@ const Dashboard = ({ onNavigate, onSignOut, profile }) => {
                 <p>Here's what's happening with your legal matters today.</p>
               </div>
               <div className="header-overlay"></div>
-            </div>
-          </section>
-
-          {/* Quick Action Cards */}
-          <section className="quick-actions">
-            <div className="action-card" onClick={() => navigate('/consultations')}>
-              <Calendar size={32} className="action-icon" />
-              <h3 className="action-title">View Consultations</h3>
-              <p className="action-description">Manage upcoming consultations</p>
-            </div>
-            <div className="action-card" onClick={() => navigate('/requests')}>
-              <FileText size={32} className="action-icon" />
-              <h3 className="action-title">Notarial Requests</h3>
-              <p className="action-description">Review pending notary requests</p>
             </div>
           </section>
 
