@@ -26,9 +26,9 @@ const ScalesIcon = ({ size = 24, color = '#f5a623' }) => (
 );
 
 const ShieldIcon = () => (
-  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#1e3a8a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#f2c879" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-    <circle cx="12" cy="12" r="3" fill="#1e3a8a" stroke="none" />
+    <circle cx="12" cy="12" r="3" fill="#f2c879" stroke="none" />
   </svg>
 );
 
@@ -322,14 +322,14 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
               <>
                 Enter the 6-digit code sent via SMS to<br />
                 <span className="otp-card__email">{destinationLabel}</span><br />
-                <span style={{ fontSize: 12, color: '#9ca3af' }}>Code is valid for 15 minutes.</span>
+                <span style={{ fontSize: 12, color: '#8b9aa7' }}>Code is valid for 15 minutes.</span>
               </>
             )}
           </p>
 
           <div className="otp-form" style={{ marginBottom: 12 }}>
             <p className="otp-card__sub" style={{ marginBottom: 8 }}>Receive code via</p>
-            <label style={{ marginRight: 16 }}>
+            <label className="otp-delivery-label" style={{ marginRight: 16 }}>
               <input
                 type="radio"
                 name="otp-delivery"
@@ -338,7 +338,7 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
               />
               {' '}Email
             </label>
-            <label>
+            <label className="otp-delivery-label">
               <input
                 type="radio"
                 name="otp-delivery"
@@ -350,7 +350,7 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
           </div>
 
           {delivery === 'sms' && smsSending ? (
-            <p className="otp-card__sub">Sending SMS...</p>
+            <p className="otp-sms-status">Sending SMS...</p>
           ) : null}
 
           {delivery === 'sms' && needsPhone && !smsInitDone && !smsSending ? (
@@ -360,11 +360,11 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
               </p>
               <input
                 type="tel"
+                className="otp-phone-input"
                 value={optionalPhone}
                 onChange={(ev) => setOptionalPhone(sanitizePhoneInput(ev.target.value))}
                 placeholder="09XXXXXXXXX"
                 maxLength={11}
-                style={{ width: '100%', marginBottom: 8, padding: '8px 10px', boxSizing: 'border-box' }}
               />
               <button type="submit" className="otp-btn" disabled={smsSending}>
                 Save number &amp; send SMS
@@ -398,7 +398,7 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
             </form>
           ) : null}
 
-          {errorText ? <p>{errorText}</p> : null}
+          {errorText ? <p className="otp-error">{errorText}</p> : null}
 
           {(delivery === 'email' || smsInitDone) && !smsSending ? (
             <>
