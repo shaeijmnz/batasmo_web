@@ -136,6 +136,7 @@ const RECOVERY_ACTIVE_KEY = 'batasmo_recovery_active'
 const RECOVERY_EMAIL_KEY = 'batasmo_recovery_email'
 const RECOVERY_VERIFIED_KEY = 'batasmo_recovery_verified'
 const FORCE_LOGIN_REDIRECT_KEY = 'batasmo_force_login_redirect'
+const CURRENT_PAGE_KEY = 'batasmo_current_page'
 const IS_DEV = process.env.NODE_ENV !== 'production'
 
 const readPaymongoReturnFromLocation = () => {
@@ -162,6 +163,11 @@ const resolveInitialPage = () => {
   if (pathname === '/signup') return 'signup'
   if (pathname === '/forgot-password') return 'forgot-password'
   if (pathname === '/reset-password') return 'reset-password'
+
+  const savedPage = sessionStorage.getItem(CURRENT_PAGE_KEY)
+  if (savedPage && !PUBLIC_PAGES.has(savedPage)) {
+    return savedPage
+  }
 
   return 'home'
 }
@@ -518,6 +524,12 @@ function App() {
     }
   }, [forceResetToLogin]);
 
+  useEffect(() => {
+    if (!PUBLIC_PAGES.has(page)) {
+      sessionStorage.setItem(CURRENT_PAGE_KEY, page)
+    }
+  }, [page])
+
   const isPublicPage = PUBLIC_PAGES.has(page);
 
   const profileScopeKey = currentProfile?.id
@@ -559,10 +571,6 @@ function App() {
     const hasRecoveryFlow = localStorage.getItem(RECOVERY_ACTIVE_KEY) === 'true'
 
     if (isPublicPage) {
-      if (page === 'home') {
-        return
-      }
-
       if (isRecoveryFlowPage && hasRecoveryFlow) {
         return undefined
       }
