@@ -150,7 +150,7 @@ export default function AttorneyLogs({ onNavigate, profile, initialAppointmentId
       setSummarySaving(true);
       setSummaryNotice('');
       await saveAttorneyConsultationSummary({ appointmentId: activeLog.id, summary: attorneySummaryDraft });
-      setSummaryNotice('Summary saved. The client can view it in Consultation Logs.');
+      closeTranscript();
     } catch (error) {
       setLoadError(error.message || 'Failed to save summary.');
     } finally {
