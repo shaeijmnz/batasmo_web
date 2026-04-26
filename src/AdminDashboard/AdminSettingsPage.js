@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   LayoutDashboard, Users, Scale, FileText,
   BarChart3, Settings as SettingsIcon, LogOut, Menu,
-  User, Lock, BellRing, CreditCard, Save, Globe, Smartphone, Download
+  User, Lock, BellRing, Save, Globe, Smartphone
 } from 'lucide-react';
 import './AdminTheme.css';
 import './settings.css';
@@ -75,7 +75,7 @@ const Settings = ({ onNavigate }) => {
 
           {/* TAB NAVIGATION */}
           <div className="settings-tabs">
-            {['Profile', 'Security', 'Notifications', 'Billing'].map(tab => (
+            {['Profile', 'Security', 'Notifications'].map(tab => (
               <button 
                 key={tab} 
                 className={`settings-tab ${activeTab === tab ? 'active' : ''}`}
@@ -90,7 +90,6 @@ const Settings = ({ onNavigate }) => {
             {activeTab === 'Profile' && <ProfileSection />}
             {activeTab === 'Security' && <SecuritySection />}
             {activeTab === 'Notifications' && <NotificationsSection />}
-            {activeTab === 'Billing' && <BillingSection />}
           </div>
         </div>
       </main>
@@ -166,46 +165,6 @@ const NotificationsSection = () => (
         <div><h4>Weekly Reports</h4><p>Get weekly summary reports via email</p></div>
         <input type="checkbox" className="switch" />
       </div>
-    </div>
-  </div>
-);
-
-const BillingSection = () => (
-  <div className="settings-stack">
-    <div className="card">
-      <h3 className="card-title"><CreditCard size={18} /> Subscription Plan</h3>
-      <div className="plan-banner">
-        <div className="plan-info">
-          <h4>Enterprise Plan</h4>
-          <p>Unlimited attorneys and clients</p>
-        </div>
-        <div className="plan-price">PHP29,999<span>/month</span></div>
-      </div>
-      <button className="btn-full gold" onClick={() => handleQuickAction('Subscription plan change opened')}>Change Plan</button>
-    </div>
-    
-    <div className="card">
-      <h3 className="card-title">Payment Method</h3>
-      <div className="payment-method">
-        <div className="visa-box">VISA</div>
-        <div className="card-details">**** **** **** 4242 <span>Expires 12/2025</span></div>
-        <button className="btn-edit" onClick={() => handleQuickAction('Payment method editing opened')}>Edit</button>
-      </div>
-      <button className="btn-add-method" onClick={() => handleQuickAction('Add payment method flow opened')}>Add New Payment Method</button>
-    </div>
-
-    <div className="card">
-      <h3 className="card-title">Billing History</h3>
-      {[1000, 1001, 1002].map((id, i) => (
-        <div key={id} className="history-item">
-          <div><p>Mar {1+i}, 2026</p><span>Invoice #{id}</span></div>
-          <div className="history-right">
-            <span className="price">PHP29,999</span>
-            <span className="status-paid">Paid</span>
-            <Download size={16} className="dl-icon" />
-          </div>
-        </div>
-      ))}
     </div>
   </div>
 );
