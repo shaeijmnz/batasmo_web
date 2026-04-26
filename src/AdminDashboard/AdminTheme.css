@@ -406,6 +406,10 @@ body {
   margin: 0;
 }
 
+#root {
+  background: #F5F1EB !important;
+}
+
 /* Hide scrollbar visuals while keeping scroll functionality */
 html,
 body,
@@ -429,7 +433,12 @@ body::-webkit-scrollbar,
 }
 
 .app-container,
-.dashboard-container,
+.dashboard-container {
+  background: #F5F1EB !important;
+  min-height: 100vh;
+  overflow: visible !important;
+}
+
 .main-content,
 .main-panel {
   background: transparent !important;
