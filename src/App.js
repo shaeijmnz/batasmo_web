@@ -436,6 +436,32 @@ function App() {
   }, [currentProfile?.id, forceResetToLogin])
 
   useEffect(() => {
+    if (!currentProfile?.id || normalizeRole(currentProfile?.role || '') !== 'Client') return undefined
+
+    const channel = supabase.channel('online-clients', {
+      config: {
+        presence: {
+          key: currentProfile.id,
+        },
+      },
+    })
+
+    channel.subscribe((status) => {
+      if (status !== 'SUBSCRIBED') return
+      channel.track({
+        user_id: currentProfile.id,
+        role: 'Client',
+        online_at: new Date().toISOString(),
+      })
+    })
+
+    return () => {
+      channel.untrack()
+      supabase.removeChannel(channel)
+    }
+  }, [currentProfile?.id, currentProfile?.role])
+
+  useEffect(() => {
     const onUnhandledRejection = (event) => {
       console.error('[runtime] unhandled promise rejection', event?.reason || event)
     }

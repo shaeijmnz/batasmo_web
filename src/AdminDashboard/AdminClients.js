@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { 
   LayoutDashboard, Users, Scale, FileText, MessageSquare, 
   BarChart3, Settings, LogOut, Menu, Plus, Search, 
-  Filter, Download, Mail, MapPin, Phone, Calendar, MoreVertical 
+  Filter, Download, Mail, Phone, Calendar, MoreVertical 
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import './AdminTheme.css';
@@ -24,12 +24,8 @@ const Clients = ({ onNavigate }) => {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [clients, setClients] = useState([]);
-  const [clientStats, setClientStats] = useState([
-    { label: 'Total Clients', value: '0', color: '#1e3a8a' },
-    { label: 'Active Clients', value: '0', color: '#22c55e' },
-    { label: 'New This Month', value: '0', color: '#eab308' },
-    { label: 'Total Consultations', value: '0', color: '#64748b' },
-  ]);
+  const [clientMetrics, setClientMetrics] = useState({ total: 0, newThisMonth: 0, totalConsultations: 0 });
+  const [onlineClientIds, setOnlineClientIds] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const navigate = (path) => {
@@ -99,14 +95,11 @@ const Clients = ({ onNavigate }) => {
           return created.getMonth() === currentMonth && created.getFullYear() === currentYear;
         }).length;
 
-        const activeClientIds = new Set(validConsultations.map((row) => row.client_id).filter(Boolean));
-
         const normalizedClients = profileRows.map((row) => ({
           id: row.id,
           avatar: initialsFromName(row.full_name),
           name: row.full_name || 'Unnamed Client',
           email: row.email || 'No email',
-          location: row.address || 'No location provided',
           phone: row.phone || 'No phone',
           joined: formatJoinedDate(row.created_at),
           consultations: Number(consultationsByClient.get(row.id) || 0),
@@ -115,12 +108,11 @@ const Clients = ({ onNavigate }) => {
         if (!isMounted) return;
 
         setClients(normalizedClients);
-        setClientStats([
-          { label: 'Total Clients', value: profileRows.length.toLocaleString(), color: '#1e3a8a' },
-          { label: 'Active Clients', value: activeClientIds.size.toLocaleString(), color: '#22c55e' },
-          { label: 'New This Month', value: newThisMonth.toLocaleString(), color: '#eab308' },
-          { label: 'Total Consultations', value: validConsultations.length.toLocaleString(), color: '#64748b' },
-        ]);
+        setClientMetrics({
+          total: profileRows.length,
+          newThisMonth,
+          totalConsultations: validConsultations.length,
+        });
         setLoadError('');
       } catch (error) {
         if (isMounted) {
@@ -153,11 +145,44 @@ const Clients = ({ onNavigate }) => {
     };
   }, []);
 
+  useEffect(() => {
+    const syncOnlineClients = (channel) => {
+      const state = channel.presenceState();
+      const nextOnlineIds = new Set();
+
+      Object.values(state || {}).forEach((presences) => {
+        (presences || []).forEach((presence) => {
+          if (presence?.role === 'Client' && presence?.user_id) {
+            nextOnlineIds.add(String(presence.user_id));
+          }
+        });
+      });
+
+      setOnlineClientIds(nextOnlineIds);
+    };
+
+    const presenceChannel = supabase
+      .channel('online-clients')
+      .on('presence', { event: 'sync' }, () => syncOnlineClients(presenceChannel))
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(presenceChannel);
+    };
+  }, []);
+
+  const clientStats = useMemo(() => [
+    { label: 'Total Clients', value: clientMetrics.total.toLocaleString(), color: '#1e3a8a' },
+    { label: 'Active Clients', value: onlineClientIds.size.toLocaleString(), color: '#22c55e' },
+    { label: 'New This Month', value: clientMetrics.newThisMonth.toLocaleString(), color: '#eab308' },
+    { label: 'Total Consultations', value: clientMetrics.totalConsultations.toLocaleString(), color: '#64748b' },
+  ], [clientMetrics, onlineClientIds.size]);
+
   const filteredClients = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     if (!term) return clients;
     return clients.filter((client) =>
-      [client.name, client.email, client.location].some((value) =>
+      [client.name, client.email].some((value) =>
         String(value || '').toLowerCase().includes(term),
       ),
     );
@@ -234,7 +259,7 @@ const Clients = ({ onNavigate }) => {
               <Search size={18} className="search-icon" />
               <input
                 type="text"
-                placeholder="Search clients by name, email, or location..."
+                placeholder="Search clients by name or email..."
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
               />
@@ -260,11 +285,12 @@ const Clients = ({ onNavigate }) => {
                     <div className="client-details">
                       <div className="name-wrapper">
                         <span className="client-name">{client.name}</span>
-                        <span className="status-badge">Active</span>
+                        <span className={`status-badge ${onlineClientIds.has(String(client.id)) ? 'online' : 'offline'}`}>
+                          {onlineClientIds.has(String(client.id)) ? 'Online' : 'Offline'}
+                        </span>
                       </div>
                       <div className="contact-info">
                         <span><Mail size={14} /> {client.email}</span>
-                        <span><MapPin size={14} /> {client.location}</span>
                       </div>
                     </div>
                   </div>
