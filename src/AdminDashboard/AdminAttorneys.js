@@ -154,7 +154,6 @@ const Attorneys = ({ onNavigate }) => {
   const [attorneyStats, setAttorneyStats] = useState([
     { label: 'Total Attorneys', value: '0', color: '#1e3a8a' },
     { label: 'Available Now', value: '0', color: '#22c55e' },
-    { label: 'Average Rating', value: '0.0', color: '#eab308' },
     { label: 'Total Consultations', value: '0', color: '#3b82f6' },
   ]);
   const [attorneysList, setAttorneysList] = useState([]);
@@ -291,11 +290,7 @@ const Attorneys = ({ onNavigate }) => {
         });
 
         const availableCount = normalized.filter((item) => item.status === 'Available').length;
-        const totalConsultations = normalized.reduce((sum, item) => sum + item.consultations, 0);
-        const ratingValues = normalized.map((item) => Number(item.rating)).filter((value) => value > 0);
-        const averageRating = ratingValues.length
-          ? (ratingValues.reduce((sum, value) => sum + value, 0) / ratingValues.length).toFixed(1)
-          : '0.0';
+        const completedConsultations = normalized.reduce((sum, item) => sum + item.cases, 0);
 
         if (!isMounted) return;
 
@@ -303,8 +298,7 @@ const Attorneys = ({ onNavigate }) => {
         setAttorneyStats([
           { label: 'Total Attorneys', value: profileRows.length.toLocaleString(), color: '#1e3a8a' },
           { label: 'Available Now', value: availableCount.toLocaleString(), color: '#22c55e' },
-          { label: 'Average Rating', value: averageRating, color: '#eab308' },
-          { label: 'Total Consultations', value: totalConsultations.toLocaleString(), color: '#3b82f6' },
+          { label: 'Total Consultations', value: completedConsultations.toLocaleString(), color: '#3b82f6' },
         ]);
         setLoadError('');
       } catch (error) {
