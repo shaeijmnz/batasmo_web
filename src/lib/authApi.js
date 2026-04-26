@@ -254,6 +254,11 @@ export async function signInWithEmail({ email, password }) {
       dbName = String(profileRow.full_name).trim() || dbName
     }
 
+    if (dbRole === 'Admin') {
+      await supabase.auth.signOut()
+      throw new Error('Admin dashboard is currently disabled.')
+    }
+
     // Update profile in background (don't wait)
     void Promise.resolve(
       supabase.from('profiles').upsert(

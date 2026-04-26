@@ -335,7 +335,7 @@ export function normalizeRole(roleText) {
 
 export function pageFromRole(roleText) {
   const role = normalizeRole(roleText)
-  if (role === 'Admin') return 'admin-home'
+  if (role === 'Admin') return 'login'
   if (role === 'Attorney') return 'attorney-home'
   return 'home-logged'
 }
