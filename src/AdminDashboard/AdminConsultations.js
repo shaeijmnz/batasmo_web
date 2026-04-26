@@ -1,19 +1,19 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { 
   LayoutDashboard, Users, Scale, FileText, MessageSquare, 
-  BarChart3, Settings, LogOut, Menu, Search, 
-  Filter, Download, Video, Phone, MessageCircle, Star
+  BarChart3, Settings, LogOut, Menu,
+  Video, Phone, MessageCircle, Star
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import './AdminTheme.css';
 import './consultations.css';
 
-const normalizeConsultationStatus = (status) => {
-  const value = String(status || '').toLowerCase();
-  if (value === 'completed') return 'Completed';
-  if (value === 'confirmed' || value === 'rescheduled') return 'Scheduled';
-  if (value === 'started' || value === 'in_progress' || value === 'in-progress' || value === 'active') return 'In Progress';
-  return 'Scheduled';
+const getConsultationStatus = ({ appointmentStatus, isPaid, room }) => {
+  const value = String(appointmentStatus || '').toLowerCase();
+  if (value === 'completed' || room?.is_closed) return 'Completed';
+  if (room?.video_meeting_id && !room?.is_closed) return 'In Progress';
+  if (isPaid) return 'Scheduled';
+  return null;
 };
 
 const formatDateLabel = (value) => {
@@ -28,10 +28,10 @@ const Consultations = ({ onNavigate }) => {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('All');
   const [expandedId, setExpandedId] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [activeTranscript, setActiveTranscript] = useState(null);
   const navigate = (path) => {
     const pageMap = {
       '/': 'admin-home',
@@ -61,19 +61,27 @@ const Consultations = ({ onNavigate }) => {
 
     const loadConsultations = async () => {
       try {
-        const [appointmentsRes, feedbackRes] = await Promise.all([
+        const [appointmentsRes, feedbackRes, transactionsRes, roomsRes] = await Promise.all([
           supabase
             .from('appointments')
-            .select('id, title, notes, scheduled_at, duration_minutes, status, client:client_id(full_name), attorney:attorney_id(full_name)')
+            .select('id, title, notes, attorney_consultation_summary, scheduled_at, duration_minutes, status, client:client_id(full_name), attorney:attorney_id(full_name)')
             .order('scheduled_at', { ascending: false }),
           supabase
             .from('consultation_feedback')
             .select('appointment_id, rating, comment')
             .order('created_at', { ascending: false }),
+          supabase
+            .from('transactions')
+            .select('appointment_id, payment_status'),
+          supabase
+            .from('consultation_rooms')
+            .select('appointment_id, is_closed, video_meeting_id'),
         ]);
 
         if (appointmentsRes.error) throw appointmentsRes.error;
         if (feedbackRes.error) throw feedbackRes.error;
+        if (transactionsRes.error) throw transactionsRes.error;
+        if (roomsRes.error) throw roomsRes.error;
 
         const feedbackByAppointment = new Map();
         (feedbackRes.data || []).forEach((row) => {
@@ -84,10 +92,27 @@ const Consultations = ({ onNavigate }) => {
           });
         });
 
+        const paidAppointmentIds = new Set(
+          (transactionsRes.data || [])
+            .filter((row) => String(row.payment_status || '').toLowerCase() === 'paid')
+            .map((row) => row.appointment_id),
+        );
+
+        const roomByAppointment = new Map();
+        (roomsRes.data || []).forEach((row) => {
+          if (row.appointment_id) roomByAppointment.set(row.appointment_id, row);
+        });
+
         const normalized = (appointmentsRes.data || [])
           .filter((row) => String(row.status || '').toLowerCase() !== 'cancelled')
           .map((row) => {
-            const status = normalizeConsultationStatus(row.status);
+            const room = roomByAppointment.get(row.id);
+            const status = getConsultationStatus({
+              appointmentStatus: row.status,
+              isPaid: paidAppointmentIds.has(row.id),
+              room,
+            });
+            if (!status) return null;
             const feedback = feedbackByAppointment.get(row.id);
             return {
               id: row.id,
@@ -101,8 +126,10 @@ const Consultations = ({ onNavigate }) => {
               duration: formatDurationLabel(row.duration_minutes),
               rating: feedback?.rating || 0,
               notes: feedback?.comment || row.notes || '',
+              transcript: row.attorney_consultation_summary || '',
             };
-          });
+          })
+          .filter(Boolean);
 
         if (!isMounted) return;
         setSessions(normalized);
@@ -131,10 +158,22 @@ const Consultations = ({ onNavigate }) => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'consultation_feedback' }, () => loadConsultations())
       .subscribe();
 
+    const transactionsChannel = supabase
+      .channel('admin-consultations-transactions')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => loadConsultations())
+      .subscribe();
+
+    const roomsChannel = supabase
+      .channel('admin-consultations-rooms')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'consultation_rooms' }, () => loadConsultations())
+      .subscribe();
+
     return () => {
       isMounted = false;
       supabase.removeChannel(appointmentsChannel);
       supabase.removeChannel(feedbackChannel);
+      supabase.removeChannel(transactionsChannel);
+      supabase.removeChannel(roomsChannel);
     };
   }, []);
 
@@ -151,15 +190,8 @@ const Consultations = ({ onNavigate }) => {
   }, [sessions]);
 
   const visibleSessions = useMemo(() => {
-    const byTab = activeTab === 'All' ? sessions : sessions.filter((item) => item.status === activeTab);
-    const term = searchTerm.trim().toLowerCase();
-    if (!term) return byTab;
-    return byTab.filter((item) =>
-      [item.title, item.client, item.attorney, item.category].some((value) =>
-        String(value || '').toLowerCase().includes(term),
-      ),
-    );
-  }, [activeTab, sessions, searchTerm]);
+    return activeTab === 'All' ? sessions : sessions.filter((item) => item.status === activeTab);
+  }, [activeTab, sessions]);
 
   const getIcon = (type) => {
     if (type === 'Video Call') return <Video size={14} />;
@@ -221,22 +253,6 @@ const Consultations = ({ onNavigate }) => {
             ))}
           </div>
 
-          <div className="filter-bar">
-            <div className="search-box">
-              <Search size={18} className="search-icon" />
-              <input
-                type="text"
-                placeholder="Search consultations by client, attorney, or category..."
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-              />
-            </div>
-            <div className="action-buttons">
-              <button className="btn-secondary" onClick={() => handleQuickAction('Consultation filters opened')}><Filter size={18} /> Filter</button>
-              <button className="btn-secondary" onClick={() => handleQuickAction('Consultation export started')}><Download size={18} /> Export</button>
-            </div>
-          </div>
-
           <div className="tabs-container">
             {['All', 'Completed', 'Scheduled', 'In Progress'].map(tab => (
               <button key={tab} className={`tab ${activeTab === tab ? 'active' : ''}`} onClick={() => setActiveTab(tab)}>{tab}</button>
@@ -292,10 +308,12 @@ const Consultations = ({ onNavigate }) => {
                         event.stopPropagation();
                         handleQuickAction(`Viewing details for ${s.title}`);
                       }}>View Details</button>
-                      <button className="btn-outline" onClick={(event) => {
-                        event.stopPropagation();
-                        handleQuickAction(`Downloading report for ${s.title}`);
-                      }}>Download Report</button>
+                      {s.status === 'Completed' ? (
+                        <button className="btn-outline" onClick={(event) => {
+                          event.stopPropagation();
+                          setActiveTranscript(s);
+                        }}>View Transcript</button>
+                      ) : null}
                     </div>
                   </div>
                 )}
@@ -307,6 +325,27 @@ const Consultations = ({ onNavigate }) => {
           </div>
         </div>
       </main>
+
+      {activeTranscript ? (
+        <div className="admin-consultation-modal-overlay" onClick={() => setActiveTranscript(null)}>
+          <div className="admin-consultation-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="admin-consultation-modal__header">
+              <div>
+                <h3>Session Summary</h3>
+                <p>{activeTranscript.client} with {activeTranscript.attorney}</p>
+              </div>
+              <button type="button" className="admin-consultation-modal__close" onClick={() => setActiveTranscript(null)}>Close</button>
+            </div>
+            <div className="admin-consultation-modal__body">
+              {activeTranscript.transcript ? (
+                <p>{activeTranscript.transcript}</p>
+              ) : (
+                <p className="admin-consultation-modal__empty">No attorney summary has been added for this completed session yet.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

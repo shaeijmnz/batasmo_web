@@ -92,6 +92,72 @@
 .btn-primary { background: var(--navy); color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; }
 .btn-outline { background: white; border: 1px solid var(--gold); color: var(--gold); padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; }
 
+.admin-consultation-modal-overlay {
+  align-items: center;
+  background: rgba(15, 23, 42, 0.42);
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  left: 0;
+  padding: 24px;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 1100;
+}
+
+.admin-consultation-modal {
+  background: #ffffff;
+  border: 1px solid var(--ui-glass-border);
+  border-radius: 18px;
+  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.22);
+  max-width: 560px;
+  overflow: hidden;
+  width: min(100%, 560px);
+}
+
+.admin-consultation-modal__header {
+  align-items: flex-start;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 20px;
+}
+
+.admin-consultation-modal__header h3 {
+  color: var(--ui-text-primary);
+  font-size: 1.1rem;
+  margin: 0 0 4px;
+}
+
+.admin-consultation-modal__header p,
+.admin-consultation-modal__empty {
+  color: var(--ui-text-secondary);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.admin-consultation-modal__close {
+  background: var(--ui-glass-bg);
+  border: 1px solid var(--ui-glass-border);
+  border-radius: 10px;
+  color: var(--ui-text-primary);
+  cursor: pointer;
+  font-weight: 700;
+  padding: 8px 12px;
+}
+
+.admin-consultation-modal__body {
+  color: #1e293b;
+  font-size: 0.94rem;
+  line-height: 1.6;
+  max-height: 55vh;
+  overflow-y: auto;
+  padding: 20px;
+  white-space: pre-wrap;
+}
+
 .consultations-info-message {
   background: white;
   border: 1px solid var(--border);
