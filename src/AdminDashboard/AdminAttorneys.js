@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { 
   LayoutDashboard, Users, Scale, FileText, MessageSquare, 
   BarChart3, Settings, LogOut, Menu, Plus, Search, 
-  Filter, Download, Mail, Phone, Star, Award, Calendar, CheckCircle, X
+  Filter, Download, Mail, Phone, Star, Calendar, CheckCircle, X
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { fetchAttorneyAvailabilitySlots, saveAttorneyAvailabilitySlots } from '../lib/userApi';
@@ -26,6 +26,29 @@ const formatExperience = (years) => {
 };
 
 const computeAvailability = (activeCount) => (activeCount > 0 ? 'Busy' : 'Available');
+
+const resolveAttorneyImage = (name) => {
+  const normalized = String(name || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^atty\s+/, '')
+    .trim();
+
+  if (normalized.includes('jeanne') && normalized.includes('anarna')) {
+    return '/assets/attorneys/jeanne-luz-castillo-anarna.jpg';
+  }
+
+  if (normalized.includes('alston') && normalized.includes('anarna')) {
+    return '/assets/attorneys/alston-kevin-anarna.jpg';
+  }
+
+  if (normalized.includes('allen') && normalized.includes('anarna')) {
+    return '/assets/attorneys/allen-kristopher-anarna.png';
+  }
+
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'Attorney')}&background=152238&color=ffffff`;
+};
 
 const SLOT_TIME_OPTIONS = [
   '08:00',
@@ -243,6 +266,7 @@ const Attorneys = ({ onNavigate }) => {
           return {
             id: row.id,
             name: row.full_name || 'Attorney',
+            imageUrl: resolveAttorneyImage(row.full_name || 'Attorney'),
             status: computeAvailability(activeCount),
             rating: rating.toFixed(1),
             specialty: formatSpecialty(extra?.specialties),
@@ -541,9 +565,7 @@ const Attorneys = ({ onNavigate }) => {
               {filteredAttorneys.map((attorney) => (
                 <div key={attorney.id} className="attorney-row">
                   <div className="attorney-identity">
-                    <div className="attorney-avatar">
-                      <Award size={24} />
-                    </div>
+                    <img className="attorney-avatar" src={attorney.imageUrl} alt={`${attorney.name} profile`} />
                     <div className="attorney-details">
                       <div className="name-wrapper">
                         <span className="attorney-name">{attorney.name}</span>
