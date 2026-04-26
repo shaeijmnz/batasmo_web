@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   LayoutDashboard, Users, Scale, FileText,
   BarChart3, Settings as SettingsIcon, LogOut, Menu,
-  User, Lock, BellRing, Save, Globe, Smartphone
+  User, Lock, BellRing, Save, Globe
 } from 'lucide-react';
 import './AdminTheme.css';
 import './settings.css';
+import { getAppConfig, setAppConfig } from '../lib/userApi';
 
 const handleQuickAction = (message) => window.alert(message);
 
@@ -131,25 +132,121 @@ const ProfileSection = () => (
   </div>
 );
 
-const SecuritySection = () => (
-  <div className="settings-stack">
-    <div className="card">
-      <h3 className="card-title"><Lock size={18} /> Change Password</h3>
-      <div className="input-group"><label>Current Password</label><input type="password" /></div>
-      <div className="input-group"><label>New Password</label><input type="password" /></div>
-      <div className="input-group"><label>Confirm New Password</label><input type="password" /></div>
-      <button className="btn-save" onClick={() => handleQuickAction('Password update requested')}><Save size={16} /> Update Password</button>
-    </div>
-    <div className="card">
-      <h3 className="card-title"><Smartphone size={18} /> Two-Factor Authentication</h3>
-      <div className="toggle-item">
-        <div><h4>Enable 2FA</h4><p>Add an extra layer of security</p></div>
-        <input type="checkbox" className="switch" />
+const coerceBooleanSetting = (value, fallback = true) => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true' || normalized === '1') return true;
+    if (normalized === 'false' || normalized === '0') return false;
+  }
+  if (typeof value === 'number') return value !== 0;
+  return fallback;
+};
+
+const SecuritySection = () => {
+  const [settings, setSettings] = useState({
+    prevent_double_booking: true,
+    enforce_schedule_window: true,
+  });
+  const [loading, setLoading] = useState(true);
+  const [savingKey, setSavingKey] = useState('');
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadSecuritySettings = async () => {
+      try {
+        const [doubleBooking, scheduleWindow] = await Promise.all([
+          getAppConfig('prevent_double_booking', true),
+          getAppConfig('enforce_schedule_window', true),
+        ]);
+
+        if (!mounted) return;
+        setSettings({
+          prevent_double_booking: coerceBooleanSetting(doubleBooking, true),
+          enforce_schedule_window: coerceBooleanSetting(scheduleWindow, true),
+        });
+        setError('');
+      } catch (loadError) {
+        if (!mounted) return;
+        setError(loadError.message || 'Unable to load security toggles.');
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    loadSecuritySettings();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const updateToggle = async (key, checked) => {
+    const previous = settings[key];
+    setSettings((current) => ({ ...current, [key]: checked }));
+    setSavingKey(key);
+    setMessage('');
+    setError('');
+
+    try {
+      await setAppConfig(key, checked);
+      setMessage('Security setting saved. The app will apply this to clients and attorneys in realtime.');
+    } catch (saveError) {
+      setSettings((current) => ({ ...current, [key]: previous }));
+      setError(saveError.message || 'Failed to save security setting.');
+    } finally {
+      setSavingKey('');
+    }
+  };
+
+  return (
+    <div className="settings-stack">
+      <div className="card">
+        <h3 className="card-title"><Lock size={18} /> Booking & Chat Validation</h3>
+        {loading ? <p className="settings-hint">Loading security settings...</p> : null}
+        {error ? <p className="settings-error">{error}</p> : null}
+        {message ? <p className="settings-success">{message}</p> : null}
+
+        <div className="toggle-item border-b">
+          <div>
+            <h4>Prevent Multiple Active Bookings</h4>
+            <p>
+              ON blocks clients from booking another consultation while they still have an active one.
+              OFF allows repeated bookings for development testing.
+            </p>
+          </div>
+          <input
+            type="checkbox"
+            className="switch"
+            checked={settings.prevent_double_booking}
+            disabled={loading || Boolean(savingKey)}
+            onChange={(event) => updateToggle('prevent_double_booking', event.target.checked)}
+          />
+        </div>
+
+        <div className="toggle-item">
+          <div>
+            <h4>Enforce Scheduled Chat Time</h4>
+            <p>
+              ON blocks client and attorney chat access until the scheduled consultation time.
+              OFF lets paid consultations enter the chatroom anytime for retesting.
+            </p>
+          </div>
+          <input
+            type="checkbox"
+            className="switch"
+            checked={settings.enforce_schedule_window}
+            disabled={loading || Boolean(savingKey)}
+            onChange={(event) => updateToggle('enforce_schedule_window', event.target.checked)}
+          />
+        </div>
       </div>
-      <button className="btn-save gold-outline" onClick={() => handleQuickAction('2FA configuration started')}>Configure 2FA</button>
     </div>
-  </div>
-);
+  );
+};
 
 const NotificationsSection = () => (
   <div className="settings-stack">

@@ -55,8 +55,13 @@
 .toggle-item h4 { font-size: 0.95rem; margin-bottom: 4px; color: var(--ui-text-primary); }
 .toggle-item p { font-size: 0.8rem; color: var(--ui-text-secondary); }
 .border-b { border-bottom: 1px solid var(--ui-glass-border); }
+.settings-hint, .settings-success, .settings-error { margin: -6px 0 12px; font-size: 0.85rem; font-weight: 600; }
+.settings-hint { color: var(--ui-text-secondary); }
+.settings-success { color: #16a34a; }
+.settings-error { color: #dc2626; }
 
 .switch { appearance: none; width: 40px; height: 20px; background: var(--ui-glass-border); border-radius: 20px; position: relative; cursor: pointer; transition: 0.3s; }
 .switch:checked { background: linear-gradient(135deg, var(--ui-accent) 0%, var(--ui-accent-hover) 100%); box-shadow: var(--ui-shadow-glow); }
 .switch::before { content: ''; position: absolute; width: 16px; height: 16px; background: white; border-radius: 50%; top: 2px; left: 2px; transition: 0.3s; }
 .switch:checked::before { transform: translateX(20px); }
+.switch:disabled { cursor: not-allowed; opacity: 0.65; }
