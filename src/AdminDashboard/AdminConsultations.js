@@ -1,32 +1,116 @@
-import { useEffect, useMemo, useState } from 'react';
-import './AdminConsultations.css';
-import { fetchCompletedConsultations } from '../lib/adminApi';
+import React, { useEffect, useMemo, useState } from 'react';
+import { 
+  LayoutDashboard, Users, Scale, FileText, MessageSquare, 
+  BarChart3, Settings, LogOut, Menu, Search, 
+  Filter, Download, Video, Phone, MessageCircle, Star
+} from 'lucide-react';
+import { supabase } from '../lib/supabaseClient';
+import './AdminTheme.css';
+import './consultations.css';
 
-const BackIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
-  </svg>
-);
+const normalizeConsultationStatus = (status) => {
+  const value = String(status || '').toLowerCase();
+  if (value === 'completed') return 'Completed';
+  if (value === 'confirmed' || value === 'rescheduled') return 'Scheduled';
+  if (value === 'started' || value === 'in_progress' || value === 'in-progress' || value === 'active') return 'In Progress';
+  return 'Scheduled';
+};
 
-function AdminConsultations({ onNavigate }) {
-  const [consultations, setConsultations] = useState([]);
-  const [searchText, setSearchText] = useState('');
+const formatDateLabel = (value) => {
+  const parsed = value ? new Date(value) : null;
+  if (!parsed || Number.isNaN(parsed.getTime())) return 'TBD';
+  return parsed.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const formatDurationLabel = (minutes) => `${Number(minutes || 60)} min`;
+
+const Consultations = ({ onNavigate }) => {
+  const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('All');
+  const [expandedId, setExpandedId] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [errorText, setErrorText] = useState('');
-  const [selectedTranscript, setSelectedTranscript] = useState(null);
+  const [loadError, setLoadError] = useState('');
+  const navigate = (path) => {
+    const pageMap = {
+      '/': 'admin-home',
+      '/clients': 'admin-clients',
+      '/attorneys': 'admin-attorneys',
+      '/requests': 'admin-requests',
+      '/consultations': 'admin-consultations',
+      '/reports': 'admin-reports',
+      '/settings': 'admin-settings',
+    };
+    onNavigate?.(pageMap[path] || 'admin-home');
+  };
+  const handleQuickAction = (message) => window.alert(message);
+
+  const navItems = [
+    { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/' },
+    { label: 'Clients', icon: <Users size={20} />, path: '/clients' },
+    { label: 'Attorneys', icon: <Scale size={20} />, path: '/attorneys' },
+    { label: 'Requests', icon: <FileText size={20} />, path: '/requests' },
+    { label: 'Consultations', icon: <MessageSquare size={20} />, path: '/consultations' },
+    { label: 'Reports', icon: <BarChart3 size={20} />, path: '/reports' },
+    { label: 'Settings', icon: <Settings size={20} />, path: '/settings' },
+  ];
 
   useEffect(() => {
     let isMounted = true;
 
     const loadConsultations = async () => {
       try {
-        const rows = await fetchCompletedConsultations();
-        if (isMounted) {
-          setConsultations(rows);
-        }
+        const [appointmentsRes, feedbackRes] = await Promise.all([
+          supabase
+            .from('appointments')
+            .select('id, title, notes, scheduled_at, duration_minutes, status, client:client_id(full_name), attorney:attorney_id(full_name)')
+            .order('scheduled_at', { ascending: false }),
+          supabase
+            .from('consultation_feedback')
+            .select('appointment_id, rating, comment')
+            .order('created_at', { ascending: false }),
+        ]);
+
+        if (appointmentsRes.error) throw appointmentsRes.error;
+        if (feedbackRes.error) throw feedbackRes.error;
+
+        const feedbackByAppointment = new Map();
+        (feedbackRes.data || []).forEach((row) => {
+          if (!row.appointment_id || feedbackByAppointment.has(row.appointment_id)) return;
+          feedbackByAppointment.set(row.appointment_id, {
+            rating: Number(row.rating || 0),
+            comment: String(row.comment || '').trim(),
+          });
+        });
+
+        const normalized = (appointmentsRes.data || [])
+          .filter((row) => String(row.status || '').toLowerCase() !== 'cancelled')
+          .map((row) => {
+            const status = normalizeConsultationStatus(row.status);
+            const feedback = feedbackByAppointment.get(row.id);
+            return {
+              id: row.id,
+              title: row.title || 'Consultation',
+              type: 'Online Session',
+              category: row.title || 'Consultation',
+              status,
+              client: row.client?.full_name || 'Client',
+              attorney: row.attorney?.full_name || 'Attorney',
+              date: formatDateLabel(row.scheduled_at),
+              duration: formatDurationLabel(row.duration_minutes),
+              rating: feedback?.rating || 0,
+              notes: feedback?.comment || row.notes || '',
+            };
+          });
+
+        if (!isMounted) return;
+        setSessions(normalized);
+        setLoadError('');
       } catch (error) {
         if (isMounted) {
-          setErrorText(error.message || 'Failed to load completed consultations.');
+          setSessions([]);
+          setLoadError(error.message || 'Failed to load consultations.');
         }
       } finally {
         if (isMounted) {
@@ -37,122 +121,201 @@ function AdminConsultations({ onNavigate }) {
 
     loadConsultations();
 
+    const appointmentsChannel = supabase
+      .channel('admin-consultations-appointments')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => loadConsultations())
+      .subscribe();
+
+    const feedbackChannel = supabase
+      .channel('admin-consultations-feedback')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'consultation_feedback' }, () => loadConsultations())
+      .subscribe();
+
     return () => {
       isMounted = false;
+      supabase.removeChannel(appointmentsChannel);
+      supabase.removeChannel(feedbackChannel);
     };
   }, []);
 
-  const filteredConsultations = useMemo(() => {
-    const keyword = searchText.trim().toLowerCase();
-    if (!keyword) return consultations;
+  const stats = useMemo(() => {
+    const completed = sessions.filter((item) => item.status === 'Completed').length;
+    const scheduled = sessions.filter((item) => item.status === 'Scheduled').length;
+    const inProgress = sessions.filter((item) => item.status === 'In Progress').length;
+    return [
+      { label: 'Completed', value: completed.toLocaleString(), color: '#22c55e' },
+      { label: 'Scheduled', value: scheduled.toLocaleString(), color: '#eab308' },
+      { label: 'In Progress', value: inProgress.toLocaleString(), color: '#3b82f6' },
+      { label: 'Total Sessions', value: sessions.length.toLocaleString(), color: '#64748b' },
+    ];
+  }, [sessions]);
 
-    return consultations.filter((item) => {
-      const clientName = item.client?.full_name || '';
-      const attorneyName = item.attorney?.full_name || '';
-      const notes = item.notes || '';
-      return (
-        clientName.toLowerCase().includes(keyword)
-        || attorneyName.toLowerCase().includes(keyword)
-        || notes.toLowerCase().includes(keyword)
-      );
-    });
-  }, [consultations, searchText]);
+  const visibleSessions = useMemo(() => {
+    const byTab = activeTab === 'All' ? sessions : sessions.filter((item) => item.status === activeTab);
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return byTab;
+    return byTab.filter((item) =>
+      [item.title, item.client, item.attorney, item.category].some((value) =>
+        String(value || '').toLowerCase().includes(term),
+      ),
+    );
+  }, [activeTab, sessions, searchTerm]);
+
+  const getIcon = (type) => {
+    if (type === 'Video Call') return <Video size={14} />;
+    if (type === 'Phone Call') return <Phone size={14} />;
+    return <MessageCircle size={14} />;
+  };
 
   return (
-    <div className="adm-detail-page">
-      <header className="adm-detail-header">
-        <div className="adm-detail-header__left">
-          <button className="adm-detail-back-btn" onClick={() => onNavigate('admin-home')} title="Go back">
-            <BackIcon />
+    <div className="app-container">
+      {/* SIDEBAR */}
+      <aside className={`sidebar ${isSidebarOpen ? 'open' : 'closed'}`}>
+        <div className="sidebar-header">
+          <button className="sidebar-toggle" onClick={() => setSidebarOpen(!isSidebarOpen)}>
+            <Menu size={24} />
           </button>
-          <h1 className="adm-detail-title">Completed Consultations</h1>
-          <span className="adm-detail-count">{loading ? '...' : consultations.length}</span>
+          {isSidebarOpen && <img src="/logo/logo.jpg" alt="BatasMo logo" className="brand-logo" />}
+          {isSidebarOpen && <span className="logo-text">BatasMo</span>}
         </div>
-        <div className="adm-detail-actions">
-          <button className="adm-detail-btn" onClick={() => onNavigate('admin-consultation-stats')}>Statistics</button>
-        </div>
-      </header>
-
-      <main className="adm-detail-main">
-        <div className="adm-detail-card">
-          <div className="adm-detail-search">
-            <input
-              type="text"
-              placeholder="Search consultations..."
-              className="adm-detail-input"
-              value={searchText}
-              onChange={(event) => setSearchText(event.target.value)}
+        <nav className="sidebar-nav">
+          {navItems.map((item) => (
+            <NavItem
+              key={item.label}
+              icon={item.icon}
+              label={item.label}
+              active={item.path === '/consultations'}
+              open={isSidebarOpen}
+              onClick={() => navigate(item.path)}
             />
+          ))}
+        </nav>
+        <div className="sidebar-footer">
+          <div className="profile-section">
+            <div className="profile-avatar">AD</div>
+            {isSidebarOpen && (
+              <div className="profile-info">
+                <p className="name">Admin User</p>
+                <p className="email">admin@batasmo.com</p>
+              </div>
+            )}
           </div>
-          {errorText ? <p>{errorText}</p> : null}
+          <button className="logout-btn" onClick={() => handleQuickAction('Logout clicked')}><LogOut size={18} /> {isSidebarOpen && <span>Logout</span>}</button>
+        </div>
+      </aside>
 
-          <table className="adm-detail-table">
-            <thead>
-              <tr>
-                <th>Client Name</th>
-                <th>Attorney</th>
-                <th>Date</th>
-                <th>Duration</th>
-                <th>Fee</th>
-                <th>Rating</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredConsultations.map((cons) => (
-                <tr key={cons.id} className="adm-detail-table__row--clickable">
-                  <td>{cons.client?.full_name || 'Unknown Client'}</td>
-                  <td>{cons.attorney?.full_name || 'Unknown Attorney'}</td>
-                  <td>{cons.scheduled_at ? new Date(cons.scheduled_at).toLocaleDateString() : '-'}</td>
-                  <td>{cons.duration_minutes ? `${cons.duration_minutes} mins` : '-'}</td>
-                  <td><strong>{typeof cons.amount === 'number' ? `PHP ${cons.amount.toLocaleString()}` : 'PHP 0'}</strong></td>
-                  <td><span className="adm-detail-rating">Completed</span></td>
-                  <td><button className="adm-detail-row-btn" onClick={() => setSelectedTranscript(cons)}>View Notes</button></td>
-                </tr>
-              ))}
-              {!loading && filteredConsultations.length === 0 ? (
-                <tr>
-                  <td colSpan="7">No completed consultations found.</td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
+      {/* MAIN CONTENT */}
+      <main className="main-content">
+        <div className="content-wrapper">
+          <div className="page-header">
+            <h2 className="title">Consultations</h2>
+            <p className="subtitle">View and manage all consultation sessions</p>
+          </div>
+
+          <div className="stats-grid">
+            {stats.map((s, i) => (
+              <div key={i} className="stat-card" style={{ borderLeft: `4px solid ${s.color}` }}>
+                <h3 className="stat-value">{s.value}</h3>
+                <p className="stat-label">{s.label}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="filter-bar">
+            <div className="search-box">
+              <Search size={18} className="search-icon" />
+              <input
+                type="text"
+                placeholder="Search consultations by client, attorney, or category..."
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+              />
+            </div>
+            <div className="action-buttons">
+              <button className="btn-secondary" onClick={() => handleQuickAction('Consultation filters opened')}><Filter size={18} /> Filter</button>
+              <button className="btn-secondary" onClick={() => handleQuickAction('Consultation export started')}><Download size={18} /> Export</button>
+            </div>
+          </div>
+
+          <div className="tabs-container">
+            {['All', 'Completed', 'Scheduled', 'In Progress'].map(tab => (
+              <button key={tab} className={`tab ${activeTab === tab ? 'active' : ''}`} onClick={() => setActiveTab(tab)}>{tab}</button>
+            ))}
+          </div>
+
+          <div className="sessions-list">
+            {loadError ? <p className="consultations-info-message">{loadError}</p> : null}
+            {loading ? <p className="consultations-info-message">Loading consultations...</p> : null}
+            {visibleSessions.map((s) => (
+              <div 
+                key={s.id} 
+                className={`session-card ${expandedId === s.id ? 'expanded' : ''}`}
+                onClick={() => setExpandedId(expandedId === s.id ? null : s.id)}
+              >
+                <div className="session-main">
+                  <div className="session-left">
+                    <h4 className="session-title">{s.title}</h4>
+                    <div className="tag-group">
+                      <span className="type-pill">{getIcon(s.type)} {s.type}</span>
+                      <span className="category-pill">{s.category}</span>
+                    </div>
+                    <div className="client-info">
+                      <p>Client: <strong>{s.client}</strong></p>
+                      <p>Date: {s.date}</p>
+                      {s.rating && (
+                        <div className="rating">
+                          Rating: {[...Array(5)].map((_, i) => (
+                            <Star key={i} size={14} fill={i < s.rating ? "#eab308" : "none"} color={i < s.rating ? "#eab308" : "#cbd5e1"} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="session-right">
+                    <span className={`status-tag ${s.status.toLowerCase().replace(' ', '')}`}>{s.status}</span>
+                    <div className="attorney-info">
+                      <p>Attorney: <strong>{s.attorney}</strong></p>
+                      <p>Duration: {s.duration}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* EXPANDED SECTION */}
+                {expandedId === s.id && (
+                  <div className="expanded-details">
+                    <div className="notes-box">
+                      <p className="notes-label">Notes:</p>
+                      <p className="notes-text">{s.notes || 'No notes available for this session.'}</p>
+                    </div>
+                    <div className="action-row">
+                      <button className="btn-primary" onClick={(event) => {
+                        event.stopPropagation();
+                        handleQuickAction(`Viewing details for ${s.title}`);
+                      }}>View Details</button>
+                      <button className="btn-outline" onClick={(event) => {
+                        event.stopPropagation();
+                        handleQuickAction(`Downloading report for ${s.title}`);
+                      }}>Download Report</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+            {!loading && !loadError && visibleSessions.length === 0 ? (
+              <p className="consultations-info-message">No consultations found.</p>
+            ) : null}
+          </div>
         </div>
       </main>
-
-      {selectedTranscript && (
-        <div className="adm-detail-modal-overlay" onClick={() => setSelectedTranscript(null)}>
-          <div className="adm-detail-modal" onClick={e => e.stopPropagation()}>
-            <div className="adm-detail-modal__header">
-              <h2>Consultation Transcript</h2>
-              <button className="adm-detail-modal__close" onClick={() => setSelectedTranscript(null)}>x</button>
-            </div>
-            <div className="adm-detail-modal__content">
-              <div className="adm-detail-modal__row">
-                <label>Client:</label>
-                <p>{selectedTranscript.client?.full_name || 'Unknown Client'}</p>
-              </div>
-              <div className="adm-detail-modal__row">
-                <label>Attorney:</label>
-                <p>{selectedTranscript.attorney?.full_name || 'Unknown Attorney'}</p>
-              </div>
-              <div className="adm-detail-modal__row">
-                <label>Date:</label>
-                <p>{selectedTranscript.scheduled_at ? new Date(selectedTranscript.scheduled_at).toLocaleDateString() : '-'}</p>
-              </div>
-              <div className="adm-detail-modal__row">
-                <label>Consultation Notes:</label>
-                <p>{selectedTranscript.notes || 'No notes saved for this consultation.'}</p>
-              </div>
-            </div>
-            <div className="adm-detail-modal__actions">
-              <button className="adm-detail-modal__btn adm-detail-modal__btn--close" onClick={() => setSelectedTranscript(null)}>Close</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
-}
+};
 
-export default AdminConsultations;
+const NavItem = ({ icon, label, active, open, onClick }) => (
+  <div className={`nav-item ${active ? 'active' : ''}`} onClick={onClick}>
+    {icon}
+    {open && <span>{label}</span>}
+  </div>
+);
+
+export default Consultations;

@@ -1,31 +1,131 @@
-import { useEffect, useMemo, useState } from 'react';
-import './AdminClients.css';
-import { createNotification, fetchClients } from '../lib/adminApi';
+import React, { useEffect, useMemo, useState } from 'react';
+import { 
+  LayoutDashboard, Users, Scale, FileText, MessageSquare, 
+  BarChart3, Settings, LogOut, Menu, Plus, Search, 
+  Filter, Download, Mail, MapPin, Phone, Calendar, MoreVertical 
+} from 'lucide-react';
+import { supabase } from '../lib/supabaseClient';
+import './AdminTheme.css';
+import './clients.css';
 
-const BackIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
-  </svg>
-);
+const formatJoinedDate = (value) => {
+  const parsed = value ? new Date(value) : null;
+  if (!parsed || Number.isNaN(parsed.getTime())) return 'Unknown';
+  return parsed.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+};
 
-function AdminClients({ onNavigate }) {
+const initialsFromName = (name) => {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return 'CL';
+  return parts.slice(0, 2).map((part) => part[0].toUpperCase()).join('');
+};
+
+const Clients = ({ onNavigate }) => {
+  const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const [clients, setClients] = useState([]);
-  const [searchText, setSearchText] = useState('');
+  const [clientStats, setClientStats] = useState([
+    { label: 'Total Clients', value: '0', color: '#1e3a8a' },
+    { label: 'Active Clients', value: '0', color: '#22c55e' },
+    { label: 'New This Month', value: '0', color: '#eab308' },
+    { label: 'Total Consultations', value: '0', color: '#64748b' },
+  ]);
   const [loading, setLoading] = useState(true);
-  const [actionState, setActionState] = useState({ message: '', error: '' });
+  const [loadError, setLoadError] = useState('');
+  const navigate = (path) => {
+    const pageMap = {
+      '/': 'admin-home',
+      '/clients': 'admin-clients',
+      '/attorneys': 'admin-attorneys',
+      '/requests': 'admin-requests',
+      '/consultations': 'admin-consultations',
+      '/reports': 'admin-reports',
+      '/settings': 'admin-settings',
+    };
+    onNavigate?.(pageMap[path] || 'admin-home');
+  };
+  const handleQuickAction = (message) => window.alert(message);
+
+  const navItems = [
+    { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/' },
+    { label: 'Clients', icon: <Users size={20} />, path: '/clients' },
+    { label: 'Attorneys', icon: <Scale size={20} />, path: '/attorneys' },
+    { label: 'Requests', icon: <FileText size={20} />, path: '/requests' },
+    { label: 'Consultations', icon: <MessageSquare size={20} />, path: '/consultations' },
+    { label: 'Reports', icon: <BarChart3 size={20} />, path: '/reports' },
+    { label: 'Settings', icon: <Settings size={20} />, path: '/settings' },
+  ];
 
   useEffect(() => {
     let isMounted = true;
 
     const loadClients = async () => {
       try {
-        const rows = await fetchClients();
-        if (isMounted) {
-          setClients(rows);
-        }
+        const [profilesRes, appointmentsRes] = await Promise.all([
+          supabase
+            .from('profiles')
+            .select('id, full_name, email, phone, address, created_at')
+            .eq('role', 'Client')
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('appointments')
+            .select('id, client_id, status, created_at')
+            .order('created_at', { ascending: false }),
+        ]);
+
+        if (profilesRes.error) throw profilesRes.error;
+        if (appointmentsRes.error) throw appointmentsRes.error;
+
+        const profileRows = profilesRes.data || [];
+        const appointmentRows = appointmentsRes.data || [];
+        const validConsultations = appointmentRows.filter(
+          (row) => String(row.status || '').toLowerCase() !== 'cancelled',
+        );
+
+        const consultationsByClient = new Map();
+        validConsultations.forEach((row) => {
+          if (!row.client_id) return;
+          consultationsByClient.set(
+            row.client_id,
+            Number(consultationsByClient.get(row.client_id) || 0) + 1,
+          );
+        });
+
+        const currentMonth = new Date().getMonth();
+        const currentYear = new Date().getFullYear();
+        const newThisMonth = profileRows.filter((row) => {
+          const created = row.created_at ? new Date(row.created_at) : null;
+          if (!created || Number.isNaN(created.getTime())) return false;
+          return created.getMonth() === currentMonth && created.getFullYear() === currentYear;
+        }).length;
+
+        const activeClientIds = new Set(validConsultations.map((row) => row.client_id).filter(Boolean));
+
+        const normalizedClients = profileRows.map((row) => ({
+          id: row.id,
+          avatar: initialsFromName(row.full_name),
+          name: row.full_name || 'Unnamed Client',
+          email: row.email || 'No email',
+          location: row.address || 'No location provided',
+          phone: row.phone || 'No phone',
+          joined: formatJoinedDate(row.created_at),
+          consultations: Number(consultationsByClient.get(row.id) || 0),
+        }));
+
+        if (!isMounted) return;
+
+        setClients(normalizedClients);
+        setClientStats([
+          { label: 'Total Clients', value: profileRows.length.toLocaleString(), color: '#1e3a8a' },
+          { label: 'Active Clients', value: activeClientIds.size.toLocaleString(), color: '#22c55e' },
+          { label: 'New This Month', value: newThisMonth.toLocaleString(), color: '#eab308' },
+          { label: 'Total Consultations', value: validConsultations.length.toLocaleString(), color: '#64748b' },
+        ]);
+        setLoadError('');
       } catch (error) {
         if (isMounted) {
-          setActionState({ message: '', error: error.message || 'Failed to load clients.' });
+          setClients([]);
+          setLoadError(error.message || 'Failed to load clients.');
         }
       } finally {
         if (isMounted) {
@@ -36,103 +136,170 @@ function AdminClients({ onNavigate }) {
 
     loadClients();
 
+    const profilesChannel = supabase
+      .channel('admin-clients-profiles')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => loadClients())
+      .subscribe();
+
+    const appointmentsChannel = supabase
+      .channel('admin-clients-appointments')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => loadClients())
+      .subscribe();
+
     return () => {
       isMounted = false;
+      supabase.removeChannel(profilesChannel);
+      supabase.removeChannel(appointmentsChannel);
     };
   }, []);
 
   const filteredClients = useMemo(() => {
-    const keyword = searchText.trim().toLowerCase();
-    if (!keyword) return clients;
-
-    return clients.filter((client) => {
-      const fullName = client.full_name || '';
-      const email = client.email || '';
-      const phone = client.phone || '';
-      return (
-        fullName.toLowerCase().includes(keyword)
-        || email.toLowerCase().includes(keyword)
-        || phone.toLowerCase().includes(keyword)
-      );
-    });
-  }, [clients, searchText]);
-
-  const notifyClient = async (client) => {
-    try {
-      await createNotification({
-        userId: client.id,
-        title: 'Update from BatasMo Admin',
-        body: 'Your request has been reviewed. Please open your dashboard for the latest status.',
-        type: 'admin_notice',
-      });
-      setActionState({ message: `Notification sent to ${client.full_name || client.email}.`, error: '' });
-    } catch (error) {
-      setActionState({ message: '', error: error.message || 'Failed to send notification.' });
-    }
-  };
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return clients;
+    return clients.filter((client) =>
+      [client.name, client.email, client.location].some((value) =>
+        String(value || '').toLowerCase().includes(term),
+      ),
+    );
+  }, [clients, searchTerm]);
 
   return (
-    <div className="adm-detail-page">
-      <header className="adm-detail-header">
-        <div className="adm-detail-header__left">
-          <button className="adm-detail-back-btn" onClick={() => onNavigate('admin-home')} title="Go back">
-            <BackIcon />
+    <div className="app-container">
+      {/* SIDEBAR */}
+      <aside className={`sidebar ${isSidebarOpen ? 'open' : 'closed'}`}>
+        <div className="sidebar-header">
+          <button className="sidebar-toggle" onClick={() => setSidebarOpen(!isSidebarOpen)}>
+            <Menu size={24} />
           </button>
-          <h1 className="adm-detail-title">Total Clients</h1>
-          <span className="adm-detail-count">{loading ? '...' : clients.length}</span>
+          {isSidebarOpen && <img src="/logo/logo.jpg" alt="BatasMo logo" className="brand-logo" />}
+          {isSidebarOpen && <span className="logo-text">BatasMo</span>}
         </div>
-      </header>
 
-      <main className="adm-detail-main">
-        <div className="adm-detail-card">
-          <div className="adm-detail-search">
-            <input
-              type="text"
-              placeholder="Search clients..."
-              className="adm-detail-input"
-              value={searchText}
-              onChange={(event) => setSearchText(event.target.value)}
+        <nav className="sidebar-nav">
+          {navItems.map((item) => (
+            <NavItem
+              key={item.label}
+              icon={item.icon}
+              label={item.label}
+              active={item.path === '/clients'}
+              open={isSidebarOpen}
+              onClick={() => navigate(item.path)}
             />
+          ))}
+        </nav>
+
+        <div className="sidebar-footer">
+          <div className="profile-section">
+            <div className="profile-avatar">AD</div>
+            {isSidebarOpen && (
+              <div className="profile-info">
+                <p className="name">Admin User</p>
+                <p className="email">admin@batasmo.com</p>
+              </div>
+            )}
+          </div>
+          <button className="logout-btn" onClick={() => handleQuickAction('Logout clicked')}>
+            <LogOut size={18} />
+            {isSidebarOpen && <span>Logout</span>}
+          </button>
+        </div>
+      </aside>
+
+      {/* MAIN CONTENT */}
+      <main className="main-content">
+        <div className="content-wrapper">
+          <div className="page-header">
+            <div>
+              <h2 className="title">Clients Management</h2>
+              <p className="subtitle">Manage and view all registered clients</p>
+            </div>
+            <button className="add-btn" onClick={() => handleQuickAction('Add New Client clicked')}>
+              <Plus size={18} /> Add New Client
+            </button>
           </div>
 
-          {actionState.message ? <p>{actionState.message}</p> : null}
-          {actionState.error ? <p>{actionState.error}</p> : null}
+          {/* Stats Grid */}
+          <div className="stats-grid">
+            {clientStats.map((stat, index) => (
+              <div key={index} className="stat-card" style={{ borderLeft: `4px solid ${stat.color}` }}>
+                <h3 className="stat-value">{stat.value}</h3>
+                <p className="stat-label">{stat.label}</p>
+              </div>
+            ))}
+          </div>
 
-          <table className="adm-detail-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Phone</th>
-                <th>Join Date</th>
-                <th>Status</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
+          {/* Filters Bar */}
+          <div className="filter-bar">
+            <div className="search-box">
+              <Search size={18} className="search-icon" />
+              <input
+                type="text"
+                placeholder="Search clients by name, email, or location..."
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+              />
+            </div>
+            <div className="filter-actions">
+              <button className="btn-secondary" onClick={() => handleQuickAction('Client filters opened')}><Filter size={18} /> Filter</button>
+              <button className="btn-secondary" onClick={() => handleQuickAction('Client export started')}><Download size={18} /> Export</button>
+            </div>
+          </div>
+
+          {/* Clients List */}
+          <div className="clients-container">
+            <div className="list-header">
+              <h3>All Clients ({filteredClients.length})</h3>
+            </div>
+            {loadError ? <p className="clients-info-message">{loadError}</p> : null}
+            {loading ? <p className="clients-info-message">Loading clients...</p> : null}
+            <div className="client-stack">
               {filteredClients.map((client) => (
-                <tr key={client.id} className="adm-detail-table__row--clickable">
-                  <td>{client.full_name || 'Unnamed Client'}</td>
-                  <td>{client.email || '-'}</td>
-                  <td>{client.phone || '-'}</td>
-                  <td>{client.created_at ? new Date(client.created_at).toLocaleDateString() : '-'}</td>
-                  <td><span className="adm-detail-badge adm-detail-badge--active">Active</span></td>
-                  <td>
-                    <button className="adm-detail-row-btn" onClick={() => notifyClient(client)}>Notify</button>
-                  </td>
-                </tr>
+                <div key={client.id} className="client-row">
+                  <div className="client-identity">
+                    <div className="client-avatar">{client.avatar}</div>
+                    <div className="client-details">
+                      <div className="name-wrapper">
+                        <span className="client-name">{client.name}</span>
+                        <span className="status-badge">Active</span>
+                      </div>
+                      <div className="contact-info">
+                        <span><Mail size={14} /> {client.email}</span>
+                        <span><MapPin size={14} /> {client.location}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="client-meta">
+                    <div className="meta-info">
+                      <span><Phone size={14} /> {client.phone}</span>
+                      <span><Calendar size={14} /> Joined: {client.joined}</span>
+                    </div>
+                    <div className="consult-info">
+                      <div className="count-group">
+                        <span className="count">{client.consultations}</span>
+                        <span className="label">Consultations</span>
+                      </div>
+                      <MoreVertical size={18} className="more-icon" />
+                    </div>
+                  </div>
+                </div>
               ))}
-              {!loading && filteredClients.length === 0 ? (
-                <tr>
-                  <td colSpan="6">No client records found.</td>
-                </tr>
+              {!loading && !loadError && filteredClients.length === 0 ? (
+                <p className="clients-info-message">No clients found.</p>
               ) : null}
-            </tbody>
-          </table>
+            </div>
+          </div>
         </div>
       </main>
     </div>
   );
-}
+};
 
-export default AdminClients;
+const NavItem = ({ icon, label, active, open, onClick }) => (
+  <div className={`nav-item ${active ? 'active' : ''}`} onClick={onClick}>
+    {icon}
+    {open && <span>{label}</span>}
+  </div>
+);
+
+export default Clients;
