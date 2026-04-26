@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { 
-  LayoutDashboard, Users, Scale, FileText, MessageSquare, 
+  LayoutDashboard, Users, Scale, FileText,
   BarChart3, Settings, LogOut, Menu,
   Video, Phone, MessageCircle, Star
 } from 'lucide-react';
@@ -51,7 +51,6 @@ const Consultations = ({ onNavigate }) => {
     { label: 'Clients', icon: <Users size={20} />, path: '/clients' },
     { label: 'Attorneys', icon: <Scale size={20} />, path: '/attorneys' },
     { label: 'Requests', icon: <FileText size={20} />, path: '/requests' },
-    { label: 'Consultations', icon: <MessageSquare size={20} />, path: '/consultations' },
     { label: 'Reports', icon: <BarChart3 size={20} />, path: '/reports' },
     { label: 'Settings', icon: <Settings size={20} />, path: '/settings' },
   ];

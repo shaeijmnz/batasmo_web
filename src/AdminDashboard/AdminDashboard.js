@@ -803,7 +803,6 @@ const Dashboard = ({ onNavigate }) => {
     { label: 'Clients', icon: <Users size={20} />, path: '/clients' },
     { label: 'Attorneys', icon: <Scale size={20} />, path: '/attorneys' },
     { label: 'Requests', icon: <FileText size={20} />, path: '/requests' },
-    { label: 'Consultations', icon: <MessageSquare size={20} />, path: '/consultations' },
     { label: 'Reports', icon: <BarChart3 size={20} />, path: '/reports' },
     { label: 'Settings', icon: <Settings size={20} />, path: '/settings' },
   ];
