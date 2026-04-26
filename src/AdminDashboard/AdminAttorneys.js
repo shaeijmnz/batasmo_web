@@ -65,6 +65,15 @@ const SLOT_TIME_OPTIONS = [
 ];
 
 const WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const MONTHLY_WEEKDAY_OPTIONS = [
+  { value: 0, label: 'Sun' },
+  { value: 1, label: 'Mon' },
+  { value: 2, label: 'Tue' },
+  { value: 3, label: 'Wed' },
+  { value: 4, label: 'Thu' },
+  { value: 5, label: 'Fri' },
+  { value: 6, label: 'Sat' },
+];
 
 const toDateKey = (dateValue) => {
   const year = dateValue.getFullYear();
@@ -162,6 +171,9 @@ const Attorneys = ({ onNavigate }) => {
   const [availabilitySaving, setAvailabilitySaving] = useState(false);
   const [availabilityError, setAvailabilityError] = useState('');
   const [availabilitySaved, setAvailabilitySaved] = useState(false);
+  const [monthlyTemplateTimes, setMonthlyTemplateTimes] = useState(['14:00', '15:00', '16:00']);
+  const [monthlyTemplateWeekdays, setMonthlyTemplateWeekdays] = useState([1, 2, 3, 4, 5]);
+  const [monthlyApplyMessage, setMonthlyApplyMessage] = useState('');
   const navigate = (path) => {
     const pageMap = {
       '/': 'admin-home',
@@ -389,6 +401,7 @@ const Attorneys = ({ onNavigate }) => {
     setSelectedDate(getTodayDateKey());
     setAvailabilitySaved(false);
     setAvailabilityError('');
+    setMonthlyApplyMessage('');
     loadAvailabilityForAttorney(attorney.id);
   };
 
@@ -397,11 +410,13 @@ const Attorneys = ({ onNavigate }) => {
     setAvailabilityByDate({});
     setAvailabilityError('');
     setAvailabilitySaved(false);
+    setMonthlyApplyMessage('');
   };
 
   const changeMonth = (offset) => {
     setMonthCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() + offset, 1));
     setAvailabilitySaved(false);
+    setMonthlyApplyMessage('');
   };
 
   useEffect(() => {
@@ -434,6 +449,81 @@ const Attorneys = ({ onNavigate }) => {
       return next;
     });
     setAvailabilitySaved(false);
+    setMonthlyApplyMessage('');
+  };
+
+  const toggleMonthlyTemplateTime = (time24) => {
+    setMonthlyTemplateTimes((prev) => {
+      const current = new Set(prev);
+      if (current.has(time24)) {
+        current.delete(time24);
+      } else {
+        current.add(time24);
+      }
+      return Array.from(current).sort();
+    });
+    setAvailabilitySaved(false);
+    setMonthlyApplyMessage('');
+  };
+
+  const toggleMonthlyWeekday = (weekday) => {
+    setMonthlyTemplateWeekdays((prev) => {
+      const current = new Set(prev);
+      if (current.has(weekday)) {
+        current.delete(weekday);
+      } else {
+        current.add(weekday);
+      }
+      return Array.from(current).sort((a, b) => a - b);
+    });
+    setAvailabilitySaved(false);
+    setMonthlyApplyMessage('');
+  };
+
+  const applyMonthlyTemplate = () => {
+    if (monthlyTemplateTimes.length === 0) {
+      setAvailabilityError('Choose at least one monthly time slot before applying.');
+      return;
+    }
+
+    if (monthlyTemplateWeekdays.length === 0) {
+      setAvailabilityError('Choose at least one weekday before applying the monthly schedule.');
+      return;
+    }
+
+    const selectedWeekdays = new Set(monthlyTemplateWeekdays);
+    const year = monthCursor.getFullYear();
+    const month = monthCursor.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const monthAssignments = [];
+
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const date = new Date(year, month, day);
+      if (!selectedWeekdays.has(date.getDay())) continue;
+
+      const dateKey = toDateKey(date);
+      const futureTimes = monthlyTemplateTimes.filter((time24) => !isPastDateTime(dateKey, time24));
+      monthAssignments.push({ dateKey, futureTimes });
+    }
+
+    setAvailabilityByDate((prev) => {
+      const next = { ...prev };
+
+      monthAssignments.forEach(({ dateKey, futureTimes }) => {
+        if (futureTimes.length > 0) {
+          next[dateKey] = futureTimes;
+        } else {
+          delete next[dateKey];
+        }
+      });
+
+      return next;
+    });
+
+    setAvailabilitySaved(false);
+    setAvailabilityError('');
+    const appliedDateCount = monthAssignments.filter((item) => item.futureTimes.length > 0).length;
+    setMonthlyApplyMessage(`Monthly template applied to ${appliedDateCount} date(s). Click Save Schedule to sync it to clients.`);
   };
 
   const saveAvailability = async () => {
@@ -633,6 +723,7 @@ const Attorneys = ({ onNavigate }) => {
                 <CheckCircle size={16} /> Availability saved and synced to clients.
               </p>
             ) : null}
+            {monthlyApplyMessage ? <p className="availability-info">{monthlyApplyMessage}</p> : null}
 
             <div className="availability-layout">
               <section className="availability-card">
@@ -709,6 +800,53 @@ const Attorneys = ({ onNavigate }) => {
                       </button>
                     );
                   })}
+                </div>
+
+                <div className="monthly-template-card">
+                  <div className="monthly-template-head">
+                    <div>
+                      <h4>Monthly Template</h4>
+                      <p>Pick the usual days and times, then apply them to the whole visible month.</p>
+                    </div>
+                    <button type="button" className="monthly-apply-btn" onClick={applyMonthlyTemplate}>
+                      Apply to {monthLabel}
+                    </button>
+                  </div>
+
+                  <div className="monthly-template-section">
+                    <span className="monthly-template-label">Repeat on</span>
+                    <div className="monthly-weekday-grid">
+                      {MONTHLY_WEEKDAY_OPTIONS.map((day) => (
+                        <button
+                          key={day.value}
+                          type="button"
+                          className={`monthly-weekday-chip ${monthlyTemplateWeekdays.includes(day.value) ? 'monthly-weekday-chip--active' : ''}`}
+                          onClick={() => toggleMonthlyWeekday(day.value)}
+                        >
+                          {day.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="monthly-template-section">
+                    <span className="monthly-template-label">Time slots</span>
+                    <div className="monthly-time-grid">
+                      {SLOT_TIME_OPTIONS.map((time24) => {
+                        const active = monthlyTemplateTimes.includes(time24);
+                        return (
+                          <button
+                            key={`monthly-${time24}`}
+                            type="button"
+                            className={`monthly-time-chip ${active ? 'monthly-time-chip--active' : ''}`}
+                            onClick={() => toggleMonthlyTemplateTime(time24)}
+                          >
+                            {formatHourLabel(time24)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               </section>
             </div>
