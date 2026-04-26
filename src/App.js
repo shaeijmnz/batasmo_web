@@ -45,7 +45,6 @@ const AttorneyMessages = lazy(() => import('./AttorneyDashboard/AttorneyMessages
 const AttorneyLogs = lazy(() => import('./AttorneyDashboard/AttorneyLogs'));
 const AttorneyAnnouncements = lazy(() => import('./AttorneyDashboard/AttorneyAnnouncements'));
 const AttorneyProfile = lazy(() => import('./AttorneyDashboard/AttorneyProfile'));
-const ManageAvailability = lazy(() => import('./AttorneyDashboard/ManageAvailability'));
 
 const AdminDashboard = lazy(() => import('./AdminDashboard/AdminDashboard'));
 const AdminClients = lazy(() => import('./AdminDashboard/AdminClients'));
@@ -78,7 +77,6 @@ const ATTORNEY_PAGES = [
   'attorney-logs',
   'attorney-announcements',
   'attorney-profile',
-  'manage-availability',
 ]
 
 const ADMIN_PAGES = [
@@ -625,7 +623,6 @@ function App() {
     );
   if (page === 'attorney-announcements') return renderLazy(<AttorneyAnnouncements onNavigate={handleNavigate} profile={currentProfile} />);
   if (page === 'attorney-profile') return renderLazy(<AttorneyProfile onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} onProfileUpdated={setCurrentProfile} />);
-  if (page === 'manage-availability') return renderLazy(<ManageAvailability onNavigate={handleNavigate} profile={currentProfile} />);
   if (page === 'admin-home') return renderLazy(<AdminDashboard onNavigate={handleNavigate} />);
   if (page === 'admin-clients') return renderLazy(<AdminClients onNavigate={handleNavigate} />);
   if (page === 'admin-attorneys') return renderLazy(<AdminAttorneys onNavigate={handleNavigate} />);

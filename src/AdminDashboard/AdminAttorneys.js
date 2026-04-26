@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { 
   LayoutDashboard, Users, Scale, FileText, MessageSquare, 
   BarChart3, Settings, LogOut, Menu, Plus, Search, 
-  Filter, Download, Mail, Phone, Star, Award, MoreVertical
+  Filter, Download, Mail, Phone, Star, Award, Calendar, CheckCircle, X
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import { fetchAttorneyAvailabilitySlots, saveAttorneyAvailabilitySlots } from '../lib/userApi';
 import './AdminTheme.css';
 import './attorneys.css';
 
@@ -26,6 +27,95 @@ const formatExperience = (years) => {
 
 const computeAvailability = (activeCount) => (activeCount > 0 ? 'Busy' : 'Available');
 
+const SLOT_TIME_OPTIONS = [
+  '08:00',
+  '09:00',
+  '10:00',
+  '11:00',
+  '12:00',
+  '13:00',
+  '14:00',
+  '15:00',
+  '16:00',
+  '17:00',
+  '18:00',
+];
+
+const WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+const toDateKey = (dateValue) => {
+  const year = dateValue.getFullYear();
+  const month = String(dateValue.getMonth() + 1).padStart(2, '0');
+  const day = String(dateValue.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getTodayDateKey = () => toDateKey(new Date());
+
+const formatDisplayDate = (dateKey) => {
+  if (!dateKey) return 'No date selected';
+  const parsed = new Date(`${dateKey}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return dateKey;
+  return parsed.toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+};
+
+const formatHourLabel = (time24) => {
+  const [rawHour, rawMinute] = String(time24 || '').split(':').map(Number);
+  if (!Number.isFinite(rawHour) || !Number.isFinite(rawMinute)) return String(time24 || '');
+  const meridiem = rawHour >= 12 ? 'PM' : 'AM';
+  const twelveHour = rawHour % 12 === 0 ? 12 : rawHour % 12;
+  return `${String(twelveHour).padStart(2, '0')}:${String(rawMinute).padStart(2, '0')} ${meridiem}`;
+};
+
+const parseHourLabelTo24 = (value) => {
+  const match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) return null;
+  let hour = Number(match[1]);
+  const minute = String(match[2]).padStart(2, '0');
+  const meridiem = String(match[3] || '').toUpperCase();
+
+  if (meridiem === 'PM' && hour < 12) hour += 12;
+  if (meridiem === 'AM' && hour === 12) hour = 0;
+  return `${String(hour).padStart(2, '0')}:${minute}`;
+};
+
+const monthKeyFromDate = (dateValue) => `${dateValue.getFullYear()}-${String(dateValue.getMonth() + 1).padStart(2, '0')}`;
+
+const isPastDateTime = (dateKey, time24) => {
+  const parsed = new Date(`${dateKey}T${time24}:00`);
+  if (Number.isNaN(parsed.getTime())) return true;
+  return parsed <= new Date();
+};
+
+const buildCalendarCells = (monthCursor) => {
+  const year = monthCursor.getFullYear();
+  const month = monthCursor.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const leadingCount = firstDay.getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells = [];
+
+  for (let index = 0; index < leadingCount; index += 1) {
+    cells.push({ type: 'blank', key: `leading-${index}` });
+  }
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const date = new Date(year, month, day);
+    cells.push({
+      type: 'day',
+      key: `day-${day}`,
+      day,
+      dateKey: toDateKey(date),
+    });
+  }
+
+  while (cells.length % 7 !== 0) {
+    cells.push({ type: 'blank', key: `trailing-${cells.length}` });
+  }
+
+  return cells;
+};
+
 const Attorneys = ({ onNavigate }) => {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -38,6 +128,17 @@ const Attorneys = ({ onNavigate }) => {
   const [attorneysList, setAttorneysList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [availabilityAttorney, setAvailabilityAttorney] = useState(null);
+  const [availabilityByDate, setAvailabilityByDate] = useState({});
+  const [monthCursor, setMonthCursor] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+  const [selectedDate, setSelectedDate] = useState(getTodayDateKey());
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [availabilitySaving, setAvailabilitySaving] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState('');
+  const [availabilitySaved, setAvailabilitySaved] = useState(false);
   const navigate = (path) => {
     const pageMap = {
       '/': 'admin-home',
@@ -223,6 +324,130 @@ const Attorneys = ({ onNavigate }) => {
     );
   }, [attorneysList, searchTerm]);
 
+  const loadAvailabilityForAttorney = useCallback(async (attorneyId) => {
+    if (!attorneyId) return;
+
+    setAvailabilityLoading(true);
+    setAvailabilityError('');
+    try {
+      const rows = await fetchAttorneyAvailabilitySlots(attorneyId);
+      const nextMap = {};
+
+      rows.forEach((item) => {
+        const dateKey = String(item.date || '').trim();
+        if (!dateKey) return;
+
+        const parsedTime = parseHourLabelTo24(item.startLabel);
+        if (!parsedTime || !SLOT_TIME_OPTIONS.includes(parsedTime)) return;
+
+        if (!nextMap[dateKey]) nextMap[dateKey] = [];
+        if (!nextMap[dateKey].includes(parsedTime)) nextMap[dateKey].push(parsedTime);
+      });
+
+      Object.keys(nextMap).forEach((dateKey) => {
+        nextMap[dateKey].sort();
+      });
+
+      setAvailabilityByDate(nextMap);
+    } catch (error) {
+      setAvailabilityError(error.message || 'Failed to load attorney availability.');
+      setAvailabilityByDate({});
+    } finally {
+      setAvailabilityLoading(false);
+    }
+  }, []);
+
+  const openAvailabilityManager = (attorney) => {
+    const now = new Date();
+    setAvailabilityAttorney(attorney);
+    setAvailabilityByDate({});
+    setMonthCursor(new Date(now.getFullYear(), now.getMonth(), 1));
+    setSelectedDate(getTodayDateKey());
+    setAvailabilitySaved(false);
+    setAvailabilityError('');
+    loadAvailabilityForAttorney(attorney.id);
+  };
+
+  const closeAvailabilityManager = () => {
+    setAvailabilityAttorney(null);
+    setAvailabilityByDate({});
+    setAvailabilityError('');
+    setAvailabilitySaved(false);
+  };
+
+  const changeMonth = (offset) => {
+    setMonthCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() + offset, 1));
+    setAvailabilitySaved(false);
+  };
+
+  useEffect(() => {
+    const currentMonthKey = monthKeyFromDate(monthCursor);
+    if (!String(selectedDate || '').startsWith(currentMonthKey)) {
+      const today = new Date();
+      const todayKey = toDateKey(today);
+      setSelectedDate(monthKeyFromDate(today) === currentMonthKey ? todayKey : `${currentMonthKey}-01`);
+    }
+  }, [monthCursor, selectedDate]);
+
+  const toggleTimeSlot = (time24) => {
+    if (!selectedDate || isPastDateTime(selectedDate, time24)) return;
+
+    setAvailabilityByDate((prev) => {
+      const current = new Set(prev[selectedDate] || []);
+      if (current.has(time24)) {
+        current.delete(time24);
+      } else {
+        current.add(time24);
+      }
+
+      const next = { ...prev };
+      const sorted = Array.from(current).sort();
+      if (sorted.length > 0) {
+        next[selectedDate] = sorted;
+      } else {
+        delete next[selectedDate];
+      }
+      return next;
+    });
+    setAvailabilitySaved(false);
+  };
+
+  const saveAvailability = async () => {
+    if (!availabilityAttorney?.id) return;
+
+    const now = new Date();
+    const prepared = Object.entries(availabilityByDate)
+      .flatMap(([dateKey, timeList]) =>
+        (timeList || []).map((time24) => {
+          const start = new Date(`${dateKey}T${time24}:00`);
+          if (Number.isNaN(start.getTime()) || start <= now) return null;
+          const end = new Date(start.getTime() + 60 * 60 * 1000);
+          return {
+            startTime: start.toISOString(),
+            endTime: end.toISOString(),
+          };
+        }),
+      )
+      .filter(Boolean);
+
+    setAvailabilitySaving(true);
+    setAvailabilityError('');
+    try {
+      await saveAttorneyAvailabilitySlots({ attorneyId: availabilityAttorney.id, slots: prepared });
+      await loadAvailabilityForAttorney(availabilityAttorney.id);
+      setAvailabilitySaved(true);
+    } catch (error) {
+      setAvailabilityError(error.message || 'Failed to save attorney availability.');
+      setAvailabilitySaved(false);
+    } finally {
+      setAvailabilitySaving(false);
+    }
+  };
+
+  const calendarCells = buildCalendarCells(monthCursor);
+  const selectedTimes = availabilityByDate[selectedDate] || [];
+  const monthLabel = monthCursor.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' });
+
   return (
     <div className="app-container">
       {/* SIDEBAR */}
@@ -345,7 +570,14 @@ const Attorneys = ({ onNavigate }) => {
                       <span className="m-value">{attorney.cases}</span>
                       <span className="m-label">Cases</span>
                     </div>
-                    <MoreVertical size={20} className="more-icon" />
+                    <button
+                      type="button"
+                      className="manage-availability-btn"
+                      onClick={() => openAvailabilityManager(attorney)}
+                    >
+                      <Calendar size={16} />
+                      Manage Availability
+                    </button>
                   </div>
                 </div>
               ))}
@@ -356,6 +588,111 @@ const Attorneys = ({ onNavigate }) => {
           </div>
         </div>
       </main>
+
+      {availabilityAttorney ? (
+        <div className="availability-page-overlay">
+          <section className="availability-page">
+            <div className="availability-page__header">
+              <div>
+                <p className="availability-kicker">Admin Schedule Control</p>
+                <h2>Manage Availability</h2>
+                <p>
+                  Set bookable time slots for <strong>{availabilityAttorney.name}</strong>. These slots appear on the client booking page.
+                </p>
+              </div>
+              <button type="button" className="availability-close-btn" onClick={closeAvailabilityManager}>
+                <X size={22} />
+              </button>
+            </div>
+
+            {availabilityError ? <p className="availability-error">{availabilityError}</p> : null}
+            {availabilitySaved ? (
+              <p className="availability-success">
+                <CheckCircle size={16} /> Availability saved and synced to clients.
+              </p>
+            ) : null}
+
+            <div className="availability-layout">
+              <section className="availability-card">
+                <div className="availability-calendar-head">
+                  <button type="button" onClick={() => changeMonth(-1)} aria-label="Previous month">‹</button>
+                  <h3>{monthLabel}</h3>
+                  <button type="button" onClick={() => changeMonth(1)} aria-label="Next month">›</button>
+                </div>
+
+                <div className="availability-weekdays">
+                  {WEEKDAY_LABELS.map((label, index) => (
+                    <span key={`${label}-${index}`}>{label}</span>
+                  ))}
+                </div>
+
+                <div className="availability-days">
+                  {calendarCells.map((cell) => {
+                    if (cell.type === 'blank') {
+                      return <span key={cell.key} className="availability-day availability-day--blank" />;
+                    }
+
+                    const hasAvailability = (availabilityByDate[cell.dateKey] || []).length > 0;
+                    const isSelected = cell.dateKey === selectedDate;
+                    const isToday = cell.dateKey === getTodayDateKey();
+
+                    return (
+                      <button
+                        key={cell.key}
+                        type="button"
+                        className={`availability-day ${isSelected ? 'availability-day--selected' : ''} ${isToday ? 'availability-day--today' : ''}`}
+                        onClick={() => setSelectedDate(cell.dateKey)}
+                      >
+                        <span>{cell.day}</span>
+                        {hasAvailability ? <i className="availability-dot" /> : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section className="availability-card">
+                <div className="availability-slots-head">
+                  <div>
+                    <h3>{formatDisplayDate(selectedDate)}</h3>
+                    <p>{selectedTimes.length} active slot(s)</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="availability-save-btn"
+                    onClick={saveAvailability}
+                    disabled={availabilitySaving}
+                  >
+                    {availabilitySaving ? 'Saving...' : 'Save Schedule'}
+                  </button>
+                </div>
+
+                {availabilityLoading ? <p className="availability-muted">Loading availability...</p> : null}
+
+                <div className="availability-slot-grid">
+                  {SLOT_TIME_OPTIONS.map((time24) => {
+                    const active = selectedTimes.includes(time24);
+                    const blockedByPast = isPastDateTime(selectedDate, time24);
+
+                    return (
+                      <button
+                        key={time24}
+                        type="button"
+                        className={`availability-time-chip ${active ? 'availability-time-chip--active' : ''} ${blockedByPast ? 'availability-time-chip--disabled' : ''}`}
+                        onClick={() => toggleTimeSlot(time24)}
+                        disabled={blockedByPast}
+                      >
+                        <strong>{formatHourLabel(time24)}</strong>
+                        <span>{blockedByPast ? 'Past' : active ? 'Available' : 'Tap to enable'}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 };
