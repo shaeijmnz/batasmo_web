@@ -1,0 +1,56 @@
+@import './AdminDetail.css';
+
+.adm-profile-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.adm-profile-section-title {
+  margin: 0 0 14px;
+  color: #1f2937;
+  font-size: 1.15rem;
+}
+
+.adm-profile-message {
+  margin: 6px 0 12px;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: #2563eb;
+}
+
+.adm-profile-signout-card {
+  grid-column: span 2;
+}
+
+.adm-profile-signout-text {
+  margin: 0 0 12px;
+  color: #6b7280;
+  font-size: 0.92rem;
+}
+
+.adm-profile-signout-btn {
+  border: none;
+  border-radius: 8px;
+  background: #ef4444;
+  color: #fff;
+  padding: 10px 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .2s;
+}
+
+.adm-profile-signout-btn:hover {
+  background: #dc2626;
+}
+
+@media (max-width: 900px) {
+  .adm-profile-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .adm-profile-signout-card {
+    grid-column: span 1;
+  }
+}
