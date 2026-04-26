@@ -2746,12 +2746,27 @@ const DOUBLE_BOOKING_INACTIVE_STATUSES = new Set([
   'noshow',
 ])
 
-export async function assertNoActiveAppointmentForClient(clientId) {
-  if (!clientId) return
+export async function getClientActiveBookingStatus(clientId) {
+  if (!clientId) {
+    return {
+      enforcementEnabled: true,
+      activeAppointments: [],
+      activeCount: 0,
+      requiresConfirmation: false,
+      blocked: false,
+    }
+  }
+
   const enabled = await isDoubleBookingPreventionEnabled()
   if (!enabled) {
     console.info('[booking] double-booking prevention OFF -> skipping check')
-    return
+    return {
+      enforcementEnabled: false,
+      activeAppointments: [],
+      activeCount: 0,
+      requiresConfirmation: false,
+      blocked: false,
+    }
   }
 
   // Fetch all of this client's appointments and decide activeness in JS so
@@ -2779,26 +2794,52 @@ export async function assertNoActiveAppointmentForClient(clientId) {
     return !DOUBLE_BOOKING_INACTIVE_STATUSES.has(normalized)
   })
 
-  if (activeRows.length > 0) {
-    const existing = activeRows[0]
+  return {
+    enforcementEnabled: true,
+    activeAppointments: activeRows,
+    activeCount: activeRows.length,
+    existingAppointment: activeRows[0] || null,
+    requiresConfirmation: activeRows.length === 1,
+    blocked: activeRows.length >= 2,
+  }
+}
+
+export async function assertNoActiveAppointmentForClient(clientId, options = {}) {
+  const status = await getClientActiveBookingStatus(clientId)
+
+  if (!status.enforcementEnabled) return status
+
+  if (status.blocked) {
+    const existing = status.existingAppointment || {}
     console.warn('[booking] double-booking BLOCKED', {
       clientId,
       existingAppointmentId: existing.id,
       existingStatus: existing.status,
       existingTitle: existing.title,
-      totalActive: activeRows.length,
+      totalActive: status.activeCount,
     })
     const err = new Error(
-      `You cannot book a new consultation yet. You already have an active appointment (${existing.title || 'Legal Consultation'}, status: ${existing.status || 'unknown'}). Please finish or cancel it first.`,
+      'You cannot book a new consultation yet. You already have two active appointments. Please finish or cancel one first.',
     )
     err.code = 'DOUBLE_BOOKING_BLOCKED'
     throw err
   }
 
+  if (status.requiresConfirmation && !options.secondBookingConfirmed) {
+    const existing = status.existingAppointment || {}
+    const err = new Error(
+      `You already have an active appointment (${existing.title || 'Legal Consultation'}, status: ${existing.status || 'unknown'}). You can book one more consultation, but please confirm first.`,
+    )
+    err.code = 'DOUBLE_BOOKING_NEEDS_CONFIRMATION'
+    err.details = status
+    throw err
+  }
+
   console.info('[booking] double-booking check passed -> no active appointment found', {
-    totalFetched: (data || []).length,
-    activeCount: activeRows.length,
+    activeCount: status.activeCount,
   })
+
+  return status
 }
 
 export async function createAppointmentBooking({
@@ -2811,6 +2852,7 @@ export async function createAppointmentBooking({
   paymentMethod,
   paymentCode,
   payload,
+  secondBookingConfirmed = false,
 }) {
   const {
     data: { user },
@@ -2822,7 +2864,7 @@ export async function createAppointmentBooking({
 
   const resolvedClientId = user.id
 
-  await assertNoActiveAppointmentForClient(resolvedClientId)
+  await assertNoActiveAppointmentForClient(resolvedClientId, { secondBookingConfirmed })
   if (clientId && clientId !== resolvedClientId) {
     console.warn('[booking] client payload id mismatch, using authenticated id', {
       providedClientId: clientId,

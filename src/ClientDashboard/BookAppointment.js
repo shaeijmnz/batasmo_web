@@ -352,6 +352,7 @@ function BookAppointment({ onNavigate, profile }) {
     }
 
     let checkoutWindow = null;
+    let secondBookingConfirmed = false;
 
     try {
       setIsPaying(true);
@@ -363,8 +364,16 @@ function BookAppointment({ onNavigate, profile }) {
       try {
         await assertNoActiveAppointmentForClient(profile.id);
       } catch (preCheckError) {
-        setSubmitError(preCheckError?.message || 'You cannot book a new consultation right now.');
-        return;
+        if (preCheckError?.code === 'DOUBLE_BOOKING_NEEDS_CONFIRMATION') {
+          const shouldContinue = window.confirm(
+            `${preCheckError.message}\n\nDo you want to continue with this second active booking?`
+          );
+          if (!shouldContinue) return;
+          secondBookingConfirmed = true;
+        } else {
+          setSubmitError(preCheckError?.message || 'You cannot book a new consultation right now.');
+          return;
+        }
       }
 
       checkoutWindow = window.open('', '_blank');
@@ -385,6 +394,7 @@ function BookAppointment({ onNavigate, profile }) {
         title: `Consultation - ${bookingAttorney.specialty || 'General'}`,
         notes: reason.trim() || null,
         amount: bookingAttorney.amount || 2000,
+        secondBookingConfirmed,
         payload: {
           attorney_id: bookingAttorney.id,
           title: `Consultation - ${bookingAttorney.specialty || 'General'}`,
