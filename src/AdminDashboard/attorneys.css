@@ -5,19 +5,19 @@
   --border: #e2e8f0;
   --text-primary: #1e293b;
   --text-secondary: #64748b;
-  --ui-bg-darker: #1e293b;
-  --ui-bg-dark: #1e293b;
-  --ui-bg-card: #ffffff;
-  --ui-accent: #eab308;
-  --ui-text-primary: #ffffff;
-  --ui-text-secondary: #64748b;
+  --ui-bg-darker: #ECE6DE;
+  --ui-bg-dark: #F5F1EB;
+  --ui-bg-card: rgba(255, 255, 255, 0.96);
+  --ui-accent: #152238;
+  --ui-text-primary: #0B0F19;
+  --ui-text-secondary: #4B5563;
   --ui-border: #e2e8f0;
-  --ui-glass-border: rgba(255, 255, 255, 0.2);
-  --ui-glass-bg: rgba(255, 255, 255, 0.1);
-  --ui-shadow-glow: 0 0 10px rgba(59, 130, 246, 0.6);
-  --ui-shadow-premium: 0 4px 12px rgba(0, 0, 0, 0.1);
-  --ui-accent-hover: #d4a017;
-  --ui-bg-card-hover: #f7f7f7;
+  --ui-glass-border: rgba(21, 34, 56, 0.15);
+  --ui-glass-bg: rgba(255, 255, 255, 0.85);
+  --ui-shadow-glow: 0 0 20px rgba(21, 34, 56, 0.1);
+  --ui-shadow-premium: 0 6px 28px rgba(21, 34, 56, 0.12);
+  --ui-accent-hover: #1e2d45;
+  --ui-bg-card-hover: rgba(255, 255, 255, 1);
 }
 
 .app-container { display: flex; min-height: 100vh; overflow: visible; }
