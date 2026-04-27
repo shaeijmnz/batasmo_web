@@ -113,8 +113,16 @@ const Reports = ({ onNavigate }) => {
 
   useEffect(() => {
     let isMounted = true;
+    let reloadTimeoutId = null;
+    let loadingReports = false;
+    let queuedReload = false;
 
     const loadReports = async () => {
+      if (loadingReports) {
+        queuedReload = true;
+        return;
+      }
+      loadingReports = true;
       try {
         const months = getLastSixMonths();
         const monthMetricsMap = new Map(months.map((item) => [item.key, { revenue: 0, consultations: 0 }]));
@@ -291,7 +299,22 @@ const Reports = ({ onNavigate }) => {
         }
       } finally {
         if (isMounted) setLoading(false);
+        loadingReports = false;
+        if (queuedReload) {
+          queuedReload = false;
+          void loadReports();
+        }
       }
+    };
+
+    const scheduleReportsReload = () => {
+      if (reloadTimeoutId) {
+        window.clearTimeout(reloadTimeoutId);
+      }
+      reloadTimeoutId = window.setTimeout(() => {
+        reloadTimeoutId = null;
+        void loadReports();
+      }, 350);
     };
 
     loadReports();
@@ -299,24 +322,27 @@ const Reports = ({ onNavigate }) => {
     const channels = [
       supabase
         .channel('reports-transactions')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => loadReports())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, scheduleReportsReload)
         .subscribe(),
       supabase
         .channel('reports-appointments')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => loadReports())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, scheduleReportsReload)
         .subscribe(),
       supabase
         .channel('reports-feedback')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'consultation_feedback' }, () => loadReports())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'consultation_feedback' }, scheduleReportsReload)
         .subscribe(),
       supabase
         .channel('reports-notarial-requests')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'notarial_requests' }, () => loadReports())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'notarial_requests' }, scheduleReportsReload)
         .subscribe(),
     ];
 
     return () => {
       isMounted = false;
+      if (reloadTimeoutId) {
+        window.clearTimeout(reloadTimeoutId);
+      }
       channels.forEach((channel) => supabase.removeChannel(channel));
     };
   }, []);

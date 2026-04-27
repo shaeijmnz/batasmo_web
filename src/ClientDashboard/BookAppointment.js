@@ -451,9 +451,10 @@ function BookAppointment({ onNavigate, profile }) {
       const startedAt = Date.now();
       const timeoutMs = 5 * 60 * 1000;
       let paid = false;
+      let pollDelayMs = 2500;
 
       while (Date.now() - startedAt < timeoutMs) {
-        await new Promise((resolve) => setTimeout(resolve, 3000));
+        await new Promise((resolve) => setTimeout(resolve, pollDelayMs));
         const statusResult = await getAppointmentPaymentStatus(session.transactionId);
         const status = String(statusResult?.status || 'pending').toLowerCase();
 
@@ -464,6 +465,8 @@ function BookAppointment({ onNavigate, profile }) {
         if (status === 'failed') {
           throw new Error('Payment failed. Please try again.');
         }
+        // Gradually slow polling to reduce load while waiting.
+        pollDelayMs = Math.min(6000, pollDelayMs + 500);
       }
 
       if (!paid) {
