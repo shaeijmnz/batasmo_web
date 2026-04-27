@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import './Announcements.css';
 import { supabase } from '../lib/supabaseClient';
 
@@ -64,18 +64,6 @@ const AnnProfileIcon = () => (
 const MegaphoneIcon = () => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f5a623" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-  </svg>
-);
-
-const SendIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
-  </svg>
-);
-
-const CloseIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
   </svg>
 );
 
@@ -145,13 +133,7 @@ function Announcements({ onNavigate, profile }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [announcements, setAnnouncements] = useState([]);
   const [activeFilter, setActiveFilter] = useState('All');
-  const [chatOpen, setChatOpen] = useState(false);
-  const [chatAnnouncement, setChatAnnouncement] = useState(null);
-  const [chatMessages, setChatMessages] = useState([]);
-  const [chatInput, setChatInput] = useState('');
   const [loadError, setLoadError] = useState('');
-  const chatEndRef = useRef(null);
-  const chatInputRef = useRef(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -164,6 +146,7 @@ function Announcements({ onNavigate, profile }) {
           .from('notifications')
           .select('id, title, body, type, is_read, created_at')
           .eq('user_id', profile.id)
+          .in('type', ['admin_announcement', 'admin_general', 'admin_reschedule', 'admin_update', 'admin_reminder'])
           .order('created_at', { ascending: false })
           .limit(50);
 
@@ -172,8 +155,14 @@ function Announcements({ onNavigate, profile }) {
 
         const mapped = (data || []).map((item) => {
           const dt = new Date(item.created_at);
-          const type = (item.type || 'general').toLowerCase();
-          const normalizedType = type.includes('resched') ? 'reschedule' : type.includes('remind') ? 'reminder' : type.includes('update') ? 'update' : 'general';
+          const type = String(item.type || 'admin_announcement').toLowerCase().replace(/^admin_/, '');
+          const normalizedType = type.includes('resched')
+            ? 'reschedule'
+            : type.includes('remind')
+              ? 'reminder'
+              : type.includes('update')
+                ? 'update'
+                : 'general';
           return {
             id: item.id,
             type: normalizedType,
@@ -183,7 +172,6 @@ function Announcements({ onNavigate, profile }) {
             priority: normalizedType === 'reschedule' || normalizedType === 'reminder' ? 'high' : 'normal',
             read: !!item.is_read,
             adminName: 'BatasMo Admin',
-            chatHistory: [{ from: 'admin', text: item.body || '', time: Number.isNaN(dt.getTime()) ? 'Now' : dt.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', hour12: true }) }],
           };
         });
 
@@ -210,51 +198,6 @@ function Announcements({ onNavigate, profile }) {
     : announcements.filter(a => a.type === activeFilter.toLowerCase());
 
   const unreadCount = announcements.filter(a => !a.read).length;
-
-  // Scroll to bottom on new message
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatMessages]);
-
-  // Focus input when chat opens
-  useEffect(() => {
-    if (chatOpen) chatInputRef.current?.focus();
-  }, [chatOpen]);
-
-  const openChat = (announcement) => {
-    // Mark as read
-    setAnnouncements(prev => prev.map(a =>
-      a.id === announcement.id ? { ...a, read: true } : a
-    ));
-    setChatAnnouncement(announcement);
-    setChatMessages(announcement.chatHistory || []);
-    setChatOpen(true);
-  };
-
-  const closeChat = () => {
-    // Save chat history back
-    if (chatAnnouncement) {
-      setAnnouncements(prev => prev.map(a =>
-        a.id === chatAnnouncement.id ? { ...a, chatHistory: chatMessages } : a
-      ));
-    }
-    setChatOpen(false);
-    setChatAnnouncement(null);
-    setChatMessages([]);
-    setChatInput('');
-  };
-
-  const sendMessage = (e) => {
-    e.preventDefault();
-    if (!chatInput.trim()) return;
-
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', hour12: true });
-
-    const userMsg = { from: 'user', text: chatInput.trim(), time: timeStr };
-    setChatMessages(prev => [...prev, userMsg]);
-    setChatInput('');
-  };
 
   const markAllRead = () => {
     setAnnouncements(prev => prev.map(a => ({ ...a, read: true })));
@@ -367,7 +310,11 @@ function Announcements({ onNavigate, profile }) {
             {filteredAnnouncements.length === 0 ? (
               <div className="ann-empty">
                 <MegaphoneIcon />
-                <p>No {activeFilter.toLowerCase()} announcements</p>
+                <p>
+                  {activeFilter === 'All'
+                    ? 'No admin announcements yet'
+                    : `No ${activeFilter.toLowerCase()} announcements`}
+                </p>
               </div>
             ) : (
               filteredAnnouncements.map(ann => {
@@ -401,14 +348,6 @@ function Announcements({ onNavigate, profile }) {
                         <span className="ann-card__from">From: {ann.adminName}</span>
                       </div>
                     </div>
-                    <div className="ann-card__actions">
-                      <button className="ann-chat-btn" onClick={() => openChat(ann)}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                        </svg>
-                        Chat Now
-                      </button>
-                    </div>
                   </div>
                 );
               })
@@ -416,73 +355,6 @@ function Announcements({ onNavigate, profile }) {
           </div>
         </div>
       </main>
-
-      {/* ── Chat Panel (slide-in) ── */}
-      {chatOpen && chatAnnouncement && (
-        <>
-          <div className="ann-chat-overlay" onClick={closeChat} />
-          <div className="ann-chat-panel">
-            {/* Chat Header */}
-            <div className="ann-chat__header">
-              <div className="ann-chat__header-info">
-                <div className="ann-chat__header-avatar">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                  </svg>
-                </div>
-                <div>
-                  <span className="ann-chat__header-name">{chatAnnouncement.adminName}</span>
-                  <span className="ann-chat__header-status">
-                    <span className="ann-chat__online-dot" />
-                    Online
-                  </span>
-                </div>
-              </div>
-              <button className="ann-chat__close-btn" onClick={closeChat}>
-                <CloseIcon />
-              </button>
-            </div>
-
-            {/* Announcement context banner */}
-            <div className="ann-chat__context">
-              <span className="ann-chat__context-label">Regarding:</span>
-              <span className="ann-chat__context-title">{chatAnnouncement.title}</span>
-            </div>
-
-            {/* Messages */}
-            <div className="ann-chat__messages">
-              {chatMessages.map((msg, i) => (
-                <div key={i} className={`ann-chat__bubble ${msg.from === 'user' ? 'ann-chat__bubble--user' : 'ann-chat__bubble--admin'}`}>
-                  {msg.from === 'admin' && (
-                    <div className="ann-chat__bubble-avatar">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                    </div>
-                  )}
-                  <div className="ann-chat__bubble-content">
-                    <p>{msg.text}</p>
-                    <span className="ann-chat__bubble-time">{msg.time}</span>
-                  </div>
-                </div>
-              ))}
-              <div ref={chatEndRef} />
-            </div>
-
-            {/* Input */}
-            <form className="ann-chat__input-bar" onSubmit={sendMessage}>
-              <input
-                ref={chatInputRef}
-                type="text"
-                placeholder="Type your message..."
-                value={chatInput}
-                onChange={e => setChatInput(e.target.value)}
-              />
-              <button type="submit" className="ann-chat__send-btn" disabled={!chatInput.trim()}>
-                <SendIcon />
-              </button>
-            </form>
-          </div>
-        </>
-      )}
     </div>
   );
 }
