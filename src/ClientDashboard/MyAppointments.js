@@ -104,6 +104,7 @@ function MyAppointments({ onNavigate, profile }) {
   const [showPaymentConfirmation, setShowPaymentConfirmation] = useState(false);
   const [showTranscriptModal, setShowTranscriptModal] = useState(false);
   const [selectedAppointmentForTranscript, setSelectedAppointmentForTranscript] = useState(null);
+  const [reschedulePolicyNotice, setReschedulePolicyNotice] = useState(null);
   const [loadError, setLoadError] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
@@ -191,22 +192,48 @@ function MyAppointments({ onNavigate, profile }) {
   const getReschedulePolicyState = (appointment) => {
     const status = String(appointment.rawStatus || '').toLowerCase();
     if (status === 'completed' || status === 'cancelled' || status === 'rejected') {
-      return { can: false, reason: 'This appointment is already closed and cannot be rescheduled.' };
-    }
-    if (appointment.hasClientRescheduled) {
-      return { can: false, reason: 'You already used your one-time reschedule option for this appointment.' };
+      return {
+        can: false,
+        type: 'admin',
+        title: 'Reschedule Assistance Needed',
+        reason: 'This appointment is already closed and can no longer be rescheduled from your dashboard.',
+      };
     }
     const msUntilSchedule = Number(appointment.scheduledAtTs || 0) - Date.now();
-    if (!Number.isFinite(msUntilSchedule) || msUntilSchedule < 24 * 60 * 60 * 1000) {
-      return { can: false, reason: 'Reschedule is only allowed at least 1 day before your consultation schedule.' };
+    if (!Number.isFinite(msUntilSchedule) || msUntilSchedule <= 0) {
+      return {
+        can: false,
+        type: 'admin',
+        title: 'Appointment Date Has Passed',
+        reason: 'Your consultation schedule has already passed. Please contact BatasMo Admin for further reschedule assistance.',
+      };
     }
-    return { can: true, reason: '' };
+    if (appointment.hasClientRescheduled) {
+      return {
+        can: false,
+        type: 'admin',
+        title: 'One-Time Reschedule Used',
+        reason: 'You already used your one-time reschedule option for this appointment. Please contact BatasMo Admin for further changes.',
+      };
+    }
+    if (!Number.isFinite(msUntilSchedule) || msUntilSchedule < 24 * 60 * 60 * 1000) {
+      return {
+        can: false,
+        type: 'policy',
+        title: 'Reschedule Window Closed',
+        reason: 'Client reschedule requests are allowed only at least 1 day before the consultation schedule.',
+      };
+    }
+    return { can: true, type: '', title: '', reason: '' };
   };
 
   const openRescheduleModal = (appointment) => {
     const policy = getReschedulePolicyState(appointment);
     if (!policy.can) {
-      window.alert(`${policy.reason}\n\nFor further schedule changes, please contact admin support.`);
+      setReschedulePolicyNotice({
+        ...policy,
+        appointment,
+      });
       return;
     }
     setSelectedAppointmentForReschedule(appointment);
@@ -227,6 +254,10 @@ function MyAppointments({ onNavigate, profile }) {
     setRescheduleSlots([]);
     setRescheduleError('');
     setRescheduleSubmitting(false);
+  };
+
+  const closeReschedulePolicyNotice = () => {
+    setReschedulePolicyNotice(null);
   };
 
   const closeForfeitAlert = () => {
@@ -317,8 +348,7 @@ function MyAppointments({ onNavigate, profile }) {
 
           <div className="ma-queue-card__btns">
             <button
-              className="ma-btn ma-btn--queue-secondary"
-              disabled={!reschedulePolicy.can}
+              className={`ma-btn ma-btn--queue-secondary ${reschedulePolicy.can ? '' : 'ma-btn--needs-assistance'}`}
               title={reschedulePolicy.can ? 'Reschedule this appointment' : reschedulePolicy.reason}
               onClick={() => openRescheduleModal(appointment)}
             >
@@ -600,6 +630,55 @@ function MyAppointments({ onNavigate, profile }) {
                   disabled={rescheduleSubmitting}
                 >
                   {rescheduleSubmitting ? 'Submitting...' : 'Confirm Reschedule'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reschedule Policy Notice */}
+      {reschedulePolicyNotice && (
+        <div className="ma-policy-overlay" onClick={closeReschedulePolicyNotice}>
+          <div className="ma-policy-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="reschedule-policy-title">
+            <div className="ma-policy-header">
+              <div className="ma-policy-icon">
+                <ScalesIcon size={22} color="#f5a623" />
+              </div>
+              <div>
+                <p className="ma-policy-kicker">Reschedule Notice</p>
+                <h2 id="reschedule-policy-title">{reschedulePolicyNotice.title}</h2>
+              </div>
+            </div>
+
+            <div className="ma-policy-content">
+              <p className="ma-policy-message">{reschedulePolicyNotice.reason}</p>
+
+              <div className="ma-policy-details">
+                <div>
+                  <span>Attorney</span>
+                  <strong>Atty. {formatAttorneyName(reschedulePolicyNotice.appointment?.attorney)}</strong>
+                </div>
+                <div>
+                  <span>Schedule</span>
+                  <strong>{reschedulePolicyNotice.appointment?.date} • {reschedulePolicyNotice.appointment?.time}</strong>
+                </div>
+              </div>
+
+              <div className="ma-policy-support-box">
+                For further schedule changes, please contact <strong>BatasMo Admin</strong> so your request can be reviewed properly.
+              </div>
+
+              <div className="ma-policy-actions">
+                <button className="ma-btn--cancel" onClick={closeReschedulePolicyNotice}>Close</button>
+                <button
+                  className="ma-btn--submit"
+                  onClick={() => {
+                    closeReschedulePolicyNotice();
+                    onNavigate('announcements');
+                  }}
+                >
+                  Contact Admin
                 </button>
               </div>
             </div>

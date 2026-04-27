@@ -564,6 +564,18 @@
   color: #ffffff;
 }
 
+.ma-btn--needs-assistance {
+  border-color: #f5a623;
+  color: #5f4300;
+  background: #fffbeb;
+}
+
+.ma-btn--needs-assistance:hover:not(:disabled) {
+  background: #f5a623;
+  color: #1c1f2e;
+  border-color: #f5a623;
+}
+
 .ma-btn--queue-primary:hover:not(:disabled) {
   border-color: #1c1f2e;
   color: #1c1f2e;
@@ -1483,6 +1495,123 @@
   box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4);
 }
 
+/* Reschedule Policy Notice */
+.ma-policy-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 1004;
+  animation: fadeIn .2s ease-out;
+}
+
+.ma-policy-modal {
+  width: 100%;
+  max-width: 520px;
+  background: #fff;
+  border-radius: 22px;
+  overflow: hidden;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.38);
+  animation: scaleIn .25s ease-out;
+}
+
+.ma-policy-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 24px 26px;
+  background: linear-gradient(135deg, #1c1f2e 0%, #1e3a8a 100%);
+  border-bottom: 4px solid #f5a623;
+}
+
+.ma-policy-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: rgba(245, 166, 35, 0.14);
+  border: 1px solid rgba(245, 166, 35, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ma-policy-kicker {
+  margin: 0 0 4px;
+  color: #f5a623;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.ma-policy-header h2 {
+  margin: 0;
+  color: #fff;
+  font-size: 1.28rem;
+  font-weight: 800;
+}
+
+.ma-policy-content {
+  padding: 24px 26px 26px;
+}
+
+.ma-policy-message {
+  margin: 0 0 18px;
+  color: #1f2937;
+  font-size: 0.98rem;
+  line-height: 1.6;
+}
+
+.ma-policy-details {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+}
+
+.ma-policy-details div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ma-policy-details span {
+  color: #6b7280;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.ma-policy-details strong {
+  color: #1c1f2e;
+  font-size: 0.9rem;
+  text-align: right;
+}
+
+.ma-policy-support-box {
+  margin-top: 16px;
+  padding: 14px 16px;
+  background: #fefce8;
+  border: 1px solid rgba(245, 166, 35, 0.35);
+  border-left: 4px solid #f5a623;
+  border-radius: 12px;
+  color: #5f4300;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.ma-policy-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 22px;
+}
+
 /* Transcript Modal */
 .ma-transcript-overlay {
   position: fixed;
@@ -1765,6 +1894,29 @@
   .ma-card-actions {
     flex-direction: column;
     gap: 10px;
+  }
+
+  .ma-policy-overlay {
+    padding: 12px;
+  }
+
+  .ma-policy-header,
+  .ma-policy-content {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .ma-policy-details div {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .ma-policy-details strong {
+    text-align: left;
+  }
+
+  .ma-policy-actions {
+    flex-direction: column-reverse;
   }
 
   .ma-btn {

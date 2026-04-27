@@ -5,6 +5,7 @@ import { fetchClientNotifications, subscribeToClientNotifications } from '../lib
 const MENU_ITEMS = [
   { key: 'dashboard', label: 'Dashboard', page: 'home-logged' },
   { key: 'booking', label: 'Book Consultation', page: 'book-appointment' },
+  { key: 'announcements', label: 'Announcement', page: 'announcements' },
   { key: 'history', label: 'Transaction History', page: 'transaction-history' },
   { key: 'logs', label: 'Logs', page: 'client-logs' },
 ];
@@ -16,7 +17,7 @@ const PAGE_COPY = {
   'chat-room': 'Collaborate with your legal team securely.',
   'transaction-history': 'Review completed services and transactions.',
   'client-logs': 'Review completed consultations, ratings, and your attorney’s session summary.',
-  announcements: 'Track audit logs and request records.',
+  announcements: 'Read official updates and schedule notices from BatasMo Admin.',
   profile: 'Manage account preferences and security.',
   'my-notarial-requests': 'Track your consultations and notary services.',
   'notarial-request': 'Track your consultations and notary services.',
@@ -31,7 +32,7 @@ const ACTIVE_MENU_BY_PAGE = {
   'chat-room': 'booking',
   'transaction-history': 'history',
   'client-logs': 'logs',
-  announcements: 'logs',
+  announcements: 'announcements',
   profile: 'dashboard',
 };
 
@@ -81,6 +82,15 @@ function SidebarIcon({ type }) {
         <polyline points="23 4 23 10 17 10" />
         <polyline points="1 20 1 14 7 14" />
         <path d="M3.5 9a9 9 0 0 1 14.8-3.3L23 10M1 14l4.6 4.3A9 9 0 0 0 20.5 15" />
+      </svg>
+    );
+  }
+
+  if (type === 'announcements') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
       </svg>
     );
   }
