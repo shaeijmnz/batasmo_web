@@ -195,6 +195,21 @@
 .ann-empty svg { margin-bottom: 12px; opacity: .5; }
 .ann-empty p { font-size: 0.95rem; margin: 0; }
 
+.ann-empty--panel {
+  margin-top: 10px;
+  padding: 0;
+  min-height: 360px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: linear-gradient(180deg, rgba(16,33,60,.45) 0%, rgba(11,25,47,.35) 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.03);
+}
+
+.ann-empty--panel svg,
+.ann-empty--panel p {
+  display: none;
+}
+
 /* ── Card ── */
 .ann-card {
   display: flex;

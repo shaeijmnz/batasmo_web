@@ -198,6 +198,7 @@ function Announcements({ onNavigate, profile }) {
     : announcements.filter(a => a.type === activeFilter.toLowerCase());
 
   const unreadCount = announcements.filter(a => !a.read).length;
+  const hasAnnouncements = announcements.length > 0;
 
   const markAllRead = () => {
     setAnnouncements(prev => prev.map(a => ({ ...a, read: true })));
@@ -271,13 +272,13 @@ function Announcements({ onNavigate, profile }) {
               <div className="ann-header__title-row">
                 <MegaphoneIcon />
                 <h1>Announcements</h1>
-                {unreadCount > 0 && (
+                {hasAnnouncements && unreadCount > 0 && (
                   <span className="ann-header__unread-badge">{unreadCount} new</span>
                 )}
               </div>
               <p>Messages and updates from BatasMo Admin</p>
             </div>
-            {unreadCount > 0 && (
+            {hasAnnouncements && unreadCount > 0 && (
               <button className="ann-mark-all-btn" onClick={markAllRead}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="20 6 9 17 4 12"/>
@@ -288,36 +289,35 @@ function Announcements({ onNavigate, profile }) {
           </div>
 
           {/* Filter tabs */}
-          <div className="ann-filters">
-            {filters.map(f => (
-              <button
-                key={f}
-                className={`ann-filter-btn ${activeFilter === f ? 'ann-filter-btn--active' : ''}`}
-                onClick={() => setActiveFilter(f)}
-              >
-                {f}
-                {f !== 'All' && (
-                  <span className="ann-filter-count">
-                    {announcements.filter(a => a.type === f.toLowerCase()).length}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
+          {hasAnnouncements && (
+            <div className="ann-filters">
+              {filters.map(f => (
+                <button
+                  key={f}
+                  className={`ann-filter-btn ${activeFilter === f ? 'ann-filter-btn--active' : ''}`}
+                  onClick={() => setActiveFilter(f)}
+                >
+                  {f}
+                  {f !== 'All' && (
+                    <span className="ann-filter-count">
+                      {announcements.filter(a => a.type === f.toLowerCase()).length}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Announcement Cards */}
-          <div className="ann-list">
-            {filteredAnnouncements.length === 0 ? (
-              <div className="ann-empty">
-                <MegaphoneIcon />
-                <p>
-                  {activeFilter === 'All'
-                    ? 'No admin announcements yet'
-                    : `No ${activeFilter.toLowerCase()} announcements`}
-                </p>
-              </div>
-            ) : (
-              filteredAnnouncements.map(ann => {
+          {hasAnnouncements ? (
+            <div className="ann-list">
+              {filteredAnnouncements.length === 0 ? (
+                <div className="ann-empty">
+                  <MegaphoneIcon />
+                  <p>No {activeFilter.toLowerCase()} announcements</p>
+                </div>
+              ) : (
+                filteredAnnouncements.map(ann => {
                 const typeColor = getTypeColor(ann.type);
                 return (
                   <div key={ann.id} className={`ann-card ${!ann.read ? 'ann-card--unread' : ''}`}>
@@ -350,9 +350,12 @@ function Announcements({ onNavigate, profile }) {
                     </div>
                   </div>
                 );
-              })
-            )}
-          </div>
+                })
+              )}
+            </div>
+          ) : (
+            <div className="ann-empty ann-empty--panel" aria-label="No announcements available" />
+          )}
         </div>
       </main>
     </div>
