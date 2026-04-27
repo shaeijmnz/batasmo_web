@@ -487,12 +487,15 @@ app.use(express.json({ limit: '10mb' }))
 // PAYMENT HELPERS (PAYMONGO + SUPABASE)
 // ============================================================================
 
-const isPaymentMethodSupported = (method) => {
+const normalizePaymentMethod = (method) => {
   const normalized = String(method || '').trim().toLowerCase()
-  return normalized === 'gcash' || normalized === 'paymaya'
+  return normalized === 'maya' ? 'paymaya' : normalized
 }
 
-const normalizePaymentMethod = (method) => String(method || '').trim().toLowerCase()
+const isPaymentMethodSupported = (method) => {
+  const normalized = normalizePaymentMethod(method)
+  return normalized === 'gcash' || normalized === 'paymaya'
+}
 
 const requirePaymentConfig = () => {
   if (!PAYMONGO_SECRET_KEY) {

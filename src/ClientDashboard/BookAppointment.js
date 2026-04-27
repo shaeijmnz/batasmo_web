@@ -164,7 +164,9 @@ function BookAppointment({ onNavigate, profile }) {
   const [confirmedSlot, setConfirmedSlot] = useState(null);
   const [loadError, setLoadError] = useState('');
   const [submitError, setSubmitError] = useState('');
+  const [doubleBookingPrompt, setDoubleBookingPrompt] = useState(null);
   const pendingTimeoutsRef = useRef([]);
+  const doubleBookingResolveRef = useRef(null);
 
   const loadAttorneys = useCallback(async (options = {}) => {
     const silent = Boolean(options?.silent);
@@ -287,6 +289,11 @@ function BookAppointment({ onNavigate, profile }) {
   };
 
   const closeBooking = () => {
+    if (doubleBookingResolveRef.current) {
+      doubleBookingResolveRef.current(false);
+      doubleBookingResolveRef.current = null;
+    }
+    setDoubleBookingPrompt(null);
     setShowBooking(false);
     runDeferred(() => {
       setBookingAttorney(null);
@@ -300,6 +307,21 @@ function BookAppointment({ onNavigate, profile }) {
       setConfirmedSlot(null);
     });
   };
+
+  const requestDoubleBookingConfirmation = useCallback((message) => (
+    new Promise((resolve) => {
+      doubleBookingResolveRef.current = resolve;
+      setDoubleBookingPrompt({ message });
+    })
+  ), []);
+
+  const handleDoubleBookingDecision = useCallback((confirmed) => {
+    if (doubleBookingResolveRef.current) {
+      doubleBookingResolveRef.current(confirmed);
+      doubleBookingResolveRef.current = null;
+    }
+    setDoubleBookingPrompt(null);
+  }, []);
 
   const handleDateChange = useCallback(async (e) => {
     const date = e.target.value;
@@ -365,9 +387,7 @@ function BookAppointment({ onNavigate, profile }) {
         await assertNoActiveAppointmentForClient(profile.id);
       } catch (preCheckError) {
         if (preCheckError?.code === 'DOUBLE_BOOKING_NEEDS_CONFIRMATION') {
-          const shouldContinue = window.confirm(
-            `${preCheckError.message}\n\nDo you want to continue with this second active booking?`
-          );
+          const shouldContinue = await requestDoubleBookingConfirmation(preCheckError.message);
           if (!shouldContinue) return;
           secondBookingConfirmed = true;
         } else {
@@ -779,6 +799,47 @@ function BookAppointment({ onNavigate, profile }) {
                   </>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Double Booking Confirmation Modal */}
+      {doubleBookingPrompt && (
+        <div className="ba-double-booking-overlay" onClick={() => handleDoubleBookingDecision(false)}>
+          <div className="ba-double-booking-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="double-booking-title">
+            <div className="ba-double-booking-header">
+              <div className="ba-double-booking-icon">
+                <ScaleSmIcon />
+              </div>
+              <div>
+                <p className="ba-double-booking-kicker">Booking Notice</p>
+                <h3 id="double-booking-title">Confirm Second Appointment</h3>
+              </div>
+            </div>
+
+            <div className="ba-double-booking-body">
+              <p>{doubleBookingPrompt.message}</p>
+              <div className="ba-double-booking-note">
+                You may continue with one more active consultation. Please confirm before we proceed to payment.
+              </div>
+            </div>
+
+            <div className="ba-double-booking-actions">
+              <button
+                type="button"
+                className="ba-double-booking-btn ba-double-booking-btn--ghost"
+                onClick={() => handleDoubleBookingDecision(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="ba-double-booking-btn ba-double-booking-btn--primary"
+                onClick={() => handleDoubleBookingDecision(true)}
+              >
+                Continue Booking
+              </button>
             </div>
           </div>
         </div>

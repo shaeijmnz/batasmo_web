@@ -186,12 +186,20 @@ app.use('/chatbot/message', limiter)
 3. Connect GitHub repo (push this folder to GitHub)
 4. Set environment variables in Render dashboard:
    - `GEMINI_API_KEY`
+   - `VIDEOSDK_API_KEY`
+   - `VIDEOSDK_API_SECRET`
+   - `PAYMONGO_SECRET_KEY`
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
    - `ALLOWED_ORIGIN` (your React app URL)
+   - `PAYMENT_SUCCESS_URL` (your React app root URL)
+   - `PAYMENT_CANCEL_URL` (your React app appointments URL)
 5. Deploy
 
 Then update React `.env`:
 ```env
 REACT_APP_CHATBOT_API_URL=https://your-render-url.onrender.com
+REACT_APP_PAYMENT_API_URL=https://your-render-url.onrender.com
 ```
 
 ### Railway.app

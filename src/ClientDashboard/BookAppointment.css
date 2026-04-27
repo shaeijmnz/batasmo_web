@@ -773,6 +773,131 @@
   background: #e5e7eb;
   border-color: #d1d5db;
 }
+
+/* Double Booking Confirmation */
+.ba-double-booking-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 1003;
+  animation: fadeIn .2s ease-out;
+}
+
+.ba-double-booking-modal {
+  width: 100%;
+  max-width: 460px;
+  background: #fff;
+  border-radius: 22px;
+  overflow: hidden;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.38);
+  animation: scaleIn .25s ease-out;
+}
+
+.ba-double-booking-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 24px 26px;
+  background: linear-gradient(135deg, #1c1f2e 0%, #1e3a8a 100%);
+  border-bottom: 4px solid #f5a623;
+}
+
+.ba-double-booking-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: rgba(245, 166, 35, 0.14);
+  border: 1px solid rgba(245, 166, 35, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ba-double-booking-kicker {
+  margin: 0 0 4px;
+  color: #f5a623;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.ba-double-booking-header h3 {
+  margin: 0;
+  color: #fff;
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.ba-double-booking-body {
+  padding: 24px 26px 10px;
+}
+
+.ba-double-booking-body p {
+  margin: 0;
+  color: #1f2937;
+  font-size: 0.98rem;
+  line-height: 1.6;
+}
+
+.ba-double-booking-note {
+  margin-top: 16px;
+  padding: 14px 16px;
+  background: #fefce8;
+  border: 1px solid rgba(245, 166, 35, 0.35);
+  border-left: 4px solid #f5a623;
+  border-radius: 12px;
+  color: #5f4300;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.ba-double-booking-actions {
+  display: flex;
+  gap: 12px;
+  padding: 22px 26px 26px;
+}
+
+.ba-double-booking-btn {
+  flex: 1;
+  min-height: 44px;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
+}
+
+.ba-double-booking-btn:hover {
+  transform: translateY(-1px);
+}
+
+.ba-double-booking-btn--ghost {
+  background: #f8fafc;
+  color: #1c1f2e;
+  border: 1px solid #d1d5db;
+}
+
+.ba-double-booking-btn--ghost:hover {
+  background: #eef2f7;
+}
+
+.ba-double-booking-btn--primary {
+  background: linear-gradient(135deg, #f5a623 0%, #d97706 100%);
+  color: #1c1f2e;
+  border: none;
+  box-shadow: 0 10px 24px rgba(245, 166, 35, 0.28);
+}
+
+.ba-double-booking-btn--primary:hover {
+  box-shadow: 0 14px 30px rgba(245, 166, 35, 0.36);
+}
+
 /* Confirmation Modal */
 .ba-confirmation-overlay {
   position: fixed;
@@ -1028,6 +1153,10 @@
   .ba-booking-btn {
     width: 100%;
   }
+
+  .ba-double-booking-modal {
+    max-width: 520px;
+  }
   
   .ba-confirmation-modal {
     width: calc(100% - 32px);
@@ -1069,6 +1198,21 @@
   
   .ba-booking-header {
     padding: 20px 16px;
+  }
+
+  .ba-double-booking-overlay {
+    padding: 12px;
+  }
+
+  .ba-double-booking-header,
+  .ba-double-booking-body,
+  .ba-double-booking-actions {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .ba-double-booking-actions {
+    flex-direction: column-reverse;
   }
   
   .ba-confirmation-modal {
