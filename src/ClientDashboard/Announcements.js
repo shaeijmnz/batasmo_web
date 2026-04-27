@@ -132,7 +132,6 @@ const getTypeColor = (type) => {
 function Announcements({ onNavigate, profile }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [announcements, setAnnouncements] = useState([]);
-  const [activeFilter, setActiveFilter] = useState('All');
   const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
@@ -190,12 +189,6 @@ function Announcements({ onNavigate, profile }) {
       isMounted = false;
     };
   }, [profile?.id]);
-
-  const filters = ['All', 'Reschedule', 'Update', 'Reminder', 'General'];
-
-  const filteredAnnouncements = activeFilter === 'All'
-    ? announcements
-    : announcements.filter(a => a.type === activeFilter.toLowerCase());
 
   const unreadCount = announcements.filter(a => !a.read).length;
   const hasAnnouncements = announcements.length > 0;
@@ -288,36 +281,10 @@ function Announcements({ onNavigate, profile }) {
             )}
           </div>
 
-          {/* Filter tabs */}
-          {hasAnnouncements && (
-            <div className="ann-filters">
-              {filters.map(f => (
-                <button
-                  key={f}
-                  className={`ann-filter-btn ${activeFilter === f ? 'ann-filter-btn--active' : ''}`}
-                  onClick={() => setActiveFilter(f)}
-                >
-                  {f}
-                  {f !== 'All' && (
-                    <span className="ann-filter-count">
-                      {announcements.filter(a => a.type === f.toLowerCase()).length}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
-
           {/* Announcement Cards */}
           {hasAnnouncements ? (
             <div className="ann-list">
-              {filteredAnnouncements.length === 0 ? (
-                <div className="ann-empty">
-                  <MegaphoneIcon />
-                  <p>No {activeFilter.toLowerCase()} announcements</p>
-                </div>
-              ) : (
-                filteredAnnouncements.map(ann => {
+              {announcements.map(ann => {
                 const typeColor = getTypeColor(ann.type);
                 return (
                   <div key={ann.id} className={`ann-card ${!ann.read ? 'ann-card--unread' : ''}`}>
@@ -350,8 +317,7 @@ function Announcements({ onNavigate, profile }) {
                     </div>
                   </div>
                 );
-                })
-              )}
+              })}
             </div>
           ) : (
             <div className="ann-empty ann-empty--panel" aria-label="No announcements available" />
