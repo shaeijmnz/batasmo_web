@@ -9,6 +9,7 @@ import {
   LogOut,
   Menu,
   Download,
+  Megaphone,
   TrendingUp,
   DollarSign,
   UserCheck,
@@ -63,6 +64,18 @@ const Reports = ({ onNavigate }) => {
   const [attorneyPerformanceData, setAttorneyPerformanceData] = useState([]);
   const [notarialStatusData, setNotarialStatusData] = useState([]);
   const [onlineClientIds, setOnlineClientIds] = useState(new Set());
+  const [clients, setClients] = useState([]);
+  const [announcementModalOpen, setAnnouncementModalOpen] = useState(false);
+  const [announcementSending, setAnnouncementSending] = useState(false);
+  const [announcementError, setAnnouncementError] = useState('');
+  const [announcementSuccess, setAnnouncementSuccess] = useState('');
+  const [announcementForm, setAnnouncementForm] = useState({
+    targetMode: 'all',
+    clientId: '',
+    title: '',
+    body: '',
+    type: 'general',
+  });
   const [reportMetrics, setReportMetrics] = useState({
     totalRevenue: 0,
     currentRevenue: 0,
@@ -109,7 +122,7 @@ const Reports = ({ onNavigate }) => {
         const [transactionsRes, appointmentsRes, feedbackRes, notarialRes] = await Promise.all([
           supabase
             .from('transactions')
-            .select('amount, payment_status, created_at, client_id, appointment_id, notarial_request_id')
+            .select('amount, payment_status, created_at, client_id, appointment_id')
             .eq('payment_status', 'paid')
             .order('created_at', { ascending: true }),
           supabase
@@ -309,6 +322,27 @@ const Reports = ({ onNavigate }) => {
   }, []);
 
   useEffect(() => {
+    let active = true;
+    const loadClients = async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .eq('role', 'Client')
+        .order('full_name', { ascending: true });
+      if (!active) return;
+      if (error) {
+        setClients([]);
+        return;
+      }
+      setClients(data || []);
+    };
+    loadClients();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     const syncOnlineClients = (channel) => {
       const state = channel.presenceState();
       const nextOnlineIds = new Set();
@@ -428,6 +462,91 @@ const Reports = ({ onNavigate }) => {
     downloadCsv('batasmo-admin-reports.csv', 'Metric,Value', rows);
   };
 
+  const toAnnouncementType = (value) => {
+    const v = String(value || '').toLowerCase();
+    if (v === 'reschedule') return 'admin_reschedule';
+    if (v === 'update') return 'admin_update';
+    if (v === 'reminder') return 'admin_reminder';
+    return 'admin_announcement';
+  };
+
+  const openAnnouncementModal = () => {
+    setAnnouncementError('');
+    setAnnouncementSuccess('');
+    setAnnouncementForm({
+      targetMode: 'all',
+      clientId: '',
+      title: '',
+      body: '',
+      type: 'general',
+    });
+    setAnnouncementModalOpen(true);
+  };
+
+  const closeAnnouncementModal = () => {
+    if (announcementSending) return;
+    setAnnouncementModalOpen(false);
+  };
+
+  const sendAnnouncement = async () => {
+    const title = String(announcementForm.title || '').trim();
+    const body = String(announcementForm.body || '').trim();
+    const targetMode = announcementForm.targetMode === 'single' ? 'single' : 'all';
+    const selectedClientId = String(announcementForm.clientId || '').trim();
+
+    if (!title || !body) {
+      setAnnouncementError('Title and announcement message are required.');
+      return;
+    }
+
+    let targetClientIds = [];
+    if (targetMode === 'single') {
+      if (!selectedClientId) {
+        setAnnouncementError('Please select a client recipient.');
+        return;
+      }
+      targetClientIds = [selectedClientId];
+    } else {
+      targetClientIds = clients.map((item) => item.id).filter(Boolean);
+      if (!targetClientIds.length) {
+        setAnnouncementError('No client recipients found.');
+        return;
+      }
+    }
+
+    setAnnouncementSending(true);
+    setAnnouncementError('');
+    setAnnouncementSuccess('');
+    try {
+      const nowIso = new Date().toISOString();
+      const payload = targetClientIds.map((clientId) => ({
+        user_id: clientId,
+        title,
+        body,
+        type: toAnnouncementType(announcementForm.type),
+        is_read: false,
+        created_at: nowIso,
+      }));
+      const { error } = await supabase.from('notifications').insert(payload);
+      if (error) throw error;
+
+      setAnnouncementSuccess(
+        targetMode === 'single'
+          ? 'Announcement sent to selected client.'
+          : `Announcement sent to ${payload.length} clients.`,
+      );
+      setAnnouncementForm((previous) => ({
+        ...previous,
+        title: '',
+        body: '',
+      }));
+    } catch (error) {
+      setAnnouncementError(error.message || 'Failed to send announcement.');
+    } finally {
+      setAnnouncementSending(false);
+    }
+  };
+
   return (
     <div className="app-container">
       <aside className={`sidebar ${isSidebarOpen ? 'open' : 'closed'}`}>
@@ -471,7 +590,12 @@ const Reports = ({ onNavigate }) => {
               <h2 className="title">Reports & Analytics</h2>
               <p className="subtitle">View comprehensive reports and business insights</p>
             </div>
-            <button className="export-all-btn" onClick={downloadAllReports}><Download size={18} /> Export All Reports</button>
+            <div className="reports-header-actions">
+              <button className="announce-btn" onClick={openAnnouncementModal}>
+                <Megaphone size={18} /> Send Announcement
+              </button>
+              <button className="export-all-btn" onClick={downloadAllReports}><Download size={18} /> Export All Reports</button>
+            </div>
           </div>
 
           {loadError ? <p className="report-info-message">{loadError}</p> : null}
@@ -531,6 +655,95 @@ const Reports = ({ onNavigate }) => {
             </div>
           </div>
         </div>
+
+        {announcementModalOpen ? (
+          <div className="announce-modal-overlay" onClick={closeAnnouncementModal}>
+            <div className="announce-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
+              <h3>Send Client Announcement</h3>
+              <p>Create an admin announcement for all clients or a specific client.</p>
+
+              <div className="announce-form-grid">
+                <label>
+                  Recipient Scope
+                  <select
+                    value={announcementForm.targetMode}
+                    onChange={(event) => setAnnouncementForm((prev) => ({ ...prev, targetMode: event.target.value }))}
+                    disabled={announcementSending}
+                  >
+                    <option value="all">All Clients</option>
+                    <option value="single">Single Client</option>
+                  </select>
+                </label>
+
+                {announcementForm.targetMode === 'single' ? (
+                  <label>
+                    Client Recipient
+                    <select
+                      value={announcementForm.clientId}
+                      onChange={(event) => setAnnouncementForm((prev) => ({ ...prev, clientId: event.target.value }))}
+                      disabled={announcementSending}
+                    >
+                      <option value="">Select client</option>
+                      {clients.map((client) => (
+                        <option key={client.id} value={client.id}>
+                          {client.full_name || client.email || client.id}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+
+                <label>
+                  Announcement Type
+                  <select
+                    value={announcementForm.type}
+                    onChange={(event) => setAnnouncementForm((prev) => ({ ...prev, type: event.target.value }))}
+                    disabled={announcementSending}
+                  >
+                    <option value="general">General</option>
+                    <option value="reschedule">Reschedule</option>
+                    <option value="update">Update</option>
+                    <option value="reminder">Reminder</option>
+                  </select>
+                </label>
+
+                <label>
+                  Title
+                  <input
+                    type="text"
+                    placeholder="Example: Schedule Update Notice"
+                    value={announcementForm.title}
+                    onChange={(event) => setAnnouncementForm((prev) => ({ ...prev, title: event.target.value }))}
+                    disabled={announcementSending}
+                  />
+                </label>
+
+                <label className="announce-full">
+                  Message
+                  <textarea
+                    rows={5}
+                    placeholder="Type your announcement for clients..."
+                    value={announcementForm.body}
+                    onChange={(event) => setAnnouncementForm((prev) => ({ ...prev, body: event.target.value }))}
+                    disabled={announcementSending}
+                  />
+                </label>
+              </div>
+
+              {announcementError ? <p className="announce-error">{announcementError}</p> : null}
+              {announcementSuccess ? <p className="announce-success">{announcementSuccess}</p> : null}
+
+              <div className="announce-actions">
+                <button type="button" className="chart-export" onClick={closeAnnouncementModal} disabled={announcementSending}>
+                  Close
+                </button>
+                <button type="button" className="export-all-btn" onClick={sendAnnouncement} disabled={announcementSending}>
+                  {announcementSending ? 'Sending...' : 'Send Announcement'}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </main>
     </div>
   );

@@ -705,11 +705,26 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
   };
 
   const handleCloseVideoCall = async () => {
-    if (videoCall?.roomId) {
-      await clearVideoMeetingId(videoCall.roomId);
+    try {
+      if (videoCall?.roomId) {
+        await clearVideoMeetingId(videoCall.roomId);
+      }
+      videoCallRef.current = null;
+      setVideoCall(null);
+
+      // Treat attorney "end call" as consultation end so reports and logs
+      // immediately reflect the completed session.
+      if (activeAppointmentId && !isClosed && !endingSession) {
+        await endConsultationSession(activeAppointmentId);
+        setIsClosed(true);
+        setLoadError('');
+        setPostSessionAppointmentId(activeAppointmentId);
+        setPostSessionSummaryText('');
+        setPostSessionSummaryOpen(true);
+      }
+    } catch (error) {
+      setLoadError(error.message || 'Failed to close video call.');
     }
-    videoCallRef.current = null;
-    setVideoCall(null);
   };
 
   // Auto-open video call when client starts one (video_meeting_id appears in DB)
