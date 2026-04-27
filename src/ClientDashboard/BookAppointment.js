@@ -452,9 +452,11 @@ function BookAppointment({ onNavigate, profile }) {
       const timeoutMs = 5 * 60 * 1000;
       let paid = false;
       let pollDelayMs = 2500;
+      const waitForNextPoll = (delayMs) =>
+        new Promise((resolve) => setTimeout(resolve, delayMs));
 
       while (Date.now() - startedAt < timeoutMs) {
-        await new Promise((resolve) => setTimeout(resolve, pollDelayMs));
+        await waitForNextPoll(pollDelayMs);
         const statusResult = await getAppointmentPaymentStatus(session.transactionId);
         const status = String(statusResult?.status || 'pending').toLowerCase();
 
