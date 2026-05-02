@@ -1361,7 +1361,8 @@ const normalizeDigitalPaymentMethod = (method) => {
   const value = String(method || '').trim().toLowerCase()
   if (value === 'gcash') return 'GCash'
   if (value === 'maya') return 'Maya'
-  throw new Error('Only GCash or Maya payments are supported.')
+  if (value === 'qrph') return 'QRPh'
+  throw new Error('Only GCash, Maya, or QR Ph payments are supported.')
 }
 
 const normalizeAppointmentStatus = (status) => {
@@ -2215,7 +2216,14 @@ export async function fetchClientTransactions(userId) {
     const datetime = formatDateTime(tx.created_at)
     const isConsultation = Boolean(tx.appointment_id)
     const rawMethod = String(tx.payment_method || '').toLowerCase()
-    const paymentMethod = rawMethod === 'gcash' ? 'GCash' : rawMethod === 'maya' ? 'Maya' : 'GCash'
+    const paymentMethod =
+      rawMethod === 'gcash'
+        ? 'GCash'
+        : rawMethod === 'maya'
+          ? 'Maya'
+          : rawMethod === 'qrph'
+            ? 'QR Ph'
+            : String(tx.payment_method || 'GCash')
       const appointment = tx.appointment_id ? appointmentById.get(tx.appointment_id) : null
       const notarial = tx.notarial_request_id ? notarialById.get(tx.notarial_request_id) : null
       const attorney = tx.attorney_id ? attorneyById.get(tx.attorney_id) : null

@@ -773,6 +773,7 @@ function BookAppointment({ onNavigate, profile }) {
                       >
                         <option value="GCash">GCash</option>
                         <option value="Maya">Maya</option>
+                        <option value="QRPh">QR Ph (QRPh)</option>
                       </select>
                     </div>
 
@@ -780,7 +781,14 @@ function BookAppointment({ onNavigate, profile }) {
                       <div style={{ color: '#cbd5e1', fontSize: '0.9rem' }}>
                         <div><strong>Date:</strong> {selectedDate}</div>
                         <div><strong>Time:</strong> {selectedTime}</div>
-                        <div><strong>Amount:</strong> PHP 2,000.00</div>
+                        <div>
+                          <strong>Amount:</strong>{' '}
+                          PHP{' '}
+                          {Number(bookingAttorney?.amount || 0).toLocaleString('en-PH', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </div>
                       </div>
                     </div>
 

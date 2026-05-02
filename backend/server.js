@@ -494,7 +494,7 @@ const normalizePaymentMethod = (method) => {
 
 const isPaymentMethodSupported = (method) => {
   const normalized = normalizePaymentMethod(method)
-  return normalized === 'gcash' || normalized === 'paymaya'
+  return normalized === 'gcash' || normalized === 'paymaya' || normalized === 'qrph'
 }
 
 const requirePaymentConfig = () => {
@@ -948,7 +948,7 @@ app.post('/payments/appointments/create-session', async (req, res) => {
       return res.status(400).json({ error: 'amount must be greater than 0.' })
     }
     if (!isPaymentMethodSupported(paymentMethod)) {
-      return res.status(400).json({ error: 'Only gcash or paymaya are supported.' })
+      return res.status(400).json({ error: 'Only gcash, paymaya, or qrph are supported.' })
     }
 
     const pendingTx = await supabaseInsertTransaction({
@@ -956,7 +956,14 @@ app.post('/payments/appointments/create-session', async (req, res) => {
       clientId,
       attorneyId,
       amount,
-      paymentMethod: paymentMethod === 'gcash' ? 'GCash' : 'Maya',
+      paymentMethod:
+        paymentMethod === 'gcash'
+          ? 'GCash'
+          : paymentMethod === 'paymaya'
+            ? 'Maya'
+            : paymentMethod === 'qrph'
+              ? 'QRPh'
+              : 'GCash',
     })
 
     const session = await createPaymongoCheckoutSession({
