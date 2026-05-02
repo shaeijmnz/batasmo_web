@@ -523,9 +523,23 @@ const mapPaymongoToInternalStatus = (attributes = {}) => {
   if (checkoutStatus === 'processing') return 'pending'
   if (checkoutStatus === 'canceled' || checkoutStatus === 'cancelled') return 'failed'
 
-  const firstPaymentStatus = String(attributes?.payments?.[0]?.attributes?.status || '').toLowerCase()
-  if (firstPaymentStatus === 'paid' || firstPaymentStatus === 'succeeded') return 'paid'
-  if (firstPaymentStatus === 'failed') return 'failed'
+  const sessionPayments = Array.isArray(attributes?.payments) ? attributes.payments : []
+  for (const p of sessionPayments) {
+    const st = String(p?.attributes?.status || '').toLowerCase()
+    if (st === 'paid' || st === 'succeeded') return 'paid'
+    if (st === 'failed') return 'failed'
+  }
+
+  const intentPayments = Array.isArray(attributes?.payment_intent?.attributes?.payments)
+    ? attributes.payment_intent.attributes.payments
+    : []
+  for (const p of intentPayments) {
+    const st = String(p?.attributes?.status || '').toLowerCase()
+    if (st === 'paid' || st === 'succeeded') return 'paid'
+    if (st === 'failed') return 'failed'
+  }
+
+  const firstPaymentStatus = String(sessionPayments[0]?.attributes?.status || '').toLowerCase()
   if (firstPaymentStatus === 'pending') return 'pending'
 
   return 'pending'

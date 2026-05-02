@@ -471,6 +471,20 @@ export async function signOutUser() {
   }
 }
 
+/** If multiple tx rows share one appointment_id, treat as paid when any row is paid. */
+function mergeAppointmentPaymentStatuses(transactionRows) {
+  const paymentByAppointment = new Map()
+  for (const tx of transactionRows || []) {
+    const apptId = tx.appointment_id
+    if (!apptId) continue
+    const row = String(tx.payment_status || '').toLowerCase()
+    const prev = paymentByAppointment.get(apptId)
+    if (row === 'paid' || prev === 'paid') paymentByAppointment.set(apptId, 'paid')
+    else paymentByAppointment.set(apptId, row || prev || 'pending')
+  }
+  return paymentByAppointment
+}
+
 export async function fetchClientHomeData(userId) {
   const nowMs = Date.now()
   // Make sure the admin toggles (double-booking, schedule window) are known
@@ -498,9 +512,7 @@ export async function fetchClientHomeData(userId) {
   if (notificationsRes.error) throw notificationsRes.error
   if (transactionsRes.error) throw transactionsRes.error
 
-  const paymentByAppointment = new Map(
-    (transactionsRes.data || []).map((tx) => [tx.appointment_id, tx.payment_status]),
-  )
+  const paymentByAppointment = mergeAppointmentPaymentStatuses(transactionsRes.data)
 
   const appointments = (appointmentsRes.data || [])
     .filter((item) => {
@@ -1575,9 +1587,7 @@ export async function fetchClientAppointmentsData(userId) {
   if (appointmentsRes.error) throw appointmentsRes.error
   if (transactionsRes.error) throw transactionsRes.error
 
-  const paymentByAppointment = new Map(
-    (transactionsRes.data || []).map((tx) => [tx.appointment_id, tx.payment_status]),
-  )
+  const paymentByAppointment = mergeAppointmentPaymentStatuses(transactionsRes.data)
 
   return (appointmentsRes.data || [])
     .map((item) => {
