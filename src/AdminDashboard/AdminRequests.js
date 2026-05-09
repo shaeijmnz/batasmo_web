@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import { supabase } from '../lib/supabaseClient';
+import { updateNotarialStatus, createNotification } from '../lib/adminApi';
 import './AdminRequests.css';
-import { fetchAppointmentRequests, updateAppointmentStatus } from '../lib/adminApi';
+
+const NOTARIAL_BUCKET = 'notarial-documents';
 
 const BackIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -8,68 +11,172 @@ const BackIcon = () => (
   </svg>
 );
 
+const isImageUrl = (url) => /\.(png|jpg|jpeg|gif|webp|svg)(\?|$)/i.test(String(url || ''));
+
+const normalizeStatus = (raw) => {
+  const v = String(raw || '').toLowerCase();
+  if (v === 'approved' || v === 'accepted' || v === 'in_process' || v === 'in-progress') return 'in_process';
+  if (v === 'completed') return 'completed';
+  if (v === 'cancelled' || v === 'rejected' || v === 'closed') return 'closed';
+  return 'pending';
+};
+
+const statusLabel = (status) => {
+  if (status === 'in_process') return 'In Process';
+  if (status === 'completed') return 'Ready for Pickup';
+  if (status === 'closed') return 'Closed';
+  return 'Pending';
+};
+
+const statusBadgeClass = (status) => {
+  if (status === 'in_process') return 'adm-detail-badge--in-progress';
+  if (status === 'completed') return 'adm-detail-badge--active';
+  if (status === 'closed') return 'adm-detail-badge--inactive';
+  return 'adm-detail-badge--pending';
+};
+
+const formatDate = (value) => {
+  const d = value ? new Date(value) : null;
+  if (!d || Number.isNaN(d.getTime())) return 'TBD';
+  return d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const TABS = ['All', 'Pending', 'In Process', 'Ready for Pickup', 'Closed'];
+
+const tabToStatus = {
+  Pending: 'pending',
+  'In Process': 'in_process',
+  'Ready for Pickup': 'completed',
+  Closed: 'closed',
+};
+
 function AdminRequests({ onNavigate }) {
   const [requests, setRequests] = useState([]);
   const [searchText, setSearchText] = useState('');
+  const [activeTab, setActiveTab] = useState('All');
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
   const [viewRequest, setViewRequest] = useState(null);
-  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    window.setTimeout(() => setToast((t) => (t?.message === message ? null : t)), 3500);
+  };
+
+  const loadRequests = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('notarial_requests')
+        .select('id, client_id, service_type, status, preferred_date, created_at, updated_at, notes, document_url, client:client_id(full_name), attorney:attorney_id(full_name)')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      setRequests(
+        (data || []).map((row) => ({
+          id: row.id,
+          clientId: row.client_id,
+          clientName: row.client?.full_name || 'Client',
+          attorneyName: row.attorney?.full_name || 'Unassigned',
+          serviceType: row.service_type || 'Notarial Service',
+          status: normalizeStatus(row.status),
+          preferredDate: formatDate(row.preferred_date),
+          submittedDate: formatDate(row.created_at),
+          notes: row.notes || '',
+          documentUrl: row.document_url || '',
+        })),
+      );
+      setErrorText('');
+    } catch (err) {
+      setErrorText(err.message || 'Failed to load notarial requests.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
 
-    const loadRequests = async () => {
-      try {
-        const rows = await fetchAppointmentRequests(200);
-        if (isMounted) {
-          setRequests(rows);
-        }
-      } catch (error) {
-        if (isMounted) {
-          setErrorText(error.message || 'Failed to load appointment requests.');
-        }
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
+    const safeLoad = async () => {
+      if (!isMounted) return;
+      await loadRequests();
     };
 
-    loadRequests();
+    safeLoad();
+
+    const channel = supabase
+      .channel('admin-notarial-requests-list')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notarial_requests' }, () => {
+        if (isMounted) loadRequests();
+      })
+      .subscribe();
 
     return () => {
       isMounted = false;
+      supabase.removeChannel(channel);
     };
   }, []);
 
-  const filteredRequests = useMemo(() => {
-    const keyword = searchText.trim().toLowerCase();
-    if (!keyword) return requests;
+  const visibleRequests = useMemo(() => {
+    const term = searchText.trim().toLowerCase();
+    const byTab =
+      activeTab === 'All'
+        ? requests
+        : requests.filter((r) => r.status === tabToStatus[activeTab]);
 
-    return requests.filter((req) => {
-      const clientName = req.client?.full_name || '';
-      const attorneyName = req.attorney?.full_name || '';
-      const requestType = req.title || 'Consultation';
-      return (
-        clientName.toLowerCase().includes(keyword)
-        || attorneyName.toLowerCase().includes(keyword)
-        || requestType.toLowerCase().includes(keyword)
-      );
-    });
-  }, [requests, searchText]);
+    if (!term) return byTab;
+    return byTab.filter((r) =>
+      [r.clientName, r.attorneyName, r.serviceType].some((v) =>
+        String(v || '').toLowerCase().includes(term),
+      ),
+    );
+  }, [requests, activeTab, searchText]);
 
-  const processRequest = async (requestId, status) => {
+  const counts = useMemo(() => ({
+    pending: requests.filter((r) => r.status === 'pending').length,
+    in_process: requests.filter((r) => r.status === 'in_process').length,
+    completed: requests.filter((r) => r.status === 'completed').length,
+    closed: requests.filter((r) => r.status === 'closed').length,
+    total: requests.length,
+  }), [requests]);
+
+  const updateStatus = async (req, newStatus) => {
+    if (isUpdating) return;
+    setIsUpdating(true);
     try {
-      await updateAppointmentStatus(requestId, status);
-      setRequests((prev) => prev.map((req) => (
-        req.id === requestId ? { ...req, status } : req
-      )));
-      setSelectedRequest(null);
-      setErrorText('');
-    } catch (error) {
-      setErrorText(error.message || 'Failed to update request status.');
+      await updateNotarialStatus(req.id, newStatus === 'in_process' ? 'approved' : newStatus);
+
+      const bodyMap = {
+        in_process: `Your notarial request for "${req.serviceType}" is now being processed.`,
+        completed: `Your notarized document for "${req.serviceType}" is ready for pick up.`,
+        closed: `Your notarial request for "${req.serviceType}" has been closed.`,
+      };
+
+      if (req.clientId && bodyMap[newStatus]) {
+        await createNotification({
+          userId: req.clientId,
+          title: 'Notarial Request Update',
+          body: bodyMap[newStatus],
+          type: 'notarial_update',
+        });
+      }
+
+      showToast(`Request marked as ${statusLabel(newStatus)}.`);
+    } catch (err) {
+      showToast(err.message || 'Failed to update status.', 'error');
+    } finally {
+      setIsUpdating(false);
     }
+  };
+
+  const openDocument = (req) => {
+    if (!req.documentUrl) {
+      showToast('No document uploaded for this request.', 'error');
+      return;
+    }
+    window.open(req.documentUrl, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -79,52 +186,122 @@ function AdminRequests({ onNavigate }) {
           <button className="adm-detail-back-btn" onClick={() => onNavigate('admin-home')} title="Go back">
             <BackIcon />
           </button>
-          <h1 className="adm-detail-title">Pending Requests</h1>
-          <span className="adm-detail-count">{loading ? '...' : filteredRequests.length}</span>
+          <h1 className="adm-detail-title">Notarial Requests</h1>
+          <span className="adm-detail-count">{loading ? '…' : requests.length}</span>
         </div>
       </header>
 
       <main className="adm-detail-main">
+        {/* Stats row */}
+        <div className="adm-nr-stats">
+          {[
+            { label: 'Pending', value: counts.pending, color: '#eab308' },
+            { label: 'In Process', value: counts.in_process, color: '#3b82f6' },
+            { label: 'Ready for Pickup', value: counts.completed, color: '#22c55e' },
+            { label: 'Closed', value: counts.closed, color: '#64748b' },
+            { label: 'Total', value: counts.total, color: '#1e3a8a' },
+          ].map((s) => (
+            <div key={s.label} className="adm-nr-stat-card">
+              <span className="adm-nr-stat-value" style={{ color: s.color }}>{s.value}</span>
+              <span className="adm-nr-stat-label">{s.label}</span>
+            </div>
+          ))}
+        </div>
+
         <div className="adm-detail-card">
+          {/* Search */}
           <div className="adm-detail-search">
             <input
               type="text"
-              placeholder="Search requests..."
+              placeholder="Search by client, attorney, or service..."
               className="adm-detail-input"
               value={searchText}
-              onChange={(event) => setSearchText(event.target.value)}
+              onChange={(e) => setSearchText(e.target.value)}
             />
           </div>
-          {errorText ? <p>{errorText}</p> : null}
+
+          {/* Tabs */}
+          <div className="adm-nr-tabs">
+            {TABS.map((tab) => (
+              <button
+                key={tab}
+                className={`adm-nr-tab${activeTab === tab ? ' adm-nr-tab--active' : ''}`}
+                onClick={() => setActiveTab(tab)}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+
+          {errorText ? <p className="adm-nr-error">{errorText}</p> : null}
 
           <table className="adm-detail-table">
             <thead>
               <tr>
-                <th>Client Name</th>
-                <th>Request Type</th>
-                <th>Date</th>
+                <th>Client</th>
+                <th>Service</th>
+                <th>Preferred Date</th>
+                <th>Submitted</th>
                 <th>Status</th>
-                <th>Action</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredRequests.map(req => (
+              {visibleRequests.map((req) => (
                 <tr key={req.id} className="adm-detail-table__row--clickable">
-                  <td>{req.client?.full_name || 'Unknown Client'}</td>
-                  <td>{req.title || 'Consultation'}</td>
-                  <td>{req.scheduled_at ? new Date(req.scheduled_at).toLocaleDateString() : '-'}</td>
-                  <td><span className={`adm-detail-badge adm-detail-badge--${(req.status || 'pending').toLowerCase().replace(/\s+/g, '-')}`}>{req.status || 'pending'}</span></td>
+                  <td>{req.clientName}</td>
+                  <td>{req.serviceType}</td>
+                  <td>{req.preferredDate}</td>
+                  <td>{req.submittedDate}</td>
+                  <td>
+                    <span className={`adm-detail-badge ${statusBadgeClass(req.status)}`}>
+                      {statusLabel(req.status)}
+                    </span>
+                  </td>
                   <td>
                     <div className="adm-detail-row-actions">
-                      <button className="adm-detail-row-btn adm-detail-row-btn--view" onClick={() => setViewRequest(req)}>View</button>
-                      <button className="adm-detail-row-btn" onClick={() => setSelectedRequest(req)}>Process</button>
+                      <button
+                        className="adm-detail-row-btn adm-detail-row-btn--view"
+                        onClick={() => setViewRequest(req)}
+                      >
+                        View
+                      </button>
+                      {req.status === 'pending' && (
+                        <button
+                          className="adm-detail-row-btn adm-nr-btn--process"
+                          disabled={isUpdating}
+                          onClick={() => updateStatus(req, 'in_process')}
+                        >
+                          In Process
+                        </button>
+                      )}
+                      {req.status === 'in_process' && (
+                        <button
+                          className="adm-detail-row-btn adm-nr-btn--pickup"
+                          disabled={isUpdating}
+                          onClick={() => updateStatus(req, 'completed')}
+                        >
+                          Ready for Pickup
+                        </button>
+                      )}
+                      {(req.status === 'pending' || req.status === 'in_process') && (
+                        <button
+                          className="adm-detail-row-btn adm-nr-btn--close"
+                          disabled={isUpdating}
+                          onClick={() => updateStatus(req, 'closed')}
+                        >
+                          Close
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
               ))}
-              {!loading && filteredRequests.length === 0 ? (
+              {!loading && visibleRequests.length === 0 ? (
                 <tr>
-                  <td colSpan="5">No pending appointment requests found.</td>
+                  <td colSpan="6" style={{ textAlign: 'center', color: '#9ca3af', padding: '32px' }}>
+                    No notarial requests found.
+                  </td>
                 </tr>
               ) : null}
             </tbody>
@@ -132,70 +309,117 @@ function AdminRequests({ onNavigate }) {
         </div>
       </main>
 
+      {/* View / Detail Modal */}
       {viewRequest && (
         <div className="adm-detail-modal-overlay" onClick={() => setViewRequest(null)}>
-          <div className="adm-detail-modal" onClick={e => e.stopPropagation()}>
+          <div className="adm-detail-modal" onClick={(e) => e.stopPropagation()}>
             <div className="adm-detail-modal__header">
-              <h2>Request Details</h2>
-              <button className="adm-detail-modal__close" onClick={() => setViewRequest(null)}>x</button>
+              <h2>Notarial Request Details</h2>
+              <button className="adm-detail-modal__close" onClick={() => setViewRequest(null)}>×</button>
             </div>
             <div className="adm-detail-modal__content">
               <div className="adm-detail-modal__row">
-                <label>Client Name:</label>
-                <p>{viewRequest.client?.full_name || 'Unknown Client'}</p>
+                <label>Client</label>
+                <p>{viewRequest.clientName}</p>
               </div>
               <div className="adm-detail-modal__row">
-                <label>Request Type:</label>
-                <p>{viewRequest.title || 'Consultation'}</p>
+                <label>Service Type</label>
+                <p>{viewRequest.serviceType}</p>
               </div>
               <div className="adm-detail-modal__row">
-                <label>Date & Time:</label>
-                <p>{viewRequest.scheduled_at ? new Date(viewRequest.scheduled_at).toLocaleString() : '-'}</p>
+                <label>Status</label>
+                <p>
+                  <span className={`adm-detail-badge ${statusBadgeClass(viewRequest.status)}`}>
+                    {statusLabel(viewRequest.status)}
+                  </span>
+                </p>
               </div>
               <div className="adm-detail-modal__row">
-                <label>Instructions:</label>
-                <p>{viewRequest.notes || 'No additional notes submitted.'}</p>
+                <label>Preferred Date</label>
+                <p>{viewRequest.preferredDate}</p>
               </div>
+              <div className="adm-detail-modal__row">
+                <label>Submitted</label>
+                <p>{viewRequest.submittedDate}</p>
+              </div>
+              <div className="adm-detail-modal__row">
+                <label>Attorney</label>
+                <p>{viewRequest.attorneyName}</p>
+              </div>
+              {viewRequest.notes ? (
+                <div className="adm-detail-modal__row">
+                  <label>Notes</label>
+                  <p>{viewRequest.notes}</p>
+                </div>
+              ) : null}
+              {viewRequest.documentUrl ? (
+                <div className="adm-detail-modal__row">
+                  <label>Document</label>
+                  <div className="adm-detail-files">
+                    <div className="adm-detail-file-item">
+                      <span className="adm-detail-file-name">
+                        {isImageUrl(viewRequest.documentUrl)
+                          ? 'Attached Image'
+                          : viewRequest.documentUrl.split('/').pop() || 'Document'}
+                      </span>
+                      <button
+                        className="adm-detail-file-open"
+                        onClick={() => openDocument(viewRequest)}
+                      >
+                        Open
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="adm-detail-modal__row">
+                  <label>Document</label>
+                  <p style={{ color: '#9ca3af' }}>No document uploaded</p>
+                </div>
+              )}
             </div>
             <div className="adm-detail-modal__actions">
-              <button className="adm-detail-modal__btn adm-detail-modal__btn--close" onClick={() => setViewRequest(null)}>Close</button>
+              {viewRequest.status === 'pending' && (
+                <button
+                  className="adm-detail-modal__btn adm-detail-modal__btn--approve"
+                  disabled={isUpdating}
+                  onClick={async () => {
+                    await updateStatus(viewRequest, 'in_process');
+                    setViewRequest(null);
+                  }}
+                >
+                  Mark In Process
+                </button>
+              )}
+              {viewRequest.status === 'in_process' && (
+                <button
+                  className="adm-detail-modal__btn adm-detail-modal__btn--approve"
+                  disabled={isUpdating}
+                  onClick={async () => {
+                    await updateStatus(viewRequest, 'completed');
+                    setViewRequest(null);
+                  }}
+                >
+                  Ready for Pickup
+                </button>
+              )}
+              <button
+                className="adm-detail-modal__btn adm-detail-modal__btn--close"
+                onClick={() => setViewRequest(null)}
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {selectedRequest && (
-        <div className="adm-detail-modal-overlay" onClick={() => setSelectedRequest(null)}>
-          <div className="adm-detail-modal" onClick={e => e.stopPropagation()}>
-            <div className="adm-detail-modal__header">
-              <h2>Process Request</h2>
-              <button className="adm-detail-modal__close" onClick={() => setSelectedRequest(null)}>×</button>
-            </div>
-            <div className="adm-detail-modal__content">
-              <div className="adm-detail-modal__row">
-                <label>Client Name:</label>
-                <p>{selectedRequest.client?.full_name || 'Unknown Client'}</p>
-              </div>
-              <div className="adm-detail-modal__row">
-                <label>Request Type:</label>
-                <p>{selectedRequest.title || 'Consultation'}</p>
-              </div>
-              <div className="adm-detail-modal__row">
-                <label>Date:</label>
-                <p>{selectedRequest.scheduled_at ? new Date(selectedRequest.scheduled_at).toLocaleString() : '-'}</p>
-              </div>
-              <div className="adm-detail-modal__row">
-                <label>Current Status:</label>
-                <p>{selectedRequest.status}</p>
-              </div>
-            </div>
-            <div className="adm-detail-modal__actions">
-              <button className="adm-detail-modal__btn adm-detail-modal__btn--approve" onClick={() => processRequest(selectedRequest.id, 'confirmed')}>Approve</button>
-              <button className="adm-detail-modal__btn adm-detail-modal__btn--close" onClick={() => setSelectedRequest(null)}>Close</button>
-            </div>
-          </div>
+      {/* Toast */}
+      {toast ? (
+        <div className={`adm-nr-toast adm-nr-toast--${toast.type}`}>
+          {toast.message}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

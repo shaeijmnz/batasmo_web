@@ -3084,13 +3084,31 @@ export function subscribeToAvailabilitySlots(onChange) {
   }
 }
 
-export async function createNotarialRequest({ clientId, serviceType, preferredDate, notes, documentName }) {
+export async function createNotarialRequest({ clientId, serviceType, preferredDate, notes, file, documentName }) {
+  let documentUrl = documentName || null
+
+  if (file instanceof File) {
+    const ext = file.name.split('.').pop() || 'bin'
+    const filePath = `${clientId}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+    const { error: uploadError } = await supabase.storage
+      .from('notarial-documents')
+      .upload(filePath, file, { contentType: file.type || `application/${ext}`, upsert: false })
+
+    if (uploadError) throw uploadError
+
+    const { data: urlData } = supabase.storage
+      .from('notarial-documents')
+      .getPublicUrl(filePath)
+
+    documentUrl = urlData?.publicUrl || filePath
+  }
+
   const { error } = await supabase.from('notarial_requests').insert({
     client_id: clientId,
     service_type: serviceType,
     preferred_date: preferredDate,
     notes,
-    document_url: documentName,
+    document_url: documentUrl,
     status: 'pending',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),

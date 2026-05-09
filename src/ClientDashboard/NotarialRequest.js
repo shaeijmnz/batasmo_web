@@ -112,7 +112,7 @@ function NotarialRequest({ onNavigate, profile }) {
         serviceType: selectedServiceRow?.name || 'Notarial Service',
         preferredDate,
         notes,
-        documentName: uploadedFile.name,
+        file: uploadedFile,
       });
       setShowConfirmation(true);
     } catch (error) {

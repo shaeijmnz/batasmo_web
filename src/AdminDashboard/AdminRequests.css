@@ -3,6 +3,7 @@
 .adm-detail-row-actions {
 	display: flex;
 	gap: 8px;
+	flex-wrap: wrap;
 }
 
 .adm-detail-row-btn--view {
@@ -12,6 +13,138 @@
 
 .adm-detail-row-btn--view:hover {
 	background: #d1d5db;
+}
+
+/* Notarial-specific action button colours */
+.adm-nr-btn--process {
+	background: #3b82f6;
+	color: #fff;
+}
+
+.adm-nr-btn--process:hover:not(:disabled) {
+	background: #2563eb;
+}
+
+.adm-nr-btn--pickup {
+	background: #10b981;
+	color: #fff;
+}
+
+.adm-nr-btn--pickup:hover:not(:disabled) {
+	background: #059669;
+}
+
+.adm-nr-btn--close {
+	background: #ef4444;
+	color: #fff;
+}
+
+.adm-nr-btn--close:hover:not(:disabled) {
+	background: #dc2626;
+}
+
+.adm-detail-row-btn:disabled,
+.adm-nr-btn--process:disabled,
+.adm-nr-btn--pickup:disabled,
+.adm-nr-btn--close:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+/* Stats row */
+.adm-nr-stats {
+	display: flex;
+	gap: 16px;
+	margin-bottom: 24px;
+	flex-wrap: wrap;
+}
+
+.adm-nr-stat-card {
+	background: #fff;
+	border-radius: 10px;
+	box-shadow: 0 1px 3px rgba(0,0,0,.08);
+	padding: 16px 24px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	min-width: 110px;
+	flex: 1;
+}
+
+.adm-nr-stat-value {
+	font-size: 1.8rem;
+	font-weight: 800;
+	line-height: 1;
+}
+
+.adm-nr-stat-label {
+	font-size: 0.75rem;
+	color: #6b7280;
+	font-weight: 600;
+	margin-top: 4px;
+	text-align: center;
+}
+
+/* Tabs */
+.adm-nr-tabs {
+	display: flex;
+	gap: 8px;
+	margin-bottom: 20px;
+	flex-wrap: wrap;
+}
+
+.adm-nr-tab {
+	padding: 8px 18px;
+	border: 1px solid #e5e7eb;
+	border-radius: 20px;
+	background: #fff;
+	color: #6b7280;
+	font-size: 0.85rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: all .2s;
+}
+
+.adm-nr-tab:hover {
+	border-color: #f5a623;
+	color: #f5a623;
+}
+
+.adm-nr-tab--active {
+	background: #f5a623;
+	border-color: #f5a623;
+	color: #fff;
+}
+
+/* Error */
+.adm-nr-error {
+	color: #ef4444;
+	font-size: 0.9rem;
+	margin-bottom: 16px;
+}
+
+/* Toast */
+.adm-nr-toast {
+	position: fixed;
+	bottom: 28px;
+	left: 50%;
+	transform: translateX(-50%);
+	padding: 12px 28px;
+	border-radius: 8px;
+	font-size: 0.9rem;
+	font-weight: 600;
+	color: #fff;
+	z-index: 9999;
+	box-shadow: 0 4px 16px rgba(0,0,0,.2);
+	pointer-events: none;
+}
+
+.adm-nr-toast--success {
+	background: #10b981;
+}
+
+.adm-nr-toast--error {
+	background: #ef4444;
 }
 
 .adm-detail-files {

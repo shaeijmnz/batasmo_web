@@ -210,11 +210,11 @@ export async function updateAppointmentStatus(id, status) {
   if (error) throw error
 }
 
-export async function fetchNotarialRequests(limit = 12) {
+export async function fetchNotarialRequests(limit = 200) {
   const { data, error } = await withTimeout(
     supabase
       .from('notarial_requests')
-      .select('id, client_id, service_type, status, created_at, client:client_id(full_name), attorney:attorney_id(full_name)')
+      .select('id, client_id, service_type, status, preferred_date, created_at, updated_at, notes, document_url, client:client_id(full_name), attorney:attorney_id(full_name)')
       .order('created_at', { ascending: false })
       .limit(limit),
     'Fetch notarial requests',
