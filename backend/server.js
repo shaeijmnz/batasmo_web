@@ -14,6 +14,14 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').trim()
 const SUPABASE_SERVICE_ROLE_KEY = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
 const PAYMONGO_SECRET_KEY = String(process.env.PAYMONGO_SECRET_KEY || '').trim()
+const AZURE_FACE_KEY = String(process.env.AZURE_FACE_KEY || '').trim()
+const AZURE_FACE_ENDPOINT = String(process.env.AZURE_FACE_ENDPOINT || '').trim().replace(/\/+$/, '')
+/** Face++ (Megvii) — no Azure subscription needed. https://console.faceplusplus.com */
+const FACEPLUS_API_KEY = String(process.env.FACEPLUS_API_KEY || '').trim()
+const FACEPLUS_API_SECRET = String(process.env.FACEPLUS_API_SECRET || '').trim()
+const FACEPLUS_API_BASE = String(process.env.FACEPLUS_API_BASE || 'https://api-us.faceplusplus.com')
+  .trim()
+  .replace(/\/+$/, '')
 // Root URL avoids deep-link + auth race (PayMongo "back to merchant" should land on client home, not login).
 const PAYMENT_SUCCESS_URL = String(process.env.PAYMENT_SUCCESS_URL || `${ALLOWED_ORIGIN_BASE}/`).trim()
 const PAYMENT_CANCEL_URL = String(process.env.PAYMENT_CANCEL_URL || `${ALLOWED_ORIGIN_BASE}/my-appointments`).trim()
@@ -1065,6 +1073,116 @@ app.get('/payments/appointments/status/:transactionId', async (req, res) => {
     })
   } catch (error) {
     return res.status(500).json({ error: error?.message || 'Unable to check payment status.' })
+  }
+})
+
+// ── Face verification (Face++ preferred, Azure optional) ────────────────────
+// POST /verify-identity
+// Body: { selfieBase64: string, idBase64: string }
+// Returns: { verified: boolean, confidence: number, isIdentical?: boolean, provider?: string }
+
+const stripDataUriBase64 = (input) => String(input || '').replace(/^data:[^;]+;base64,/i, '').replace(/\s/g, '')
+
+const MIN_FACE_MATCH_CONFIDENCE = Number(process.env.FACE_VERIFY_MIN_CONFIDENCE || 75)
+
+async function verifyIdentityFacePlusPlus(selfieBase64, idBase64) {
+  const form = new URLSearchParams()
+  form.append('api_key', FACEPLUS_API_KEY)
+  form.append('api_secret', FACEPLUS_API_SECRET)
+  form.append('image_base64_1', stripDataUriBase64(selfieBase64))
+  form.append('image_base64_2', stripDataUriBase64(idBase64))
+
+  const url = `${FACEPLUS_API_BASE}/facepp/v3/compare`
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: form.toString(),
+  })
+
+  const body = await response.json()
+  if (body.error_message) {
+    console.error('[face++] compare error:', body)
+    throw new Error(String(body.error_message))
+  }
+
+  // Face++ returns confidence 0–100 (same person likelihood)
+  const confidence = Math.round(Number(body.confidence ?? 0))
+  const verified = confidence >= MIN_FACE_MATCH_CONFIDENCE
+  return { verified, confidence, isIdentical: verified, provider: 'faceplusplus' }
+}
+
+async function verifyIdentityAzure(selfieBase64, idBase64) {
+  const detectUrl = `${AZURE_FACE_ENDPOINT}/face/v1.0/detect?returnFaceId=true&detectionModel=detection_03&recognitionModel=recognition_04`
+  const headers = { 'Ocp-Apim-Subscription-Key': AZURE_FACE_KEY, 'Content-Type': 'application/octet-stream' }
+
+  const detectFace = async (base64, label) => {
+    const clean = stripDataUriBase64(base64)
+    const buffer = Buffer.from(clean, 'base64')
+    const response = await fetch(detectUrl, { method: 'POST', headers, body: buffer })
+    const json = await response.json()
+    if (!response.ok) {
+      console.error(`[azure-face] detect ${label} failed:`, json)
+      throw new Error(`Face detection failed for ${label}: ${json?.error?.message || response.status}`)
+    }
+    if (!Array.isArray(json) || json.length === 0) {
+      throw new Error(`No face detected in the ${label}. Please ensure the image is clear and well-lit.`)
+    }
+    return json[0].faceId
+  }
+
+  const [selfieFaceId, idFaceId] = await Promise.all([
+    detectFace(selfieBase64, 'selfie'),
+    detectFace(idBase64, 'government ID'),
+  ])
+
+  const verifyRes = await fetch(`${AZURE_FACE_ENDPOINT}/face/v1.0/verify`, {
+    method: 'POST',
+    headers: { 'Ocp-Apim-Subscription-Key': AZURE_FACE_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ faceId1: selfieFaceId, faceId2: idFaceId }),
+  })
+
+  const verifyBody = await verifyRes.json()
+  if (!verifyRes.ok) {
+    console.error('[azure-face] verify failed:', verifyBody)
+    throw new Error(`Verification error: ${verifyBody?.error?.message || verifyRes.status}`)
+  }
+
+  const confidence = Math.round((verifyBody.confidence ?? 0) * 100)
+  const verified = Boolean(verifyBody.isIdentical) && confidence >= MIN_FACE_MATCH_CONFIDENCE
+  return {
+    verified,
+    confidence,
+    isIdentical: Boolean(verifyBody.isIdentical),
+    provider: 'azure',
+  }
+}
+
+app.post('/verify-identity', async (req, res) => {
+  const selfieBase64 = String(req.body?.selfieBase64 || '').trim()
+  const idBase64 = String(req.body?.idBase64 || '').trim()
+
+  if (!selfieBase64 || !idBase64) {
+    return res.status(400).json({ error: 'selfieBase64 and idBase64 are required.' })
+  }
+
+  const hasFacePlus = FACEPLUS_API_KEY && FACEPLUS_API_SECRET
+  const hasAzure = AZURE_FACE_KEY && AZURE_FACE_ENDPOINT
+
+  if (!hasFacePlus && !hasAzure) {
+    return res.status(503).json({
+      error:
+        'Face verification is not configured. Add FACEPLUS_API_KEY and FACEPLUS_API_SECRET (recommended), or AZURE_FACE_KEY and AZURE_FACE_ENDPOINT, to backend .env.',
+    })
+  }
+
+  try {
+    const result = hasFacePlus
+      ? await verifyIdentityFacePlusPlus(selfieBase64, idBase64)
+      : await verifyIdentityAzure(selfieBase64, idBase64)
+    return res.json(result)
+  } catch (err) {
+    console.error('[verify-identity] error:', err)
+    return res.status(500).json({ error: err.message })
   }
 })
 
