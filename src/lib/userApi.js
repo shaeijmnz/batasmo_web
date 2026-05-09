@@ -33,27 +33,6 @@ const toNumberOrNull = (value) => {
   return Number.isFinite(numeric) ? numeric : null
 }
 
-const parseNotificationDataPayload = (value) => {
-  if (value == null || value === '') return {}
-  if (typeof value === 'object' && value !== null && !Array.isArray(value)) return value
-  if (typeof value === 'string') {
-    try {
-      const parsed = JSON.parse(value)
-      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
-    } catch {
-      return {}
-    }
-  }
-  return {}
-}
-
-const appointmentIdFromNotificationData = (value) => {
-  const raw = parseNotificationDataPayload(value)
-  const id = raw.appointment_id ?? raw.appointmentId
-  if (id == null || id === '') return null
-  return String(id)
-}
-
 const normalizeDateTimeForUi = (value) => {
   if (!value) return { date: 'TBD', time: 'TBD', parsed: null }
 
@@ -112,82 +91,12 @@ const mapAppointmentRow = (row) => {
   }
 }
 
-const resolveAppointmentScheduleMs = (value) => {
-  if (!value) return null
-
-  if (value instanceof Date) {
-    const timestamp = value.getTime()
-    return Number.isNaN(timestamp) ? null : timestamp
-  }
-
-  const parsed = new Date(value)
-  const timestamp = parsed.getTime()
-  return Number.isNaN(timestamp) ? null : timestamp
-}
-
-const isUpcomingAppointmentSchedule = ({ scheduledAt, slotDate, slotTime, nowMs = Date.now() } = {}) => {
-  const slotDateTime = slotDate && slotTime ? parseSlotDateTime(slotDate, slotTime) : null
-  const slotTimestamp = resolveAppointmentScheduleMs(slotDateTime)
-  const scheduleTimestamp = resolveAppointmentScheduleMs(scheduledAt)
-  const appointmentTimestamp = slotTimestamp ?? scheduleTimestamp
-
-  // If schedule is missing/invalid, keep row visible rather than silently dropping it.
-  if (!Number.isFinite(appointmentTimestamp)) return true
-  return appointmentTimestamp >= nowMs
-}
-
 const formatNotificationTimestamp = (value) => {
   if (!value) return 'Now'
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return 'Now'
   return parsed.toLocaleString()
 }
-
-/** Whole calendar days from local "today" to the appointment day (avoids "In 2 days" when it is tomorrow). */
-export const calendarDaysFromTodayLocal = (dateInput) => {
-  const target = new Date(dateInput)
-  if (Number.isNaN(target.getTime())) return 0
-  const today = new Date()
-  const t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-  const t1 = new Date(target.getFullYear(), target.getMonth(), target.getDate())
-  return Math.round((t1 - t0) / 86400000)
-}
-
-const inferAttorneyNotificationType = (title, body, explicitType) => {
-  const t = String(explicitType || '').trim().toLowerCase()
-  if (t && t !== 'general') return t
-  const s = `${title || ''} ${body || ''}`.toLowerCase()
-  if (/\bpaid\b|received payment|php\s*[\d,.]/.test(s)) return 'payment'
-  if (/\bbooked\b/.test(s)) return 'booking'
-  return 'general'
-}
-
-const mapStoredAttorneyNotificationRow = (n) => {
-  const title = String(n.title || '').trim() || 'Notification'
-  const body = String(n.body || '').trim()
-  const type = inferAttorneyNotificationType(title, body, n.type)
-  return {
-    id: n.id,
-    title,
-    body,
-    text: body ? `${title}: ${body}` : title,
-    type,
-    time: formatNotificationTimestamp(n.created_at),
-    unread: !n.is_read,
-    createdAt: n.created_at,
-  }
-}
-
-const mergeAttorneyNotifications = (stored, derived, limit) =>
-  [...stored, ...derived]
-    .reduce((acc, item) => {
-      if (!acc.some((existing) => existing.id === item.id)) {
-        acc.push(item)
-      }
-      return acc
-    }, [])
-    .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
-    .slice(0, limit)
 
 const buildDerivedAttorneyNotifications = ({ appointments = [], paidTransactions = [] }) => {
   const appointmentById = new Map(
@@ -202,19 +111,12 @@ const buildDerivedAttorneyNotifications = ({ appointments = [], paidTransactions
     .map((item) => {
       const createdAt = item?.created_at || item?.updated_at || null
       if (!createdAt) return null
-      const clientName = item.client_name || 'A client'
-      const consultTitle = item.title || 'a consultation'
-      const body = `${clientName} booked ${consultTitle} on ${item.date_label} at ${item.time_label}.`
       return {
         id: `derived-booking-${item.id}`,
-        title: 'New booking',
-        body,
-        text: body,
-        type: 'booking',
+        text: `${item.client_name || 'A client'} booked ${item.title || 'a consultation'} on ${item.date_label} at ${item.time_label}.`,
         time: formatNotificationTimestamp(createdAt),
         unread: true,
         sortAt: new Date(createdAt).getTime() || 0,
-        createdAt,
       }
     })
     .filter(Boolean)
@@ -228,17 +130,12 @@ const buildDerivedAttorneyNotifications = ({ appointments = [], paidTransactions
       const title = appointment?.title || 'a consultation'
       const amount = Number(tx?.amount || 0)
 
-      const body = `${clientName} paid ${amount > 0 ? `PHP ${amount.toLocaleString()}` : 'for'} ${title}.`
       return {
         id: `derived-paid-${tx.id || `${tx.appointment_id || 'appt'}-${createdAt}`}`,
-        title: 'Payment received',
-        body,
-        text: body,
-        type: 'payment',
+        text: `${clientName} paid ${amount > 0 ? `PHP ${amount.toLocaleString()}` : 'for'} ${title}.`,
         time: formatNotificationTimestamp(createdAt),
         unread: true,
         sortAt: new Date(createdAt).getTime() || 0,
-        createdAt,
       }
     })
     .filter(Boolean)
@@ -277,7 +174,6 @@ async function fetchAttorneyAppointments(userId, options = {}) {
     return cached.data
   }
 
-  await ensureAppConfigLoaded()
   const { data, error } = await supabase
     .from('appointments')
     .select(
@@ -398,7 +294,7 @@ export async function getCurrentSessionProfile() {
 
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('id, full_name, email, phone, address, role, sex, age, guardian_name, guardian_contact, guardian_details')
+    .select('id, full_name, email, phone, address, role, age, guardian_name, guardian_contact, guardian_details')
     .eq('id', session.user.id)
     .maybeSingle()
 
@@ -413,7 +309,6 @@ export async function getCurrentSessionProfile() {
         phone: '',
         address: '',
         role: normalizeRole(session.user.user_metadata?.role || 'Client'),
-        sex: '',
         age: null,
         guardian_name: '',
         guardian_contact: '',
@@ -435,7 +330,6 @@ export async function getCurrentSessionProfile() {
       phone: '',
       address: '',
       role: 'Client',
-      sex: '',
       age: null,
       guardian_name: '',
       guardian_contact: '',
@@ -471,25 +365,7 @@ export async function signOutUser() {
   }
 }
 
-/** If multiple tx rows share one appointment_id, treat as paid when any row is paid. */
-function mergeAppointmentPaymentStatuses(transactionRows) {
-  const paymentByAppointment = new Map()
-  for (const tx of transactionRows || []) {
-    const apptId = tx.appointment_id
-    if (!apptId) continue
-    const row = String(tx.payment_status || '').toLowerCase()
-    const prev = paymentByAppointment.get(apptId)
-    if (row === 'paid' || prev === 'paid') paymentByAppointment.set(apptId, 'paid')
-    else paymentByAppointment.set(apptId, row || prev || 'pending')
-  }
-  return paymentByAppointment
-}
-
 export async function fetchClientHomeData(userId) {
-  const nowMs = Date.now()
-  // Make sure the admin toggles (double-booking, schedule window) are known
-  // before we compute chatAccessible per row.
-  await ensureAppConfigLoaded()
   const [appointmentsRes, notificationsRes, transactionsRes] = await Promise.all([
     supabase
       .from('appointments')
@@ -498,7 +374,7 @@ export async function fetchClientHomeData(userId) {
       .order('scheduled_at', { ascending: true }),
     supabase
       .from('notifications')
-      .select('id, title, body, type, is_read, created_at, data')
+      .select('id, title, body, type, is_read, created_at')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(20),
@@ -512,15 +388,14 @@ export async function fetchClientHomeData(userId) {
   if (notificationsRes.error) throw notificationsRes.error
   if (transactionsRes.error) throw transactionsRes.error
 
-  const paymentByAppointment = mergeAppointmentPaymentStatuses(transactionsRes.data)
+  const paymentByAppointment = new Map(
+    (transactionsRes.data || []).map((tx) => [tx.appointment_id, tx.payment_status]),
+  )
 
   const appointments = (appointmentsRes.data || [])
     .filter((item) => {
       const status = String(item.status || '').toLowerCase()
-      return isUpcomingAppointmentSchedule({
-        scheduledAt: item.scheduled_at,
-        nowMs,
-      }) && (
+      return (
         status === 'pending' ||
         status === 'confirmed' ||
         status === 'rescheduled' ||
@@ -552,23 +427,18 @@ export async function fetchClientHomeData(userId) {
           scheduledAt: item.scheduled_at,
           slotDate: derivedSlotDate,
           slotTime: derivedSlotTime,
-          paymentStatus: paymentByAppointment.get(item.id) === 'paid' ? 'paid' : 'unpaid',
         }),
       }
     })
 
-  const notifications = (notificationsRes.data || []).map((n) => {
-    const appointmentId = appointmentIdFromNotificationData(n.data)
-    return {
-      id: n.id,
-      type: n.type || 'general',
-      title: n.title,
-      desc: n.body,
-      time: n.created_at ? new Date(n.created_at).toLocaleString() : 'Now',
-      read: n.is_read,
-      appointmentId,
-    }
-  })
+  const notifications = (notificationsRes.data || []).map((n) => ({
+    id: n.id,
+    type: n.type || 'general',
+    title: n.title,
+    desc: n.body,
+    time: n.created_at ? new Date(n.created_at).toLocaleString() : 'Now',
+    read: n.is_read,
+  }))
 
   return { appointments, notifications }
 }
@@ -580,7 +450,7 @@ export async function fetchClientNotifications(userId, options = {}) {
   const [notificationsRes, appointmentsRes] = await Promise.all([
     supabase
       .from('notifications')
-      .select('id, title, body, type, is_read, created_at, data')
+      .select('id, title, body, type, is_read, created_at')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(Number.isFinite(limit) ? limit : 20),
@@ -596,19 +466,15 @@ export async function fetchClientNotifications(userId, options = {}) {
   if (notificationsRes.error) throw notificationsRes.error
   if (appointmentsRes.error) throw appointmentsRes.error
 
-  const storedNotifications = (notificationsRes.data || []).map((item) => {
-    const appointmentId = appointmentIdFromNotificationData(item.data)
-    return {
-      id: item.id,
-      type: item.type || 'general',
-      title: item.title || 'Notification',
-      desc: item.body || '',
-      time: formatNotificationTimestamp(item.created_at),
-      read: Boolean(item.is_read),
-      createdAt: item.created_at || null,
-      appointmentId,
-    }
-  })
+  const storedNotifications = (notificationsRes.data || []).map((item) => ({
+    id: item.id,
+    type: item.type || 'general',
+    title: item.title || 'Notification',
+    desc: item.body || '',
+    time: formatNotificationTimestamp(item.created_at),
+    read: Boolean(item.is_read),
+    createdAt: item.created_at || null,
+  }))
 
   const derivedRescheduleNotifications = (appointmentsRes.data || []).map((appointment) => {
     const scheduled = normalizeDateTimeForUi(appointment.scheduled_at)
@@ -666,7 +532,6 @@ export function subscribeToClientNotifications(userId, onChange) {
 }
 
 export async function fetchAttorneyHomeData(userId) {
-  const nowMs = Date.now()
   const now = new Date()
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
 
@@ -695,29 +560,19 @@ export async function fetchAttorneyHomeData(userId) {
   if (transactionsRes.error) throw transactionsRes.error
 
   const pendingCount = appointments.filter(
-    (a) =>
-      String(a.attorney_id) === String(userId) &&
-      isUpcomingAppointmentSchedule({
-        scheduledAt: a.scheduled_value,
-        slotDate: a.slot_date,
-        slotTime: a.slot_time,
-        nowMs,
-      }) && String(a.status || '').toLowerCase() === 'pending',
+    (a) => String(a.status || '').toLowerCase() === 'pending',
   ).length
 
-  const consultFiltered = appointments
-    .filter((a) => String(a.attorney_id) === String(userId))
+  const myAppointmentCount = appointments.filter((a) => {
+    const status = String(a.status || '').toLowerCase()
+    return status === 'confirmed' || status === 'rescheduled'
+  }).length
+
+  const consultations = appointments
     .filter((a) => {
-      // Consultation queue: upcoming/active schedules only. Exclude
-      // pending because those are orphaned bookings from cancelled
-      // PayMongo checkouts; the payment check below adds another layer.
       const status = String(a.status || '').toLowerCase()
-      return isUpcomingAppointmentSchedule({
-        scheduledAt: a.scheduled_value,
-        slotDate: a.slot_date,
-        slotTime: a.slot_time,
-        nowMs,
-      }) && (
+      return (
+        status === 'pending' ||
         status === 'confirmed' ||
         status === 'rescheduled' ||
         status === 'started' ||
@@ -726,46 +581,38 @@ export async function fetchAttorneyHomeData(userId) {
         status === 'active'
       )
     })
-
-  const consultIds = consultFiltered.map((a) => a.id).filter(Boolean)
-  let paidConsultIds = new Set()
-  if (consultIds.length) {
-    const { data: txConsult } = await supabase
-      .from('transactions')
-      .select('appointment_id')
-      .in('appointment_id', consultIds)
-      .eq('payment_status', 'paid')
-    paidConsultIds = new Set((txConsult || []).map((t) => t.appointment_id))
-  }
-
-  // Only PAID consultations may surface to the attorney. A cancelled
-  // PayMongo checkout keeps the appointment row alive but without a
-  // matching paid transaction, so we exclude those here.
-  const consultations = consultFiltered
-    .filter((a) => paidConsultIds.has(a.id))
     .map((a) => ({
-      id: a.id,
-      name: a.client_name || 'Client',
-      area: a.title || 'Consultation',
-      date: a.scheduled_value,
-      time: a.scheduled_value,
-      scheduledAt: a.scheduled_value,
-      slotDate: a.slot_date || null,
-      slotTime: a.slot_time || null,
-      status: a.status || 'confirmed',
-      paymentStatus: 'paid',
-    }))
+    id: a.id,
+    name: a.client_name || 'Client',
+    area: a.title || 'Consultation',
+    date: a.scheduled_value,
+    time: a.scheduled_value,
+    scheduledAt: a.scheduled_value,
+    slotDate: a.slot_date || null,
+    slotTime: a.slot_time || null,
+    status: a.status || 'pending',
+  }))
 
-  const myAppointmentCount = consultations.length
-
-  const storedNotifications = (notificationsRes.data || []).map((n) => mapStoredAttorneyNotificationRow(n))
+  const storedNotifications = (notificationsRes.data || []).map((n) => ({
+    id: n.id,
+    text: `${n.title}: ${n.body}`,
+    time: formatNotificationTimestamp(n.created_at),
+    unread: !n.is_read,
+  }))
 
   const derivedNotifications = buildDerivedAttorneyNotifications({
     appointments,
     paidTransactions: transactionsRes.data || [],
   })
 
-  const notifications = mergeAttorneyNotifications(storedNotifications, derivedNotifications, 20)
+  const notifications = [...storedNotifications, ...derivedNotifications]
+    .reduce((acc, item) => {
+      if (!acc.some((existing) => existing.id === item.id)) {
+        acc.push(item)
+      }
+      return acc
+    }, [])
+    .slice(0, 20)
 
   return {
     consultations,
@@ -790,20 +637,10 @@ const normalizeConsultationTypeLabel = (title) => {
     .trim() || 'General Consultation'
 }
 
-const normalizeGenderLabel = (value) => {
-  const raw = String(value || '').trim().toLowerCase()
-  if (raw === 'male') return 'male'
-  if (raw === 'female') return 'female'
-  if (raw === 'others' || raw === 'other') return 'others'
-  return 'others'
-}
-
-const isClientRole = (roleValue) => String(roleValue || '').trim().toLowerCase() === 'client'
-
 export async function fetchAttorneyConsultationAnalyticsData(userId) {
   const { data, error } = await supabase
     .from('appointments')
-    .select('id, title, status, scheduled_at, client_id')
+    .select('id, title, status, scheduled_at')
     .eq('attorney_id', userId)
 
   if (error) throw error
@@ -826,95 +663,10 @@ export async function fetchAttorneyConsultationAnalyticsData(userId) {
   const total = rows.reduce((sum, item) => sum + Number(item.count || 0), 0)
   const maxCount = rows.length ? rows[0].count : 0
 
-  const baseGenderCounts = {
-    male: 0,
-    female: 0,
-    others: 0,
-  }
-
-  let genderProfiles = null
-  const uniqueClientIds = Array.from(
-    new Set(
-      (data || [])
-        .map((item) => item?.client_id)
-        .filter(Boolean),
-    ),
-  )
-
-  const { data: globalClientProfiles, error: globalClientProfilesError } = await supabase
-    .from('profiles')
-    .select('id, sex, role')
-    .or('role.eq.Client,role.eq.client')
-
-  if (!globalClientProfilesError) {
-    const globalRows = (globalClientProfiles || []).filter((row) => isClientRole(row?.role))
-
-    if (uniqueClientIds.length) {
-      const missingClientIds = uniqueClientIds.filter(
-        (clientId) => !globalRows.some((row) => String(row?.id) === String(clientId)),
-      )
-
-      if (missingClientIds.length) {
-        const { data: appointmentClientProfiles, error: appointmentClientProfilesError } = await supabase
-          .from('profiles')
-          .select('id, sex, role')
-          .in('id', missingClientIds)
-
-        if (!appointmentClientProfilesError) {
-          const merged = [...globalRows, ...(appointmentClientProfiles || [])]
-          genderProfiles = merged
-            .filter((row) => isClientRole(row?.role) || uniqueClientIds.includes(row?.id))
-            .reduce((acc, row) => {
-              if (!acc.some((existing) => String(existing?.id) === String(row?.id))) {
-                acc.push(row)
-              }
-              return acc
-            }, [])
-        } else {
-          genderProfiles = globalRows
-        }
-      } else {
-        genderProfiles = globalRows
-      }
-    } else {
-      genderProfiles = globalRows
-    }
-  } else {
-    if (uniqueClientIds.length) {
-      const { data: appointmentClientProfiles, error: appointmentClientProfilesError } = await supabase
-        .from('profiles')
-        .select('id, sex, role')
-        .in('id', uniqueClientIds)
-
-      if (!appointmentClientProfilesError) {
-        genderProfiles = appointmentClientProfiles || []
-      }
-    }
-  }
-
-  ;(genderProfiles || []).forEach((profileRow) => {
-    const key = normalizeGenderLabel(profileRow?.sex)
-    baseGenderCounts[key] = Number(baseGenderCounts[key] || 0) + 1
-  })
-
-  const genderTotal = Object.values(baseGenderCounts).reduce((sum, count) => sum + Number(count || 0), 0)
-  const genderRows = [
-    { key: 'male', label: 'Male', count: baseGenderCounts.male },
-    { key: 'female', label: 'Female', count: baseGenderCounts.female },
-    { key: 'others', label: 'Others', count: baseGenderCounts.others },
-  ].map((item) => ({
-    ...item,
-    percent: genderTotal > 0 ? Math.round((item.count / genderTotal) * 100) : 0,
-  }))
-
   return {
     rows,
     total,
     maxCount,
-    gender: {
-      total: genderTotal,
-      rows: genderRows,
-    },
   }
 }
 
@@ -1373,8 +1125,7 @@ const normalizeDigitalPaymentMethod = (method) => {
   const value = String(method || '').trim().toLowerCase()
   if (value === 'gcash') return 'GCash'
   if (value === 'maya') return 'Maya'
-  if (value === 'qrph') return 'QRPh'
-  throw new Error('Only GCash, Maya, or QR Ph payments are supported.')
+  throw new Error('Only GCash or Maya payments are supported.')
 }
 
 const normalizeAppointmentStatus = (status) => {
@@ -1501,64 +1252,11 @@ const validateChatAttachment = (sizeBytes, mime) => {
 export const isConsultationChatActiveStatus = (status) =>
   CHAT_ACTIVE_APPOINTMENT_STATUSES.has(String(status || '').toLowerCase())
 
-/**
- * Chat/video unlock: active statuses, OR pending appointment that already has a paid transaction
- * (book + pay should behave like confirmed without extra "approval" gating).
- */
-export const isConsultationUnlockedForChat = ({ status, paymentStatus } = {}) => {
-  const s = String(status || '').toLowerCase()
-  const paid = String(paymentStatus || '').toLowerCase() === 'paid'
+export const isConsultationChatWindowOpen = ({ status, scheduledAt, slotDate, slotTime, nowValue } = {}) => {
+  // DEV BYPASS — remove this line before going to production
+  if (process.env.REACT_APP_BYPASS_CHAT_WINDOW === 'true') return true
 
-  if (s === 'cancelled' || s === 'rejected' || s === 'completed') return false
-
-  if (isConsultationChatActiveStatus(s)) return true
-  if (paid && s === 'pending') return true
-  return false
-}
-
-/**
- * DEV/TEST: open chat before scheduled time. Reads REACT_APP_BYPASS_CHAT_WINDOW (true/1/yes).
- * If CRA was started before .env existed, env may be stale — in development only, you can run:
- * localStorage.setItem('batasmo_bypass_chat_window','1'); location.reload()
- * Production ignores localStorage (NODE_ENV === 'production').
- */
-export function isReactAppBypassChatWindowEnabled() {
-  const raw = process.env.REACT_APP_BYPASS_CHAT_WINDOW
-  if (raw != null && String(raw).trim() !== '') {
-    const v = String(raw).trim().toLowerCase()
-    if (v === 'true' || v === '1' || v === 'yes') return true
-    return false
-  }
-  // Testing default: if env is not configured, keep consultation chat window open.
-  // Set REACT_APP_BYPASS_CHAT_WINDOW=false in Vercel to restore strict schedule gating.
-  return true
-}
-
-export const isConsultationChatWindowOpen = ({
-  status,
-  scheduledAt,
-  slotDate,
-  slotTime,
-  nowValue,
-  paymentStatus,
-} = {}) => {
-  if (!isConsultationUnlockedForChat({ status, paymentStatus })) return false
-
-  // Admin toggle is authoritative.
-  //   ON  -> enforce the schedule window, even if the legacy dev bypass
-  //          env var is turned on.
-  //   OFF -> paid clients/attorneys can enter anytime (demo bypass).
-  const adminEnforces = coerceBoolValue(
-    getCachedAppConfig('enforce_schedule_window', true),
-    true,
-  )
-
-  if (!adminEnforces) return true
-
-  // Legacy dev bypass (REACT_APP_BYPASS_CHAT_WINDOW) only helps when the
-  // admin toggle is unknown/unreachable. Since the admin explicitly
-  // enforces above, we intentionally ignore the dev flag here so the
-  // admin setting can never be undermined by a stale env var.
+  if (!isConsultationChatActiveStatus(status)) return false
 
   const scheduled = parseChatScheduleDate({ scheduledAt, slotDate, slotTime })
   if (!scheduled) return true
@@ -1570,8 +1268,6 @@ export const isConsultationChatWindowOpen = ({
 }
 
 export async function fetchClientAppointmentsData(userId) {
-  const nowMs = Date.now()
-  await ensureAppConfigLoaded()
   const [appointmentsRes, transactionsRes] = await Promise.all([
     supabase
       .from('appointments')
@@ -1587,17 +1283,15 @@ export async function fetchClientAppointmentsData(userId) {
   if (appointmentsRes.error) throw appointmentsRes.error
   if (transactionsRes.error) throw transactionsRes.error
 
-  const paymentByAppointment = mergeAppointmentPaymentStatuses(transactionsRes.data)
+  const paymentByAppointment = new Map(
+    (transactionsRes.data || []).map((tx) => [tx.appointment_id, tx.payment_status]),
+  )
 
-  return (appointmentsRes.data || [])
-    .map((item) => {
+  return (appointmentsRes.data || []).map((item) => {
     const datetime = formatDateTime(item.scheduled_at)
     const parsedSchedule = new Date(item.scheduled_at)
     const scheduledAtTs = Number.isNaN(parsedSchedule.getTime()) ? 0 : parsedSchedule.getTime()
     const rawStatus = String(item.status || '').toLowerCase()
-    const rawNotes = String(item.notes || '')
-    const hasClientRescheduled = rawNotes.includes('[CLIENT_RESCHEDULE_USED]')
-    const cleanedNotes = rawNotes.replace(/\[CLIENT_RESCHEDULE_USED\]/g, '').trim()
     const status = normalizeAppointmentStatus(item.status)
     const paymentStatus = (paymentByAppointment.get(item.id) || 'unpaid').toLowerCase()
 
@@ -1614,13 +1308,11 @@ export async function fetchClientAppointmentsData(userId) {
       scheduledAt: item.scheduled_at || null,
       scheduledAtTs,
       rawStatus,
-      hasClientRescheduled,
       chatAccessible: isConsultationChatWindowOpen({
         status: rawStatus,
         scheduledAt: item.scheduled_at,
         slotDate: item.slot_date,
         slotTime: item.slot_time,
-        paymentStatus: paymentStatus === 'paid' ? 'paid' : 'unpaid',
       }),
       status,
       payment: paymentStatus === 'paid' ? 'PAID' : 'UNPAID',
@@ -1633,7 +1325,7 @@ export async function fetchClientAppointmentsData(userId) {
               ? 'Request Closed'
               : 'Waiting for Attorney Approval',
       description:
-        cleanedNotes ||
+        item.notes ||
         (status === 'COMPLETED'
           ? 'This consultation has been completed.'
           : status === 'APPROVED'
@@ -1642,280 +1334,28 @@ export async function fetchClientAppointmentsData(userId) {
               ? 'This request was declined or cancelled.'
               : 'Your request is still under review.'),
     }
-    })
-    .filter((item) => {
-      const isUpcoming = isUpcomingAppointmentSchedule({
-        scheduledAt: item.scheduledAt,
-        nowMs,
-      })
-      // Keep currently chat-eligible/ongoing consultations visible even after exact schedule time.
-      // This prevents "disappearing at refresh" when the appointment just started.
-      if (isUpcoming) return true
-      return Boolean(item.chatAccessible)
-    })
-}
-
-export async function fetchClientForfeitedRescheduleAlerts(userId) {
-  if (!userId) return []
-
-  const rpcRes = await supabase.rpc('mark_client_forfeited_rescheduled_payments')
-
-  if (!rpcRes.error) {
-    return (rpcRes.data || []).map((item) => {
-      const dt = normalizeDateTimeForUi(item.scheduled_at)
-      return {
-        id: item.appointment_id || item.id,
-        title: item.title || 'Consultation',
-        attorneyName: item.attorney_name || 'your attorney',
-        scheduleLabel: `${dt.date} at ${dt.time}`,
-      }
-    })
-  }
-
-  // Fallback path when RPC is not deployed yet.
-  const message = String(rpcRes.error?.message || '').toLowerCase()
-  const missingFn = message.includes('does not exist')
-  if (!missingFn) throw rpcRes.error
-
-  const nowIso = new Date().toISOString()
-  const [appointmentsRes, transactionsRes] = await Promise.all([
-    supabase
-      .from('appointments')
-      .select('id, title, scheduled_at, status, attorney:attorney_id(full_name)')
-      .eq('client_id', userId)
-      .eq('status', 'rescheduled')
-      .lt('scheduled_at', nowIso),
-    supabase
-      .from('transactions')
-      .select('appointment_id, payment_status')
-      .eq('client_id', userId)
-      .eq('payment_status', 'forfeited'),
-  ])
-
-  if (appointmentsRes.error) throw appointmentsRes.error
-  if (transactionsRes.error) throw transactionsRes.error
-
-  const forfeitedAppointmentIds = new Set(
-    (transactionsRes.data || []).map((tx) => String(tx.appointment_id || '')),
-  )
-
-  return (appointmentsRes.data || [])
-    .filter((item) => forfeitedAppointmentIds.has(String(item.id || '')))
-    .map((item) => {
-      const dt = normalizeDateTimeForUi(item.scheduled_at)
-      return {
-        id: item.id,
-        title: item.title || 'Consultation',
-        attorneyName: item.attorney?.full_name || 'your attorney',
-        scheduleLabel: `${dt.date} at ${dt.time}`,
-      }
-    })
-}
-
-export async function rescheduleClientAppointment({ appointmentId, scheduledAt, note }) {
-  if (!appointmentId) throw new Error('Appointment is required.')
-  if (!scheduledAt) throw new Error('New schedule is required.')
-
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser()
-
-  if (userError || !user?.id) throw new Error('You need to sign in again to continue.')
-
-  const { data: existingAppointment, error: existingError } = await supabase
-    .from('appointments')
-    .select('id, title, notes, scheduled_at, status, attorney_id, client_id')
-    .eq('id', appointmentId)
-    .maybeSingle()
-
-  if (existingError) throw existingError
-  if (!existingAppointment) throw new Error('Appointment not found.')
-  if (String(existingAppointment.client_id || '') !== String(user.id)) {
-    throw new Error('You can only reschedule your own appointment.')
-  }
-
-  const nowMs = Date.now()
-  const currentScheduleMs = new Date(existingAppointment.scheduled_at).getTime()
-  if (!Number.isFinite(currentScheduleMs)) {
-    throw new Error('Current appointment schedule is invalid.')
-  }
-
-  const ONE_DAY_MS = 24 * 60 * 60 * 1000
-  if (currentScheduleMs - nowMs < ONE_DAY_MS) {
-    throw new Error('Reschedule is only allowed at least 1 day before the consultation schedule.')
-  }
-
-  const noteText = String(existingAppointment.notes || '')
-  if (noteText.includes('[CLIENT_RESCHEDULE_USED]')) {
-    throw new Error('You already used your one-time client reschedule option. Please contact admin for further changes.')
-  }
-
-  const toSlotParts = (value) => {
-    const parsed = new Date(value)
-    if (Number.isNaN(parsed.getTime())) return null
-    return {
-      date: parsed.toISOString().slice(0, 10),
-      time: formatSlotTime(parsed),
-    }
-  }
-
-  const previousSlot = toSlotParts(existingAppointment.scheduled_at)
-  const nextSlot = toSlotParts(scheduledAt)
-
-  const reasonLine = note ? `Client reschedule reason: ${note}` : 'Client requested reschedule.'
-  const mergedNote = [noteText.trim(), reasonLine, '[CLIENT_RESCHEDULE_USED]'].filter(Boolean).join('\n\n')
-
-  const { error: updateError } = await supabase
-    .from('appointments')
-    .update({
-      status: 'rescheduled',
-      scheduled_at: scheduledAt,
-      notes: mergedNote,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', appointmentId)
-
-  if (updateError) throw updateError
-
-  try {
-    if (
-      existingAppointment.attorney_id &&
-      previousSlot &&
-      (!nextSlot || previousSlot.date !== nextSlot.date || previousSlot.time !== nextSlot.time)
-    ) {
-      await supabase
-        .from('availability_slots')
-        .update({ is_booked: false, updated_at: new Date().toISOString() })
-        .eq('attorney_id', existingAppointment.attorney_id)
-        .eq('date', previousSlot.date)
-        .eq('time', previousSlot.time)
-    }
-
-    if (existingAppointment.attorney_id && nextSlot) {
-      await supabase
-        .from('availability_slots')
-        .update({ is_booked: true, updated_at: new Date().toISOString() })
-        .eq('attorney_id', existingAppointment.attorney_id)
-        .eq('date', nextSlot.date)
-        .eq('time', nextSlot.time)
-        .eq('is_booked', false)
-    }
-  } catch (slotSyncError) {
-    console.warn('[client-reschedule] availability sync failed', slotSyncError)
-  }
-
-  try {
-    const scheduleLabel = new Date(scheduledAt).toLocaleString('en-PH', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    })
-
-    if (existingAppointment.attorney_id) {
-      await supabase
-        .from('notifications')
-        .insert({
-          user_id: existingAppointment.attorney_id,
-          title: 'Client Rescheduled Appointment',
-          body: `A client rescheduled ${existingAppointment.title || 'a consultation'} to ${scheduleLabel}.`,
-          type: 'reschedule',
-          is_read: false,
-          created_at: new Date().toISOString(),
-        })
-    }
-  } catch (notificationFailure) {
-    console.warn('[client-reschedule] notification step failed', notificationFailure)
-  }
-
-  invalidateAttorneyAppointmentsCache(existingAppointment.attorney_id || undefined)
-  if (existingAppointment.attorney_id && previousSlot?.date) {
-    invalidateAvailabilityCache(existingAppointment.attorney_id, previousSlot.date)
-  }
-  if (existingAppointment.attorney_id && nextSlot?.date) {
-    invalidateAvailabilityCache(existingAppointment.attorney_id, nextSlot.date)
-  }
-}
-
-const CHAT_APPOINTMENT_SELECT_WITH_ATTORNEY =
-  'id, title, scheduled_at, status, attorney:attorney_id(full_name)'
-const CHAT_APPOINTMENT_SELECT_MINIMAL = 'id, title, scheduled_at, status'
-
-async function fetchClientAppointmentsRowsForChat(userId) {
-  const runSelect = async (selectStr) => {
-    let lastErr = null
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const { data, error } = await supabase
-        .from('appointments')
-        .select(selectStr)
-        .eq('client_id', userId)
-        .order('scheduled_at', { ascending: true })
-      if (!error) {
-        return { rows: data || [], hasAttorneyJoin: selectStr === CHAT_APPOINTMENT_SELECT_WITH_ATTORNEY }
-      }
-      lastErr = error
-      const msg = String(error?.message || '').toLowerCase()
-      const transient =
-        msg.includes('fetch') ||
-        msg.includes('network') ||
-        msg.includes('failed to fetch') ||
-        msg.includes('timeout')
-      if (attempt < 2 && transient) {
-        await new Promise((r) => setTimeout(r, 400 * (attempt + 1)))
-        continue
-      }
-      break
-    }
-    throw lastErr
-  }
-
-  try {
-    return await runSelect(CHAT_APPOINTMENT_SELECT_WITH_ATTORNEY)
-  } catch {
-    return await runSelect(CHAT_APPOINTMENT_SELECT_MINIMAL)
-  }
-}
-
-const clientChatRowPassesFilters = (item, paidIds) => {
-  const adminEnforces = coerceBoolValue(
-    getCachedAppConfig('enforce_schedule_window', true),
-    true,
-  )
-  // Only honor the legacy dev bypass when the admin toggle is OFF.
-  if (!adminEnforces && isReactAppBypassChatWindowEnabled()) {
-    const s = String(item.status || '').toLowerCase()
-    return !['cancelled', 'rejected', 'completed'].includes(s)
-  }
-  return isConsultationChatWindowOpen({
-    status: item.status,
-    scheduledAt: item.scheduled_at,
-    paymentStatus: paidIds.has(item.id) ? 'paid' : 'unpaid',
   })
 }
 
 export async function fetchClientChatEligibleAppointments(userId) {
-  const { rows, hasAttorneyJoin } = await fetchClientAppointmentsRowsForChat(userId)
+  const { data, error } = await supabase
+    .from('appointments')
+    .select('id, title, scheduled_at, status, attorney:attorney_id(full_name)')
+    .eq('client_id', userId)
+    .order('scheduled_at', { ascending: true })
 
-  const ids = rows.map((r) => r.id).filter(Boolean)
-  let paidIds = new Set()
-  if (ids.length) {
-    const { data: txRows, error: txErr } = await supabase
-      .from('transactions')
-      .select('appointment_id')
-      .in('appointment_id', ids)
-      .eq('payment_status', 'paid')
-    if (!txErr && txRows) {
-      paidIds = new Set(txRows.map((t) => t.appointment_id))
-    }
-  }
+  if (error) throw error
 
-  return rows
-    .filter((item) => clientChatRowPassesFilters(item, paidIds))
+  return (data || [])
+    .filter((item) =>
+      isConsultationChatWindowOpen({
+        status: item.status,
+        scheduledAt: item.scheduled_at,
+      }),
+    )
     .map((item) => ({
       id: item.id,
-      name: hasAttorneyJoin ? item.attorney?.full_name || 'Attorney' : 'Attorney',
+      name: item.attorney?.full_name || 'Attorney',
       title: item.title || 'Consultation',
       status: String(item.status || '').toLowerCase(),
       scheduledAt: item.scheduled_at,
@@ -2003,56 +1443,53 @@ export async function fetchClientConsultationLogs(userId) {
 
 export async function payForAppointment({ appointmentId, clientId, attorneyId, amount, method }) {
   const paymentMethod = normalizeDigitalPaymentMethod(method)
-  if (!PAYMENT_BACKEND_URL) {
-    throw new Error('Payment backend URL is not configured.')
-  }
-
-  const response = await fetch(`${PAYMENT_BACKEND_URL}/payments/appointments/create-session`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      appointmentId,
-      clientId,
-      attorneyId,
-      amount: Number(amount || 0),
-      method: paymentMethod.toLowerCase(),
-    }),
+  const now = new Date().toISOString()
+  const { error: txError } = await supabase.from('transactions').insert({
+    appointment_id: appointmentId,
+    client_id: clientId,
+    attorney_id: attorneyId,
+    amount: Number(amount || 0),
+    payment_status: 'paid',
+    payment_method: paymentMethod,
+    created_at: now,
+    updated_at: now,
   })
 
-  const payload = await response.json().catch(() => null)
-  if (!response.ok) {
-    throw new Error(payload?.error || `Unable to initialize payment (${response.status})`)
-  }
+  if (txError) throw txError
 
-  if (!payload?.checkoutUrl || !payload?.transactionId) {
-    throw new Error('Payment provider returned an invalid session payload.')
-  }
+  const { error: appointmentError } = await supabase
+    .from('appointments')
+    .update({ status: 'confirmed', updated_at: now })
+    .eq('id', appointmentId)
 
-  return {
-    transactionId: payload.transactionId,
-    checkoutUrl: payload.checkoutUrl,
-    status: payload.status || 'pending',
-    checkoutSessionId: payload.checkoutSessionId || null,
-  }
-}
+  if (appointmentError) throw appointmentError
 
-export async function getAppointmentPaymentStatus(transactionId) {
-  if (!transactionId) throw new Error('transactionId is required')
-  if (!PAYMENT_BACKEND_URL) throw new Error('Payment backend URL is not configured.')
+  try {
+    const { data: appointmentMeta } = await supabase
+      .from('appointments')
+      .select('title, scheduled_at')
+      .eq('id', appointmentId)
+      .maybeSingle()
 
-  const response = await fetch(
-    `${PAYMENT_BACKEND_URL}/payments/appointments/status/${encodeURIComponent(transactionId)}`,
-    { method: 'GET' },
-  )
-  const payload = await response.json().catch(() => null)
-  if (!response.ok) {
-    throw new Error(payload?.error || `Unable to check payment status (${response.status})`)
-  }
-  return {
-    transactionId: payload?.transactionId || transactionId,
-    appointmentId: payload?.appointmentId || null,
-    status: String(payload?.status || 'pending').toLowerCase(),
-    referenceNo: payload?.referenceNo || null,
+    const scheduled = normalizeDateTimeForUi(appointmentMeta?.scheduled_at)
+    const amountValue = Number(amount || 0)
+
+    const { error: clientNotificationError } = await supabase
+      .from('notifications')
+      .insert({
+        user_id: clientId,
+        title: 'Payment Confirmed',
+        body: `Your payment${amountValue > 0 ? ` of PHP ${amountValue.toLocaleString()}` : ''} for ${appointmentMeta?.title || 'your consultation'} has been received${scheduled.date !== 'TBD' ? ` (${scheduled.date} at ${scheduled.time})` : ''}.`,
+        type: 'payment',
+        is_read: false,
+        created_at: now,
+      })
+
+    if (clientNotificationError) {
+      console.warn('[payment] failed to create client payment notification', clientNotificationError)
+    }
+  } catch (clientNotificationFailure) {
+    console.warn('[payment] client payment notification step failed', clientNotificationFailure)
   }
 }
 
@@ -2226,14 +1663,7 @@ export async function fetchClientTransactions(userId) {
     const datetime = formatDateTime(tx.created_at)
     const isConsultation = Boolean(tx.appointment_id)
     const rawMethod = String(tx.payment_method || '').toLowerCase()
-    const paymentMethod =
-      rawMethod === 'gcash'
-        ? 'GCash'
-        : rawMethod === 'maya'
-          ? 'Maya'
-          : rawMethod === 'qrph'
-            ? 'QR Ph'
-            : String(tx.payment_method || 'GCash')
+    const paymentMethod = rawMethod === 'gcash' ? 'GCash' : rawMethod === 'maya' ? 'Maya' : 'GCash'
       const appointment = tx.appointment_id ? appointmentById.get(tx.appointment_id) : null
       const notarial = tx.notarial_request_id ? notarialById.get(tx.notarial_request_id) : null
       const attorney = tx.attorney_id ? attorneyById.get(tx.attorney_id) : null
@@ -2280,33 +1710,7 @@ export async function fetchAttorneyConsultationRequests(userId, options = {}) {
   if (notificationsRes.error) throw notificationsRes.error
   if (paidTransactionsRes.error) throw paidTransactionsRes.error
 
-  // Build a set of appointment_ids that actually have a paid transaction
-  // so we hide unpaid / cancelled-payment appointments from the attorney.
-  const paidAppointmentIds = new Set(
-    (paidTransactionsRes.data || [])
-      .map((tx) => tx.appointment_id)
-      .filter(Boolean),
-  )
-
-  const attorneyAppointmentIds = appointments
-    .filter((item) => String(item.attorney_id) === String(userId))
-    .map((item) => item.id)
-    .filter(Boolean)
-
-  if (attorneyAppointmentIds.length) {
-    const { data: extraPaid } = await supabase
-      .from('transactions')
-      .select('appointment_id')
-      .in('appointment_id', attorneyAppointmentIds)
-      .eq('payment_status', 'paid')
-    ;(extraPaid || []).forEach((tx) => {
-      if (tx?.appointment_id) paidAppointmentIds.add(tx.appointment_id)
-    })
-  }
-
   const requests = appointments
-    .filter((item) => String(item.attorney_id) === String(userId))
-    .filter((item) => paidAppointmentIds.has(item.id))
     .filter((item) => {
       const status = String(item.status || '').toLowerCase()
       return (
@@ -2336,19 +1740,31 @@ export async function fetchAttorneyConsultationRequests(userId, options = {}) {
       area: item.title || 'Consultation',
       date: item.date_label,
       time: item.time_label,
-      payment: 'Paid',
+      payment: Number(item.amount || 0) > 0 ? 'Paid' : 'Unpaid',
       status: 'Approved',
       concern: item.notes || 'No additional notes provided.',
     }))
 
-  const storedNotifications = (notificationsRes.data || []).map((item) => mapStoredAttorneyNotificationRow(item))
+  const storedNotifications = (notificationsRes.data || []).map((item) => ({
+    id: item.id,
+    text: `${item.title}: ${item.body}`,
+    time: formatNotificationTimestamp(item.created_at),
+    unread: !item.is_read,
+  }))
 
   const derivedNotifications = buildDerivedAttorneyNotifications({
     appointments,
     paidTransactions: paidTransactionsRes.data || [],
   })
 
-  const notifications = mergeAttorneyNotifications(storedNotifications, derivedNotifications, 10)
+  const notifications = [...storedNotifications, ...derivedNotifications]
+    .reduce((acc, item) => {
+      if (!acc.some((existing) => existing.id === item.id)) {
+        acc.push(item)
+      }
+      return acc
+    }, [])
+    .slice(0, 10)
 
   return { requests, notifications }
 }
@@ -2614,252 +2030,6 @@ export async function fetchPublicLandingData() {
   return { content, attorneys: gallery }
 }
 
-// ---------------------------------------------------------------------------
-// Admin-controlled app_config cache
-// ---------------------------------------------------------------------------
-// We keep the latest values in-memory so sync helpers like
-// isConsultationChatWindowOpen can check the schedule-window toggle
-// without needing an async round-trip on every call.
-//
-// The cache is refreshed:
-//   1. Lazily on first access (ensureAppConfigLoaded)
-//   2. When the admin toggles via setAppConfig in this tab
-//   3. On postgres_changes from the app_config realtime channel
-// ---------------------------------------------------------------------------
-
-const APP_CONFIG_DEFAULTS = {
-  prevent_double_booking: true,
-  enforce_schedule_window: true,
-}
-
-const appConfigCache = { ...APP_CONFIG_DEFAULTS }
-let appConfigLoadPromise = null
-let appConfigRealtimeChannel = null
-
-function coerceBoolValue(value, fallback) {
-  if (value === null || value === undefined) return fallback
-  if (typeof value === 'boolean') return value
-  if (typeof value === 'number') return value !== 0
-  if (typeof value === 'string') {
-    const v = value.toLowerCase().trim()
-    if (v === 'true' || v === '1') return true
-    if (v === 'false' || v === '0') return false
-  }
-  return Boolean(value)
-}
-
-async function loadAppConfigCacheFromServer() {
-  try {
-    const [pdb, esw] = await Promise.all([
-      supabase.rpc('get_app_config', { p_key: 'prevent_double_booking' }),
-      supabase.rpc('get_app_config', { p_key: 'enforce_schedule_window' }),
-    ])
-    appConfigCache.prevent_double_booking = coerceBoolValue(
-      pdb?.data,
-      APP_CONFIG_DEFAULTS.prevent_double_booking,
-    )
-    appConfigCache.enforce_schedule_window = coerceBoolValue(
-      esw?.data,
-      APP_CONFIG_DEFAULTS.enforce_schedule_window,
-    )
-  } catch (error) {
-    console.warn('[app-config] cache refresh failed, keeping last values', error)
-  }
-}
-
-export async function ensureAppConfigLoaded() {
-  if (!appConfigLoadPromise) {
-    appConfigLoadPromise = loadAppConfigCacheFromServer()
-  }
-  return appConfigLoadPromise
-}
-
-export async function refreshAppConfigCache() {
-  appConfigLoadPromise = loadAppConfigCacheFromServer()
-  return appConfigLoadPromise
-}
-
-export function getCachedAppConfig(key, fallback) {
-  if (Object.prototype.hasOwnProperty.call(appConfigCache, key)) {
-    return appConfigCache[key]
-  }
-  return fallback
-}
-
-export function subscribeToAppConfigChanges() {
-  if (appConfigRealtimeChannel) return appConfigRealtimeChannel
-  try {
-    appConfigRealtimeChannel = supabase
-      .channel('app_config_live_changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'app_config' },
-        () => {
-          refreshAppConfigCache()
-        },
-      )
-      .subscribe()
-  } catch (error) {
-    console.warn('[app-config] realtime subscribe failed', error)
-  }
-  return appConfigRealtimeChannel
-}
-
-export async function getAppConfig(key, fallback = null) {
-  if (!key) return fallback
-  try {
-    const { data, error } = await supabase.rpc('get_app_config', { p_key: key })
-    if (error) {
-      console.warn('[app-config] get failed, returning fallback', error)
-      return fallback
-    }
-    if (data === null || data === undefined) return fallback
-    return data
-  } catch (error) {
-    console.warn('[app-config] get crashed, returning fallback', error)
-    return fallback
-  }
-}
-
-export async function setAppConfig(key, value) {
-  if (!key) throw new Error('Missing config key')
-  const { data, error } = await supabase.rpc('set_app_config', {
-    p_key: key,
-    p_value: value,
-  })
-  if (error) throw error
-  // Keep the local cache in sync immediately so this tab reacts without
-  // waiting for the realtime broadcast to arrive.
-  if (Object.prototype.hasOwnProperty.call(appConfigCache, key)) {
-    appConfigCache[key] = coerceBoolValue(value, appConfigCache[key])
-  }
-  return data
-}
-
-export async function isDoubleBookingPreventionEnabled() {
-  // Default true: if the flag is missing or the fetch fails we err on the
-  // side of protecting the user from accidental double-bookings.
-  await ensureAppConfigLoaded()
-  return coerceBoolValue(getCachedAppConfig('prevent_double_booking', true), true)
-}
-
-export async function isScheduleWindowEnforcementEnabled() {
-  await ensureAppConfigLoaded()
-  return coerceBoolValue(getCachedAppConfig('enforce_schedule_window', true), true)
-}
-
-// Statuses that mean the appointment is already finished / no longer
-// blocks a new booking. Anything NOT in this list is treated as "active"
-// so a stale pending booking (left behind by a cancelled PayMongo
-// checkout) still blocks a second booking.
-const DOUBLE_BOOKING_INACTIVE_STATUSES = new Set([
-  'completed',
-  'cancelled',
-  'canceled',
-  'rejected',
-  'declined',
-  'failed',
-  'expired',
-  'no_show',
-  'noshow',
-])
-
-export async function getClientActiveBookingStatus(clientId) {
-  if (!clientId) {
-    return {
-      enforcementEnabled: true,
-      activeAppointments: [],
-      activeCount: 0,
-      requiresConfirmation: false,
-      blocked: false,
-    }
-  }
-
-  const enabled = await isDoubleBookingPreventionEnabled()
-  if (!enabled) {
-    console.info('[booking] double-booking prevention OFF -> skipping check')
-    return {
-      enforcementEnabled: false,
-      activeAppointments: [],
-      activeCount: 0,
-      requiresConfirmation: false,
-      blocked: false,
-    }
-  }
-
-  // Fetch all of this client's appointments and decide activeness in JS so
-  // we don't have to fight PostgREST's NOT IN syntax for enum columns.
-  const { data, error } = await supabase
-    .from('appointments')
-    .select('id, title, status, scheduled_at')
-    .eq('client_id', clientId)
-    .order('scheduled_at', { ascending: true })
-    .limit(200)
-
-  if (error) {
-    // Do NOT silently allow the booking if the check fails — fail closed.
-    console.error('[booking] active-appointment check failed', error)
-    const err = new Error(
-      'Cannot verify your existing appointments right now. Please try again in a moment.',
-    )
-    err.code = 'DOUBLE_BOOKING_CHECK_FAILED'
-    throw err
-  }
-
-  const activeRows = (data || []).filter((row) => {
-    const normalized = String(row?.status || '').toLowerCase().trim()
-    if (!normalized) return true
-    return !DOUBLE_BOOKING_INACTIVE_STATUSES.has(normalized)
-  })
-
-  return {
-    enforcementEnabled: true,
-    activeAppointments: activeRows,
-    activeCount: activeRows.length,
-    existingAppointment: activeRows[0] || null,
-    requiresConfirmation: activeRows.length === 1,
-    blocked: activeRows.length >= 2,
-  }
-}
-
-export async function assertNoActiveAppointmentForClient(clientId, options = {}) {
-  const status = await getClientActiveBookingStatus(clientId)
-
-  if (!status.enforcementEnabled) return status
-
-  if (status.blocked) {
-    const existing = status.existingAppointment || {}
-    console.warn('[booking] double-booking BLOCKED', {
-      clientId,
-      existingAppointmentId: existing.id,
-      existingStatus: existing.status,
-      existingTitle: existing.title,
-      totalActive: status.activeCount,
-    })
-    const err = new Error(
-      'You cannot book a new consultation yet. You already have two active appointments. Please finish or cancel one first.',
-    )
-    err.code = 'DOUBLE_BOOKING_BLOCKED'
-    throw err
-  }
-
-  if (status.requiresConfirmation && !options.secondBookingConfirmed) {
-    const existing = status.existingAppointment || {}
-    const err = new Error(
-      `You already have an active appointment (${existing.title || 'Legal Consultation'}, status: ${existing.status || 'unknown'}). You can book one more consultation, but please confirm first.`,
-    )
-    err.code = 'DOUBLE_BOOKING_NEEDS_CONFIRMATION'
-    err.details = status
-    throw err
-  }
-
-  console.info('[booking] double-booking check passed -> no active appointment found', {
-    activeCount: status.activeCount,
-  })
-
-  return status
-}
-
 export async function createAppointmentBooking({
   clientId,
   attorneyId,
@@ -2870,7 +2040,6 @@ export async function createAppointmentBooking({
   paymentMethod,
   paymentCode,
   payload,
-  secondBookingConfirmed = false,
 }) {
   const {
     data: { user },
@@ -2881,8 +2050,6 @@ export async function createAppointmentBooking({
   }
 
   const resolvedClientId = user.id
-
-  await assertNoActiveAppointmentForClient(resolvedClientId, { secondBookingConfirmed })
   if (clientId && clientId !== resolvedClientId) {
     console.warn('[booking] client payload id mismatch, using authenticated id', {
       providedClientId: clientId,
@@ -2927,6 +2094,15 @@ export async function createAppointmentBooking({
   const scheduledIso = toIso(normalizedPayload.scheduled_at)
   if (!resolvedClientId || !normalizedPayload.attorney_id || !scheduledIso) {
     throw new Error('Missing appointment payload details.')
+  }
+
+  const activeBookingCount = await fetchClientAttorneyActiveBookingCount({
+    clientId: resolvedClientId,
+    attorneyId: normalizedPayload.attorney_id,
+  })
+
+  if (activeBookingCount >= 2) {
+    throw new Error('Booking limit reached. You can only keep up to 2 active bookings with the same attorney.')
   }
 
   normalizedPayload.scheduled_at = scheduledIso
@@ -3180,8 +2356,8 @@ export async function createAppointmentBooking({
   return { success: true, appointmentId, payload: normalizedPayload }
 }
 
-export async function fetchClientAttorneyActiveBookingCount({ clientId, attorneyId, scheduledAt }) {
-  if (!clientId || !attorneyId || !scheduledAt) return 0
+export async function fetchClientAttorneyActiveBookingCount({ clientId, attorneyId }) {
+  if (!clientId || !attorneyId) return 0
 
   const ACTIVE_LIMIT_STATUSES = new Set([
     'pending',
@@ -3194,68 +2370,28 @@ export async function fetchClientAttorneyActiveBookingCount({ clientId, attorney
     'approved',
   ])
 
-  const targetDate = new Date(scheduledAt)
-  if (Number.isNaN(targetDate.getTime())) return 0
-
-  const toDateKey = (value) => {
-    const parsed = new Date(value)
-    if (Number.isNaN(parsed.getTime())) return null
-    return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`
-  }
-
-  const targetDateKey = toDateKey(scheduledAt)
-  if (!targetDateKey) return 0
-
   const { data, error } = await supabase
     .from('appointments')
-    .select('id, status, scheduled_at')
+    .select('id, status')
     .eq('client_id', clientId)
     .eq('attorney_id', attorneyId)
 
   if (error) throw error
 
-  const sameDayActiveAppointments = (data || []).filter((item) => {
-    const normalizedStatus = String(item?.status || '').toLowerCase()
-    if (!ACTIVE_LIMIT_STATUSES.has(normalizedStatus)) return false
-    return toDateKey(item?.scheduled_at) === targetDateKey
-  })
-
-  if (!sameDayActiveAppointments.length) return 0
-
-  const appointmentIds = sameDayActiveAppointments.map((item) => item.id).filter(Boolean)
-  if (!appointmentIds.length) return 0
-
-  const { data: roomData, error: roomError } = await supabase
-    .from('consultation_rooms')
-    .select('appointment_id, is_closed')
-    .in('appointment_id', appointmentIds)
-
-  if (roomError) throw roomError
-
-  const closedAppointmentIds = new Set(
-    (roomData || [])
-      .filter((room) => Boolean(room?.is_closed))
-      .map((room) => room?.appointment_id)
-      .filter(Boolean),
-  )
-
-  return sameDayActiveAppointments.filter((item) => !closedAppointmentIds.has(item.id)).length
+  return (data || []).filter((item) => ACTIVE_LIMIT_STATUSES.has(String(item?.status || '').toLowerCase())).length
 }
 
 async function getOrCreateConsultationRoom(appointmentId) {
-  // Make sure the admin toggle is loaded so the sync checks below use the
-  // latest value instead of the conservative default.
-  await ensureAppConfigLoaded()
-  const adminEnforcesSchedule = coerceBoolValue(
-    getCachedAppConfig('enforce_schedule_window', true),
-    true,
-  )
-  const devBypass = !adminEnforcesSchedule && isReactAppBypassChatWindowEnabled()
+  const devBypass = process.env.REACT_APP_BYPASS_CHAT_WINDOW === 'true'
 
-  // Some DBs only have scheduled_at (no slot_date/slot_time columns). Schedule logic uses scheduled_at via parseChatScheduleDate.
+  // Only fetch time-related columns when the bypass is off
+  const selectFields = devBypass
+    ? 'status'
+    : 'status, scheduled_at, slot_date, slot_time'
+
   const { data: appointment, error: appointmentError } = await supabase
     .from('appointments')
-    .select('status, scheduled_at')
+    .select(selectFields)
     .eq('id', appointmentId)
     .maybeSingle()
 
@@ -3263,17 +2399,7 @@ async function getOrCreateConsultationRoom(appointmentId) {
 
   const status = String(appointment?.status || '').toLowerCase()
 
-  const { data: paidTx } = await supabase
-    .from('transactions')
-    .select('id')
-    .eq('appointment_id', appointmentId)
-    .eq('payment_status', 'paid')
-    .limit(1)
-    .maybeSingle()
-
-  const paymentStatus = paidTx?.id ? 'paid' : 'unpaid'
-
-  if (!devBypass && !isConsultationUnlockedForChat({ status, paymentStatus })) {
+  if (!devBypass && !isConsultationChatActiveStatus(status)) {
     throw new Error(CHAT_ACCESS_BLOCKED_MESSAGE)
   }
 
@@ -3282,16 +2408,15 @@ async function getOrCreateConsultationRoom(appointmentId) {
     !isConsultationChatWindowOpen({
       status,
       scheduledAt: appointment?.scheduled_at,
-      slotDate: null,
-      slotTime: null,
-      paymentStatus,
+      slotDate: appointment?.slot_date,
+      slotTime: appointment?.slot_time,
     })
   ) {
     throw new Error(
       buildChatScheduleBlockedMessage({
         scheduledAt: appointment?.scheduled_at,
-        slotDate: null,
-        slotTime: null,
+        slotDate: appointment?.slot_date,
+        slotTime: appointment?.slot_time,
       }),
     )
   }
@@ -3350,7 +2475,6 @@ export async function fetchAppointmentMessages(appointmentId) {
       `
       id,
       is_closed,
-      video_meeting_id,
       messages (
         id,
         sender_id,
@@ -3371,7 +2495,7 @@ export async function fetchAppointmentMessages(appointmentId) {
 
   if (error || !data) {
     await getOrCreateConsultationRoom(appointmentId)
-    return { messages: [], isClosed: false, videoMeetingId: null }
+    return { messages: [], isClosed: false }
   }
 
   const sorted = (data.messages || [])
@@ -3380,12 +2504,7 @@ export async function fetchAppointmentMessages(appointmentId) {
 
   const mapped = sorted.map((row) => mapRoomMessage(row, data.id, Boolean(data.is_closed), user.id))
 
-  return {
-    messages: mapped,
-    isClosed: Boolean(data.is_closed),
-    roomId: data.id,
-    videoMeetingId: data.video_meeting_id || null,
-  }
+  return { messages: mapped, isClosed: Boolean(data.is_closed), roomId: data.id }
 }
 
 export async function sendAppointmentMessage(appointmentId, messageText) {
@@ -3942,46 +3061,6 @@ export function subscribeToAttorneyAppointments(attorneyId, onChange) {
   }
 }
 
-export function subscribeToAttorneyNotifications(attorneyId, onChange) {
-  if (!attorneyId) {
-    return () => {}
-  }
-
-  const channel = supabase
-    .channel(`attorney-notifications:${attorneyId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'notifications',
-        filter: `user_id=eq.${attorneyId}`,
-      },
-      () => {
-        if (typeof onChange === 'function') {
-          onChange()
-        }
-      },
-    )
-    .subscribe()
-
-  return () => {
-    supabase.removeChannel(channel)
-  }
-}
-
-export async function markAttorneyNotificationsAsRead(attorneyId) {
-  if (!attorneyId) return
-
-  const { error } = await supabase
-    .from('notifications')
-    .update({ is_read: true })
-    .eq('user_id', attorneyId)
-    .eq('is_read', false)
-
-  if (error) throw error
-}
-
 export function subscribeToAvailabilitySlots(onChange) {
   const channel = supabase
     .channel('availability-slots:realtime')
@@ -4005,13 +3084,31 @@ export function subscribeToAvailabilitySlots(onChange) {
   }
 }
 
-export async function createNotarialRequest({ clientId, serviceType, preferredDate, notes, documentName }) {
+export async function createNotarialRequest({ clientId, serviceType, preferredDate, notes, file, documentName }) {
+  let documentUrl = documentName || null
+
+  if (file instanceof File) {
+    const ext = file.name.split('.').pop() || 'bin'
+    const filePath = `${clientId}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+    const { error: uploadError } = await supabase.storage
+      .from('notarial-documents')
+      .upload(filePath, file, { contentType: file.type || `application/${ext}`, upsert: false })
+
+    if (uploadError) throw uploadError
+
+    const { data: urlData } = supabase.storage
+      .from('notarial-documents')
+      .getPublicUrl(filePath)
+
+    documentUrl = urlData?.publicUrl || filePath
+  }
+
   const { error } = await supabase.from('notarial_requests').insert({
     client_id: clientId,
     service_type: serviceType,
     preferred_date: preferredDate,
     notes,
-    document_url: documentName,
+    document_url: documentUrl,
     status: 'pending',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -4021,44 +3118,13 @@ export async function createNotarialRequest({ clientId, serviceType, preferredDa
 }
 
 export async function fetchAttorneyUpcomingAppointments(userId, options = {}) {
-  const nowMs = Date.now()
   const appointments = await fetchAttorneyAppointments(userId, options)
 
-  const forAttorney = appointments.filter((item) => String(item.attorney_id) === String(userId))
-
-  const filtered = forAttorney.filter((item) => {
-    const status = String(item.status || '').toLowerCase()
-    const isOpenStatus =
-      status === 'pending' ||
-      status === 'confirmed' ||
-      status === 'rescheduled' ||
-      status === 'started' ||
-      status === 'in_progress' ||
-      status === 'in-progress' ||
-      status === 'active'
-    return (
-      (isUpcomingAppointmentSchedule({
-        scheduledAt: item.scheduled_value,
-        slotDate: item.slot_date,
-        slotTime: item.slot_time,
-        nowMs,
-      }) || isConsultationChatActiveStatus(status)) &&
-      isOpenStatus
-    )
-  })
-
-  const ids = filtered.map((i) => i.id).filter(Boolean)
-  let paidIds = new Set()
-  if (ids.length) {
-    const { data: txRows } = await supabase
-      .from('transactions')
-      .select('appointment_id')
-      .in('appointment_id', ids)
-      .eq('payment_status', 'paid')
-    paidIds = new Set((txRows || []).map((t) => t.appointment_id))
-  }
-
-  return filtered
+  return appointments
+    .filter((item) => {
+      const status = String(item.status || '').toLowerCase()
+      return status === 'pending' || status === 'confirmed' || status === 'rescheduled'
+    })
     .sort((a, b) => {
       const aTime = a.parsed_scheduled_at?.getTime() || 0
       const bTime = b.parsed_scheduled_at?.getTime() || 0
@@ -4090,7 +3156,6 @@ export async function fetchAttorneyUpcomingAppointments(userId, options = {}) {
         slotDate: item.slot_date || null,
         slotTime: item.slot_time || null,
         status: item.status,
-        paymentStatus: paidIds.has(item.id) ? 'paid' : 'unpaid',
         color: '#6366f1',
         concern: item.notes || '',
       }
@@ -4128,7 +3193,7 @@ export async function fetchConsultationTranscriptForAppointment(appointmentId) {
 
   const { data: appointment, error: appointmentError } = await supabase
     .from('appointments')
-    .select('id, attorney_id, client_id, status, attorney_consultation_summary')
+    .select('id, attorney_id, client_id')
     .eq('id', appointmentId)
     .maybeSingle()
 
@@ -4168,21 +3233,8 @@ export async function fetchConsultationTranscriptForAppointment(appointmentId) {
     .maybeSingle()
 
   if (error) throw new Error(error.message)
-
-  const summaryPayload = {
-    attorneyConsultationSummary: appointment?.attorney_consultation_summary
-      ? String(appointment.attorney_consultation_summary)
-      : null,
-    canEditAttorneySummary: String(user.id) === String(appointment.attorney_id),
-  }
-
   if (!data?.id) {
-    return {
-      messages: [],
-      isClosed: true,
-      roomId: null,
-      ...summaryPayload,
-    }
+    return { messages: [], isClosed: true, roomId: null }
   }
 
   const sorted = (data.messages || [])
@@ -4193,33 +3245,7 @@ export async function fetchConsultationTranscriptForAppointment(appointmentId) {
     messages: sorted.map((row) => mapRoomMessage(row, data.id, Boolean(data.is_closed), user.id)),
     isClosed: Boolean(data.is_closed),
     roomId: data.id,
-    ...summaryPayload,
   }
-}
-
-/**
- * Saves attorney-written consultation summary for the client (completed appointments only).
- * Uses SECURITY DEFINER RPC so clients cannot tamper with this field via generic UPDATE policies.
- */
-export async function saveAttorneyConsultationSummary({ appointmentId, summary }) {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) throw new Error('Not authenticated')
-  if (!appointmentId) throw new Error('Appointment is required.')
-
-  const { error } = await supabase.rpc('set_attorney_consultation_summary', {
-    p_appointment_id: appointmentId,
-    p_summary: summary ?? '',
-  })
-
-  if (error) throw new Error(error.message)
-
-  // Client notification is created inside RPC set_attorney_consultation_summary (SECURITY DEFINER),
-  // first non-empty summary only — run database/20260417_notifications_on_attorney_summary_rpc.sql in Supabase.
-
-  return { success: true }
 }
 
 export async function rescheduleAttorneyAppointment({ appointmentId, scheduledAt, note }) {
@@ -4512,8 +3538,7 @@ export async function fetchAttorneyAnnouncementsData(userId) {
 
 // ─── VideoSDK helpers ────────────────────────────────────────────────────────
 
-const PAYMENT_BACKEND_URL = process.env.REACT_APP_PAYMENT_API_URL || process.env.REACT_APP_CHATBOT_API_URL || 'http://localhost:4000'
-const VIDEOSDK_BACKEND_URL = PAYMENT_BACKEND_URL
+const VIDEOSDK_BACKEND_URL = process.env.REACT_APP_CHATBOT_API_URL || 'http://localhost:4000'
 
 let cachedVideoSdkToken = null
 
@@ -4564,37 +3589,14 @@ export async function getOrCreateVideoMeeting(appointmentId) {
 
   const { roomId: newMeetingId, token: videoToken } = await createRes.json()
 
-  // Atomic claim: only set video_meeting_id when it is still null.
-  // This prevents attorney/client "double-create" race where each side joins different room IDs.
-  const { data: claimedRoom, error: claimError } = await supabase
+  const { error: updateError } = await supabase
     .from('consultation_rooms')
     .update({ video_meeting_id: newMeetingId })
     .eq('id', room.id)
-    .is('video_meeting_id', null)
-    .select('id, video_meeting_id')
-    .maybeSingle()
 
-  if (claimError) throw claimError
+  if (updateError) throw updateError
 
-  if (claimedRoom?.video_meeting_id) {
-    return { meetingId: claimedRoom.video_meeting_id, roomId: room.id, token: videoToken }
-  }
-
-  // Another participant already claimed/created the meeting ID first.
-  // Read and join that room instead so both users auto-connect to the same call.
-  const { data: latestRoom, error: latestRoomError } = await supabase
-    .from('consultation_rooms')
-    .select('id, video_meeting_id')
-    .eq('id', room.id)
-    .maybeSingle()
-
-  if (latestRoomError) throw latestRoomError
-  if (!latestRoom?.video_meeting_id) {
-    throw new Error('Video meeting is still initializing. Please tap Video Call again.')
-  }
-
-  const latestToken = await getVideoSdkToken()
-  return { meetingId: latestRoom.video_meeting_id, roomId: room.id, token: latestToken }
+  return { meetingId: newMeetingId, roomId: room.id, token: videoToken }
 }
 
 /**

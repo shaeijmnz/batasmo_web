@@ -1,233 +1,231 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { 
-  LayoutDashboard, Users, Scale, FileText,
-  BarChart3, Settings, LogOut, Menu, Search, 
-  Filter, Download, Clock
-} from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import './AdminTheme.css';
-import './requests.css';
+import { updateNotarialStatus, createNotification } from '../lib/adminApi';
+import './AdminRequests.css';
 
-const normalizeNotaryStatus = (status) => {
-  const value = String(status || '').toLowerCase();
-  if (value === 'approved' || value === 'accepted' || value === 'in_process' || value === 'in-progress') return 'In Progress';
-  if (value === 'completed') return 'Completed';
-  if (value === 'cancelled' || value === 'rejected') return 'Cancelled';
+const NOTARIAL_BUCKET = 'notarial-documents';
+
+const BackIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+  </svg>
+);
+
+const isImageUrl = (url) => /\.(png|jpg|jpeg|gif|webp|svg)(\?|$)/i.test(String(url || ''));
+
+const normalizeStatus = (raw) => {
+  const v = String(raw || '').toLowerCase();
+  if (v === 'approved' || v === 'accepted' || v === 'in_process' || v === 'in-progress') return 'in_process';
+  if (v === 'completed') return 'completed';
+  if (v === 'cancelled' || v === 'rejected' || v === 'closed') return 'closed';
+  return 'pending';
+};
+
+const statusLabel = (status) => {
+  if (status === 'in_process') return 'In Process';
+  if (status === 'completed') return 'Ready for Pickup';
+  if (status === 'closed') return 'Closed';
   return 'Pending';
 };
 
-const formatDateLabel = (value) => {
-  const parsed = value ? new Date(value) : null;
-  if (!parsed || Number.isNaN(parsed.getTime())) return 'TBD';
-  return parsed.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+const statusBadgeClass = (status) => {
+  if (status === 'in_process') return 'adm-detail-badge--in-progress';
+  if (status === 'completed') return 'adm-detail-badge--active';
+  if (status === 'closed') return 'adm-detail-badge--inactive';
+  return 'adm-detail-badge--pending';
 };
 
-const formatTimeLabel = (value) => {
-  const parsed = value ? new Date(value) : null;
-  if (!parsed || Number.isNaN(parsed.getTime())) return 'TBD';
-  return parsed.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' });
+const formatDate = (value) => {
+  const d = value ? new Date(value) : null;
+  if (!d || Number.isNaN(d.getTime())) return 'TBD';
+  return d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-const priorityFromStatus = (status) => {
-  if (status === 'Pending') return 'High';
-  if (status === 'In Progress') return 'Medium';
-  return 'Low';
+const TABS = ['All', 'Pending', 'In Process', 'Ready for Pickup', 'Closed'];
+
+const tabToStatus = {
+  Pending: 'pending',
+  'In Process': 'in_process',
+  'Ready for Pickup': 'completed',
+  Closed: 'closed',
 };
 
-const Requests = ({ onNavigate }) => {
-  const [isSidebarOpen, setSidebarOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState('All');
-  const [searchTerm, setSearchTerm] = useState('');
+function AdminRequests({ onNavigate }) {
   const [requests, setRequests] = useState([]);
+  const [searchText, setSearchText] = useState('');
+  const [activeTab, setActiveTab] = useState('All');
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
-  const navigate = (path) => {
-    const pageMap = {
-      '/': 'admin-home',
-      '/clients': 'admin-clients',
-      '/attorneys': 'admin-attorneys',
-      '/requests': 'admin-requests',
-      '/consultations': 'admin-consultations',
-      '/reports': 'admin-reports',
-      '/settings': 'admin-settings',
-    };
-    onNavigate?.(pageMap[path] || 'admin-home');
-  };
-  const handleQuickAction = (message) => window.alert(message);
+  const [errorText, setErrorText] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [viewRequest, setViewRequest] = useState(null);
+  const [toast, setToast] = useState(null);
 
-  const navItems = [
-    { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/' },
-    { label: 'Clients', icon: <Users size={20} />, path: '/clients' },
-    { label: 'Attorneys', icon: <Scale size={20} />, path: '/attorneys' },
-    { label: 'Requests', icon: <FileText size={20} />, path: '/requests' },
-    { label: 'Reports', icon: <BarChart3 size={20} />, path: '/reports' },
-    { label: 'Settings', icon: <Settings size={20} />, path: '/settings' },
-  ];
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    window.setTimeout(() => setToast((t) => (t?.message === message ? null : t)), 3500);
+  };
+
+  const loadRequests = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('notarial_requests')
+        .select('id, client_id, service_type, status, preferred_date, created_at, updated_at, notes, document_url, client:client_id(full_name), attorney:attorney_id(full_name)')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      setRequests(
+        (data || []).map((row) => ({
+          id: row.id,
+          clientId: row.client_id,
+          clientName: row.client?.full_name || 'Client',
+          attorneyName: row.attorney?.full_name || 'Unassigned',
+          serviceType: row.service_type || 'Notarial Service',
+          status: normalizeStatus(row.status),
+          preferredDate: formatDate(row.preferred_date),
+          submittedDate: formatDate(row.created_at),
+          notes: row.notes || '',
+          documentUrl: row.document_url || '',
+        })),
+      );
+      setErrorText('');
+    } catch (err) {
+      setErrorText(err.message || 'Failed to load notarial requests.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
 
-    const loadNotaryRequests = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('notarial_requests')
-          .select('id, service_type, status, preferred_date, created_at, client:client_id(full_name), attorney:attorney_id(full_name)')
-          .order('created_at', { ascending: false });
-
-        if (error) throw error;
-
-        const normalized = (data || []).map((row) => {
-          const status = normalizeNotaryStatus(row.status);
-          const schedule = row.preferred_date || row.created_at;
-          return {
-            id: row.id,
-            title: row.service_type || 'Notary Request',
-            status,
-            category: 'Notary Service',
-            priority: priorityFromStatus(status),
-            client: row.client?.full_name || 'Client',
-            attorney: row.attorney?.full_name || 'Unassigned',
-            date: formatDateLabel(schedule),
-            time: formatTimeLabel(schedule),
-          };
-        });
-
-        if (!isMounted) return;
-        setRequests(normalized);
-        setLoadError('');
-      } catch (error) {
-        if (isMounted) {
-          setRequests([]);
-          setLoadError(error.message || 'Failed to load notary requests.');
-        }
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
+    const safeLoad = async () => {
+      if (!isMounted) return;
+      await loadRequests();
     };
 
-    loadNotaryRequests();
+    safeLoad();
 
-    const notaryChannel = supabase
-      .channel('admin-notary-requests-page')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notarial_requests' }, () => loadNotaryRequests())
+    const channel = supabase
+      .channel('admin-notarial-requests-list')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notarial_requests' }, () => {
+        if (isMounted) loadRequests();
+      })
       .subscribe();
 
     return () => {
       isMounted = false;
-      supabase.removeChannel(notaryChannel);
+      supabase.removeChannel(channel);
     };
   }, []);
 
-  const requestStats = useMemo(() => {
-    const pending = requests.filter((item) => item.status === 'Pending').length;
-    const inProgress = requests.filter((item) => item.status === 'In Progress').length;
-    const completed = requests.filter((item) => item.status === 'Completed').length;
-    return [
-      { label: 'Pending Requests', value: pending.toLocaleString(), color: '#eab308' },
-      { label: 'In Progress', value: inProgress.toLocaleString(), color: '#3b82f6' },
-      { label: 'Completed', value: completed.toLocaleString(), color: '#22c55e' },
-      { label: 'Total Requests', value: requests.length.toLocaleString(), color: '#64748b' },
-    ];
-  }, [requests]);
-
   const visibleRequests = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
-    const byTab = activeTab === 'All' ? requests : requests.filter((item) => item.status === activeTab);
+    const term = searchText.trim().toLowerCase();
+    const byTab =
+      activeTab === 'All'
+        ? requests
+        : requests.filter((r) => r.status === tabToStatus[activeTab]);
+
     if (!term) return byTab;
-    return byTab.filter((item) =>
-      [item.title, item.client, item.attorney].some((value) =>
-        String(value || '').toLowerCase().includes(term),
+    return byTab.filter((r) =>
+      [r.clientName, r.attorneyName, r.serviceType].some((v) =>
+        String(v || '').toLowerCase().includes(term),
       ),
     );
-  }, [activeTab, requests, searchTerm]);
+  }, [requests, activeTab, searchText]);
+
+  const counts = useMemo(() => ({
+    pending: requests.filter((r) => r.status === 'pending').length,
+    in_process: requests.filter((r) => r.status === 'in_process').length,
+    completed: requests.filter((r) => r.status === 'completed').length,
+    closed: requests.filter((r) => r.status === 'closed').length,
+    total: requests.length,
+  }), [requests]);
+
+  const updateStatus = async (req, newStatus) => {
+    if (isUpdating) return;
+    setIsUpdating(true);
+    try {
+      await updateNotarialStatus(req.id, newStatus === 'in_process' ? 'approved' : newStatus);
+
+      const bodyMap = {
+        in_process: `Your notarial request for "${req.serviceType}" is now being processed.`,
+        completed: `Your notarized document for "${req.serviceType}" is ready for pick up.`,
+        closed: `Your notarial request for "${req.serviceType}" has been closed.`,
+      };
+
+      if (req.clientId && bodyMap[newStatus]) {
+        await createNotification({
+          userId: req.clientId,
+          title: 'Notarial Request Update',
+          body: bodyMap[newStatus],
+          type: 'notarial_update',
+        });
+      }
+
+      showToast(`Request marked as ${statusLabel(newStatus)}.`);
+    } catch (err) {
+      showToast(err.message || 'Failed to update status.', 'error');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const openDocument = (req) => {
+    if (!req.documentUrl) {
+      showToast('No document uploaded for this request.', 'error');
+      return;
+    }
+    window.open(req.documentUrl, '_blank', 'noopener,noreferrer');
+  };
 
   return (
-    <div className="app-container">
-      {/* SIDEBAR */}
-      <aside className={`sidebar ${isSidebarOpen ? 'open' : 'closed'}`}>
-        <div className="sidebar-header">
-          <button className="sidebar-toggle" onClick={() => setSidebarOpen(!isSidebarOpen)}>
-            <Menu size={24} />
+    <div className="adm-detail-page">
+      <header className="adm-detail-header">
+        <div className="adm-detail-header__left">
+          <button className="adm-detail-back-btn" onClick={() => onNavigate('admin-home')} title="Go back">
+            <BackIcon />
           </button>
-          {isSidebarOpen && <img src="/logo/logo.jpg" alt="BatasMo logo" className="brand-logo" />}
-          {isSidebarOpen && <span className="logo-text">BatasMo</span>}
+          <h1 className="adm-detail-title">Notarial Requests</h1>
+          <span className="adm-detail-count">{loading ? '…' : requests.length}</span>
         </div>
+      </header>
 
-        <nav className="sidebar-nav">
-          {navItems.map((item) => (
-            <NavItem
-              key={item.label}
-              icon={item.icon}
-              label={item.label}
-              active={item.path === '/requests'}
-              open={isSidebarOpen}
-              onClick={() => navigate(item.path)}
-            />
+      <main className="adm-detail-main">
+        {/* Stats row */}
+        <div className="adm-nr-stats">
+          {[
+            { label: 'Pending', value: counts.pending, color: '#eab308' },
+            { label: 'In Process', value: counts.in_process, color: '#3b82f6' },
+            { label: 'Ready for Pickup', value: counts.completed, color: '#22c55e' },
+            { label: 'Closed', value: counts.closed, color: '#64748b' },
+            { label: 'Total', value: counts.total, color: '#1e3a8a' },
+          ].map((s) => (
+            <div key={s.label} className="adm-nr-stat-card">
+              <span className="adm-nr-stat-value" style={{ color: s.color }}>{s.value}</span>
+              <span className="adm-nr-stat-label">{s.label}</span>
+            </div>
           ))}
-        </nav>
-
-        <div className="sidebar-footer">
-          <div className="profile-section">
-            <div className="profile-avatar">AD</div>
-            {isSidebarOpen && (
-              <div className="profile-info">
-                <p className="name">Admin User</p>
-                <p className="email">admin@batasmo.com</p>
-              </div>
-            )}
-          </div>
-          <button className="logout-btn" onClick={() => handleQuickAction('Logout clicked')}>
-            <LogOut size={18} />
-            {isSidebarOpen && <span>Logout</span>}
-          </button>
         </div>
-      </aside>
 
-      {/* MAIN CONTENT */}
-      <main className="main-content">
-        <div className="content-wrapper">
-          <div className="page-header">
-            <div>
-              <h2 className="title">Notary Requests</h2>
-              <p className="subtitle">Manage all notary requests and document processing</p>
-            </div>
+        <div className="adm-detail-card">
+          {/* Search */}
+          <div className="adm-detail-search">
+            <input
+              type="text"
+              placeholder="Search by client, attorney, or service..."
+              className="adm-detail-input"
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+            />
           </div>
 
-          {/* Stats Grid */}
-          <div className="stats-grid">
-            {requestStats.map((stat, index) => (
-              <div key={index} className="stat-card" style={{ borderLeft: `4px solid ${stat.color}` }}>
-                <h3 className="stat-value">{stat.value}</h3>
-                <p className="stat-label">{stat.label}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Search and Filters */}
-          <div className="search-filter-section">
-            <div className="search-box">
-              <Search size={18} className="search-icon" />
-              <input
-                type="text"
-                placeholder="Search requests by client, attorney, or type..."
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-              />
-            </div>
-            <div className="action-buttons">
-              <button className="btn-secondary" onClick={() => handleQuickAction('Request filters opened')}><Filter size={18} /> Filter</button>
-              <button className="btn-secondary" onClick={() => handleQuickAction('Request export started')}><Download size={18} /> Export</button>
-            </div>
-          </div>
-
-          {/* Status Tabs */}
-          <div className="tabs-container">
-            {['All', 'Pending', 'In Progress', 'Completed', 'Cancelled'].map(tab => (
-              <button 
-                key={tab} 
-                className={`tab ${activeTab === tab ? 'active' : ''}`}
+          {/* Tabs */}
+          <div className="adm-nr-tabs">
+            {TABS.map((tab) => (
+              <button
+                key={tab}
+                className={`adm-nr-tab${activeTab === tab ? ' adm-nr-tab--active' : ''}`}
                 onClick={() => setActiveTab(tab)}
               >
                 {tab}
@@ -235,66 +233,195 @@ const Requests = ({ onNavigate }) => {
             ))}
           </div>
 
-          {/* Requests List */}
-          <div className="requests-stack">
-            {loadError ? <p className="requests-info-message">{loadError}</p> : null}
-            {loading ? <p className="requests-info-message">Loading notary requests...</p> : null}
-            {visibleRequests.map((req) => (
-              <div key={req.id} className="request-card">
-                <div className="request-header">
-                  <div className="header-left">
-                    <h3 className="request-title">{req.title}</h3>
-                    <div className="tag-group">
-                      <span className={`status-pill ${req.status.toLowerCase().replace(' ', '')}`}>
-                        <Clock size={12} /> {req.status}
-                      </span>
-                      <span className="category-pill">{req.category}</span>
-                    </div>
-                  </div>
-                  <span className={`priority-tag ${req.priority.toLowerCase()}`}>
-                    {req.priority}
-                  </span>
-                </div>
+          {errorText ? <p className="adm-nr-error">{errorText}</p> : null}
 
-                <div className="request-body">
-                  <div className="info-column">
-                    <div className="info-item">
-                      <span className="info-label">Client:</span>
-                      <span className="info-text">{req.client}</span>
+          <table className="adm-detail-table">
+            <thead>
+              <tr>
+                <th>Client</th>
+                <th>Service</th>
+                <th>Preferred Date</th>
+                <th>Submitted</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleRequests.map((req) => (
+                <tr key={req.id} className="adm-detail-table__row--clickable">
+                  <td>{req.clientName}</td>
+                  <td>{req.serviceType}</td>
+                  <td>{req.preferredDate}</td>
+                  <td>{req.submittedDate}</td>
+                  <td>
+                    <span className={`adm-detail-badge ${statusBadgeClass(req.status)}`}>
+                      {statusLabel(req.status)}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="adm-detail-row-actions">
+                      <button
+                        className="adm-detail-row-btn adm-detail-row-btn--view"
+                        onClick={() => setViewRequest(req)}
+                      >
+                        View
+                      </button>
+                      {req.status === 'pending' && (
+                        <button
+                          className="adm-detail-row-btn adm-nr-btn--process"
+                          disabled={isUpdating}
+                          onClick={() => updateStatus(req, 'in_process')}
+                        >
+                          In Process
+                        </button>
+                      )}
+                      {req.status === 'in_process' && (
+                        <button
+                          className="adm-detail-row-btn adm-nr-btn--pickup"
+                          disabled={isUpdating}
+                          onClick={() => updateStatus(req, 'completed')}
+                        >
+                          Ready for Pickup
+                        </button>
+                      )}
+                      {(req.status === 'pending' || req.status === 'in_process') && (
+                        <button
+                          className="adm-detail-row-btn adm-nr-btn--close"
+                          disabled={isUpdating}
+                          onClick={() => updateStatus(req, 'closed')}
+                        >
+                          Close
+                        </button>
+                      )}
                     </div>
-                    <div className="info-item">
-                      <span className="info-label">Date:</span>
-                      <span className="info-text">{req.date}</span>
-                    </div>
-                  </div>
-                  <div className="info-column">
-                    <div className="info-item">
-                      <span className="info-label">Attorney:</span>
-                      <span className="info-text">{req.attorney}</span>
-                    </div>
-                    <div className="info-item">
-                      <span className="info-label">Time:</span>
-                      <span className="info-text">{req.time}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-            {!loading && !loadError && visibleRequests.length === 0 ? (
-              <p className="requests-info-message">No notary requests found.</p>
-            ) : null}
-          </div>
+                  </td>
+                </tr>
+              ))}
+              {!loading && visibleRequests.length === 0 ? (
+                <tr>
+                  <td colSpan="6" style={{ textAlign: 'center', color: '#9ca3af', padding: '32px' }}>
+                    No notarial requests found.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
         </div>
       </main>
+
+      {/* View / Detail Modal */}
+      {viewRequest && (
+        <div className="adm-detail-modal-overlay" onClick={() => setViewRequest(null)}>
+          <div className="adm-detail-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="adm-detail-modal__header">
+              <h2>Notarial Request Details</h2>
+              <button className="adm-detail-modal__close" onClick={() => setViewRequest(null)}>×</button>
+            </div>
+            <div className="adm-detail-modal__content">
+              <div className="adm-detail-modal__row">
+                <label>Client</label>
+                <p>{viewRequest.clientName}</p>
+              </div>
+              <div className="adm-detail-modal__row">
+                <label>Service Type</label>
+                <p>{viewRequest.serviceType}</p>
+              </div>
+              <div className="adm-detail-modal__row">
+                <label>Status</label>
+                <p>
+                  <span className={`adm-detail-badge ${statusBadgeClass(viewRequest.status)}`}>
+                    {statusLabel(viewRequest.status)}
+                  </span>
+                </p>
+              </div>
+              <div className="adm-detail-modal__row">
+                <label>Preferred Date</label>
+                <p>{viewRequest.preferredDate}</p>
+              </div>
+              <div className="adm-detail-modal__row">
+                <label>Submitted</label>
+                <p>{viewRequest.submittedDate}</p>
+              </div>
+              <div className="adm-detail-modal__row">
+                <label>Attorney</label>
+                <p>{viewRequest.attorneyName}</p>
+              </div>
+              {viewRequest.notes ? (
+                <div className="adm-detail-modal__row">
+                  <label>Notes</label>
+                  <p>{viewRequest.notes}</p>
+                </div>
+              ) : null}
+              {viewRequest.documentUrl ? (
+                <div className="adm-detail-modal__row">
+                  <label>Document</label>
+                  <div className="adm-detail-files">
+                    <div className="adm-detail-file-item">
+                      <span className="adm-detail-file-name">
+                        {isImageUrl(viewRequest.documentUrl)
+                          ? 'Attached Image'
+                          : viewRequest.documentUrl.split('/').pop() || 'Document'}
+                      </span>
+                      <button
+                        className="adm-detail-file-open"
+                        onClick={() => openDocument(viewRequest)}
+                      >
+                        Open
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="adm-detail-modal__row">
+                  <label>Document</label>
+                  <p style={{ color: '#9ca3af' }}>No document uploaded</p>
+                </div>
+              )}
+            </div>
+            <div className="adm-detail-modal__actions">
+              {viewRequest.status === 'pending' && (
+                <button
+                  className="adm-detail-modal__btn adm-detail-modal__btn--approve"
+                  disabled={isUpdating}
+                  onClick={async () => {
+                    await updateStatus(viewRequest, 'in_process');
+                    setViewRequest(null);
+                  }}
+                >
+                  Mark In Process
+                </button>
+              )}
+              {viewRequest.status === 'in_process' && (
+                <button
+                  className="adm-detail-modal__btn adm-detail-modal__btn--approve"
+                  disabled={isUpdating}
+                  onClick={async () => {
+                    await updateStatus(viewRequest, 'completed');
+                    setViewRequest(null);
+                  }}
+                >
+                  Ready for Pickup
+                </button>
+              )}
+              <button
+                className="adm-detail-modal__btn adm-detail-modal__btn--close"
+                onClick={() => setViewRequest(null)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast ? (
+        <div className={`adm-nr-toast adm-nr-toast--${toast.type}`}>
+          {toast.message}
+        </div>
+      ) : null}
     </div>
   );
-};
+}
 
-const NavItem = ({ icon, label, active, open, onClick }) => (
-  <div className={`nav-item ${active ? 'active' : ''}`} onClick={onClick}>
-    {icon}
-    {open && <span>{label}</span>}
-  </div>
-);
-
-export default Requests;
+export default AdminRequests;
