@@ -29,3 +29,10 @@ yarn-error.log*
 
 # Supabase CLI temp / linked project metadata
 supabase/.temp/
+
+# Local-only portable toolchain (downloaded by setup-mac.sh / Cursor agent;
+# not needed once Node is installed system-wide via Homebrew or .pkg).
+.tools/
+
+# GitHub PAT for quick-push.sh (NEVER commit this file).
+.git-credentials

@@ -1441,55 +1441,89 @@ export async function fetchClientConsultationLogs(userId) {
   })
 }
 
-export async function payForAppointment({ appointmentId, clientId, attorneyId, amount, method }) {
-  const paymentMethod = normalizeDigitalPaymentMethod(method)
-  const now = new Date().toISOString()
-  const { error: txError } = await supabase.from('transactions').insert({
-    appointment_id: appointmentId,
-    client_id: clientId,
-    attorney_id: attorneyId,
-    amount: Number(amount || 0),
-    payment_status: 'paid',
-    payment_method: paymentMethod,
-    created_at: now,
-    updated_at: now,
+// Resolves the base URL of the Express backend that handles PayMongo. Reads
+// REACT_APP_PAYMENT_API_URL first, falls back to REACT_APP_CHATBOT_API_URL,
+// then to localhost:4000 for development.
+const resolvePaymentApiBaseUrl = () => {
+  const raw =
+    process.env.REACT_APP_PAYMENT_API_URL ||
+    process.env.REACT_APP_CHATBOT_API_URL ||
+    'http://localhost:4000'
+  return String(raw).replace(/\/+$/, '')
+}
+
+const requestPaymentApi = async (path, { method = 'GET', body } = {}) => {
+  const baseUrl = resolvePaymentApiBaseUrl()
+  const url = `${baseUrl}${path.startsWith('/') ? '' : '/'}${path}`
+
+  const response = await fetch(url, {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
   })
 
-  if (txError) throw txError
-
-  const { error: appointmentError } = await supabase
-    .from('appointments')
-    .update({ status: 'confirmed', updated_at: now })
-    .eq('id', appointmentId)
-
-  if (appointmentError) throw appointmentError
-
+  let payload = null
   try {
-    const { data: appointmentMeta } = await supabase
-      .from('appointments')
-      .select('title, scheduled_at')
-      .eq('id', appointmentId)
-      .maybeSingle()
+    payload = await response.json()
+  } catch {
+    payload = null
+  }
 
-    const scheduled = normalizeDateTimeForUi(appointmentMeta?.scheduled_at)
-    const amountValue = Number(amount || 0)
+  if (!response.ok) {
+    const message =
+      payload?.error || payload?.message || `Payment service error (HTTP ${response.status}).`
+    const err = new Error(message)
+    err.status = response.status
+    err.payload = payload
+    throw err
+  }
 
-    const { error: clientNotificationError } = await supabase
-      .from('notifications')
-      .insert({
-        user_id: clientId,
-        title: 'Payment Confirmed',
-        body: `Your payment${amountValue > 0 ? ` of PHP ${amountValue.toLocaleString()}` : ''} for ${appointmentMeta?.title || 'your consultation'} has been received${scheduled.date !== 'TBD' ? ` (${scheduled.date} at ${scheduled.time})` : ''}.`,
-        type: 'payment',
-        is_read: false,
-        created_at: now,
-      })
+  return payload || {}
+}
 
-    if (clientNotificationError) {
-      console.warn('[payment] failed to create client payment notification', clientNotificationError)
-    }
-  } catch (clientNotificationFailure) {
-    console.warn('[payment] client payment notification step failed', clientNotificationFailure)
+// Starts a PayMongo checkout session via the backend and returns the redirect
+// URL plus the local transactionId that the client polls until paid.
+export async function payForAppointment({ appointmentId, clientId, attorneyId, amount, method }) {
+  if (!appointmentId) throw new Error('appointmentId is required.')
+  if (!clientId) throw new Error('clientId is required.')
+  if (!attorneyId) throw new Error('attorneyId is required.')
+
+  const numericAmount = Number(amount || 0)
+  if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+    throw new Error('Amount must be greater than 0.')
+  }
+
+  const session = await requestPaymentApi('/payments/appointments/create-session', {
+    method: 'POST',
+    body: {
+      appointmentId,
+      clientId,
+      attorneyId,
+      amount: numericAmount,
+      method: normalizeDigitalPaymentMethod(method),
+    },
+  })
+
+  return {
+    transactionId: session.transactionId,
+    checkoutSessionId: session.checkoutSessionId,
+    checkoutUrl: session.checkoutUrl,
+    status: session.status || 'pending',
+  }
+}
+
+// Polls the backend for the latest PayMongo checkout status of a transaction.
+// The backend will also flip the local transaction + appointment rows when
+// the gateway reports "paid", so the UI just needs to wait until status flips.
+export async function getAppointmentPaymentStatus(transactionId) {
+  if (!transactionId) throw new Error('transactionId is required.')
+  const data = await requestPaymentApi(
+    `/payments/appointments/status/${encodeURIComponent(transactionId)}`,
+  )
+  return {
+    status: String(data.status || 'pending').toLowerCase(),
+    transactionId: data.transactionId || transactionId,
+    appointmentId: data.appointmentId || null,
   }
 }
 
@@ -1500,6 +1534,63 @@ export async function requestAppointmentReschedule({ appointmentId, scheduledAt,
     .eq('id', appointmentId)
 
   if (error) throw error
+}
+
+// Client-initiated reschedule: same shape as requestAppointmentReschedule but
+// kept under a separate name to match the consumer (MyAppointments.js).
+export async function rescheduleClientAppointment({ appointmentId, scheduledAt, note }) {
+  return requestAppointmentReschedule({ appointmentId, scheduledAt, note })
+}
+
+// Throws when prevent_double_booking is ON and the client already has an
+// active (non-finalized) appointment, so the UI can ask for explicit
+// confirmation before continuing into checkout.
+export async function assertNoActiveAppointmentForClient(clientId) {
+  if (!clientId) return
+
+  const flag = await getAppConfig('prevent_double_booking', true)
+  const enforce =
+    flag === true ||
+    flag === 'true' ||
+    flag === 1 ||
+    (typeof flag === 'string' && flag.trim().toLowerCase() === 'true')
+
+  if (!enforce) return
+
+  const inactiveStatuses = [
+    'completed',
+    'cancelled',
+    'canceled',
+    'rejected',
+    'declined',
+    'failed',
+    'expired',
+    'no_show',
+    'noshow',
+  ]
+
+  const { data, error } = await supabase
+    .from('appointments')
+    .select('id, status')
+    .eq('client_id', clientId)
+    .not('status', 'in', `(${inactiveStatuses.join(',')})`)
+
+  if (error) throw error
+
+  const activeCount = (data || []).length
+  if (activeCount === 0) return
+
+  if (activeCount >= 2) {
+    throw new Error(
+      'You already have two active appointments. Please finish or cancel one before booking again.',
+    )
+  }
+
+  const confirmError = new Error(
+    'You already have an active consultation. Are you sure you want to book another one?',
+  )
+  confirmError.code = 'DOUBLE_BOOKING_NEEDS_CONFIRMATION'
+  throw confirmError
 }
 
 const normalizeNotarialStatus = (status) => {
@@ -3609,4 +3700,246 @@ export async function clearVideoMeetingId(consultationRoomId) {
     .update({ video_meeting_id: null })
     .eq('id', consultationRoomId)
   if (error) console.error('[video] clearVideoMeetingId error', error)
+}
+
+// Admin-controlled feature flags backed by public.app_config (Supabase).
+// We keep an in-memory cache so reads are instant after the first warmup,
+// and a single realtime subscription keeps the cache in sync when an admin
+// toggles a value in the Settings page.
+
+const APP_CONFIG_KNOWN_KEYS = ['prevent_double_booking', 'enforce_schedule_window']
+const appConfigCache = new Map()
+let appConfigLoadPromise = null
+let appConfigChannel = null
+
+const fetchAppConfigValue = async (key) => {
+  const { data, error } = await supabase.rpc('get_app_config', { p_key: key })
+  if (!error) return data ?? null
+
+  const isMissingFunction =
+    error?.code === '42883' ||
+    String(error?.message || '').toLowerCase().includes('does not exist')
+  if (!isMissingFunction) throw error
+
+  const { data: row, error: tableError } = await supabase
+    .from('app_config')
+    .select('value')
+    .eq('key', key)
+    .maybeSingle()
+  if (tableError) throw tableError
+  return row?.value ?? null
+}
+
+// Pre-fetches the known feature flags into the cache. Safe to call many times;
+// returns the same in-flight promise until it settles.
+export function ensureAppConfigLoaded() {
+  if (appConfigLoadPromise) return appConfigLoadPromise
+
+  appConfigLoadPromise = (async () => {
+    await Promise.all(
+      APP_CONFIG_KNOWN_KEYS.map(async (key) => {
+        try {
+          const value = await fetchAppConfigValue(key)
+          appConfigCache.set(key, value)
+        } catch (err) {
+          console.warn(`[app_config] failed to warm "${key}":`, err?.message || err)
+        }
+      }),
+    )
+  })()
+
+  appConfigLoadPromise.finally(() => {
+    // Allow the next caller to re-warm if needed (e.g. after sign-out).
+    appConfigLoadPromise = null
+  })
+
+  return appConfigLoadPromise
+}
+
+// Subscribes once to changes on public.app_config so the cache stays current
+// without requiring callers to refetch. Idempotent.
+export function subscribeToAppConfigChanges() {
+  if (appConfigChannel) return appConfigChannel
+
+  try {
+    appConfigChannel = supabase
+      .channel('app_config_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'app_config' },
+        (payload) => {
+          const row = payload?.new || payload?.old
+          if (!row?.key) return
+          if (payload?.eventType === 'DELETE') {
+            appConfigCache.delete(row.key)
+          } else {
+            appConfigCache.set(row.key, row.value ?? null)
+          }
+        },
+      )
+      .subscribe()
+  } catch (err) {
+    console.warn('[app_config] realtime subscribe failed:', err?.message || err)
+    appConfigChannel = null
+  }
+
+  return appConfigChannel
+}
+
+// Reads a single key from public.app_config. Uses the in-memory cache when
+// available, otherwise falls back to the get_app_config RPC, then to a direct
+// table read for older databases, and finally to fallbackValue.
+export async function getAppConfig(key, fallbackValue = null) {
+  if (!key) return fallbackValue
+
+  if (appConfigCache.has(key)) {
+    const cached = appConfigCache.get(key)
+    return cached === null || cached === undefined ? fallbackValue : cached
+  }
+
+  try {
+    const value = await fetchAppConfigValue(key)
+    appConfigCache.set(key, value)
+    return value === null || value === undefined ? fallbackValue : value
+  } catch (err) {
+    console.warn(`[app_config] getAppConfig("${key}") failed:`, err?.message || err)
+    return fallbackValue
+  }
+}
+
+// Writes a single key in public.app_config via the set_app_config RPC.
+// Only Admin profiles are allowed by RLS; non-admin callers will get an error.
+export async function setAppConfig(key, value) {
+  if (!key) throw new Error('setAppConfig requires a key')
+
+  const { data, error } = await supabase.rpc('set_app_config', {
+    p_key: key,
+    p_value: value,
+  })
+  if (error) throw error
+
+  appConfigCache.set(key, data ?? value)
+  return data
+}
+
+// Saves an attorney-written consultation summary onto the appointment row via
+// the set_attorney_consultation_summary RPC (only the assigned attorney can
+// save, and only when the appointment is COMPLETED).
+export async function saveAttorneyConsultationSummary({ appointmentId, summary }) {
+  if (!appointmentId) throw new Error('appointmentId is required.')
+
+  const { error } = await supabase.rpc('set_attorney_consultation_summary', {
+    p_appointment_id: appointmentId,
+    p_summary: summary || '',
+  })
+
+  if (error) throw error
+}
+
+// Marks every notification belonging to the given attorney as read.
+export async function markAttorneyNotificationsAsRead(attorneyId) {
+  if (!attorneyId) return
+
+  const { error } = await supabase
+    .from('notifications')
+    .update({ is_read: true })
+    .eq('user_id', attorneyId)
+    .eq('is_read', false)
+
+  if (error) throw error
+}
+
+// Subscribes to realtime INSERT/UPDATE events on the notifications table for
+// the given attorney. Returns an unsubscribe function the caller can invoke
+// on cleanup.
+export function subscribeToAttorneyNotifications(attorneyId, onChange) {
+  if (!attorneyId) return () => {}
+
+  const channel = supabase
+    .channel(`attorney_notifications_${attorneyId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'notifications',
+        filter: `user_id=eq.${attorneyId}`,
+      },
+      () => {
+        try {
+          onChange?.()
+        } catch (err) {
+          console.warn('[notifications] subscriber callback error', err)
+        }
+      },
+    )
+    .subscribe()
+
+  return () => {
+    try {
+      supabase.removeChannel(channel)
+    } catch {
+      // Channel may already be gone; ignore.
+    }
+  }
+}
+
+// Returns how many full LOCAL calendar days separate today (00:00 local) from
+// the supplied date. Negative when the date is in the past, 0 when it falls
+// on today. Accepts ISO strings, "YYYY-MM-DD", or Date instances.
+export function calendarDaysFromTodayLocal(value) {
+  if (!value) return null
+
+  let target
+  if (value instanceof Date) {
+    target = new Date(value)
+  } else {
+    const str = String(value).trim()
+    const ymd = str.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (ymd) {
+      target = new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]))
+    } else {
+      target = new Date(str)
+    }
+  }
+
+  if (!target || Number.isNaN(target.getTime())) return null
+
+  const today = new Date()
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
+  const startOfTarget = new Date(target.getFullYear(), target.getMonth(), target.getDate()).getTime()
+
+  const msPerDay = 24 * 60 * 60 * 1000
+  return Math.round((startOfTarget - startOfToday) / msPerDay)
+}
+
+// Returns the list of paid consultations whose schedule has lapsed after a
+// reschedule, marking their transactions as "forfeited" (handled inside the
+// mark_client_forfeited_rescheduled_payments RPC). Each alert can be displayed
+// once and acknowledged via localStorage on the client.
+export async function fetchClientForfeitedRescheduleAlerts(clientId) {
+  if (!clientId) return []
+
+  try {
+    const { data, error } = await supabase.rpc('mark_client_forfeited_rescheduled_payments')
+    if (error) {
+      console.warn('[forfeit-alert] rpc failed:', error.message || error)
+      return []
+    }
+
+    return (data || []).map((row) => {
+      const scheduledIso = row.scheduled_at || row.scheduledAt || null
+      const scheduled = normalizeDateTimeForUi(scheduledIso)
+      return {
+        id: row.appointment_id || row.id,
+        title: row.title || 'Consultation',
+        attorneyName: row.attorney_name || row.attorneyName || 'your attorney',
+        scheduledAt: scheduledIso,
+        scheduleLabel: scheduledIso ? `${scheduled.date} at ${scheduled.time}` : 'TBD',
+      }
+    })
+  } catch (err) {
+    console.warn('[forfeit-alert] unable to load alerts', err?.message || err)
+    return []
+  }
 }
