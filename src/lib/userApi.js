@@ -1557,23 +1557,24 @@ export async function assertNoActiveAppointmentForClient(clientId) {
 
   if (!enforce) return
 
-  // The public.appointment_status enum only allows:
-  //   pending, confirmed, started, completed, cancelled, rescheduled
-  // We treat completed and cancelled as finalized (no longer "active");
-  // every other valid value still counts toward the double-booking limit.
-  // We must also avoid passing values not in the enum to Postgres or it
-  // throws "invalid input value for enum appointment_status".
-  const activeStatuses = ['pending', 'confirmed', 'started', 'rescheduled']
-
+  // We deliberately fetch *all* of the client's appointments and filter
+  // active ones in JavaScript. Sending an unknown value to Postgres'
+  // appointment_status enum throws "invalid input value for enum",
+  // and different deployments of this DB have shipped with slightly
+  // different enum members over time (e.g. some have 'started', some don't).
   const { data, error } = await supabase
     .from('appointments')
     .select('id, status')
     .eq('client_id', clientId)
-    .in('status', activeStatuses)
 
   if (error) throw error
 
-  const activeCount = (data || []).length
+  const FINALIZED_STATUSES = new Set(['completed', 'cancelled', 'rejected'])
+  const activeRows = (data || []).filter(
+    (row) => !FINALIZED_STATUSES.has(String(row?.status || '').toLowerCase()),
+  )
+
+  const activeCount = activeRows.length
   if (activeCount === 0) return
 
   if (activeCount >= 2) {
