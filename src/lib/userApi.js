@@ -1557,17 +1557,10 @@ export async function assertNoActiveAppointmentForClient(clientId) {
 
   if (!enforce) return
 
-  const inactiveStatuses = [
-    'completed',
-    'cancelled',
-    'canceled',
-    'rejected',
-    'declined',
-    'failed',
-    'expired',
-    'no_show',
-    'noshow',
-  ]
+  // Statuses that mean the appointment is finalized/no-longer-active. Must
+  // match the values that exist in the public.appointment_status enum on
+  // Supabase, otherwise Postgres throws "invalid input value for enum".
+  const inactiveStatuses = ['completed', 'cancelled', 'rejected']
 
   const { data, error } = await supabase
     .from('appointments')
