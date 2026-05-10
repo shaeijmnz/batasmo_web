@@ -2483,16 +2483,43 @@ export async function fetchClientAttorneyActiveBookingCount({ clientId, attorney
 async function getOrCreateConsultationRoom(appointmentId) {
   const devBypass = process.env.REACT_APP_BYPASS_CHAT_WINDOW === 'true'
 
-  // Only fetch time-related columns when the bypass is off
-  const selectFields = devBypass
-    ? 'status'
-    : 'status, scheduled_at, slot_date, slot_time'
+  // Older deployments of the appointments table do not have the optional
+  // slot_date / slot_time columns. Try the rich query first and fall back
+  // to a minimal one if Postgres reports a missing column.
+  const richFields = 'status, scheduled_at, slot_date, slot_time'
+  const minimalFields = 'status, scheduled_at'
 
-  const { data: appointment, error: appointmentError } = await supabase
-    .from('appointments')
-    .select(selectFields)
-    .eq('id', appointmentId)
-    .maybeSingle()
+  let appointment = null
+  let appointmentError = null
+
+  if (!devBypass) {
+    const richRes = await supabase
+      .from('appointments')
+      .select(richFields)
+      .eq('id', appointmentId)
+      .maybeSingle()
+
+    if (richRes.error && isMissingColumnError(richRes.error, 'slot_date')) {
+      const minRes = await supabase
+        .from('appointments')
+        .select(minimalFields)
+        .eq('id', appointmentId)
+        .maybeSingle()
+      appointment = minRes.data || null
+      appointmentError = minRes.error || null
+    } else {
+      appointment = richRes.data || null
+      appointmentError = richRes.error || null
+    }
+  } else {
+    const res = await supabase
+      .from('appointments')
+      .select('status')
+      .eq('id', appointmentId)
+      .maybeSingle()
+    appointment = res.data || null
+    appointmentError = res.error || null
+  }
 
   if (appointmentError) throw appointmentError
 
