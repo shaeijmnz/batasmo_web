@@ -1259,6 +1259,10 @@ export const isConsultationChatWindowOpen = ({ status, scheduledAt, slotDate, sl
 
   if (!isConsultationChatActiveStatus(status)) return false
 
+  // Admin-controlled override: when "Enforce Scheduled Chat Time" is OFF,
+  // any active consultation can enter the chat regardless of the start time.
+  if (!isAppConfigFlagOn('enforce_schedule_window', true)) return true
+
   const scheduled = parseChatScheduleDate({ scheduledAt, slotDate, slotTime })
   if (!scheduled) return true
 
@@ -2185,13 +2189,19 @@ export async function createAppointmentBooking({
     throw new Error('Missing appointment payload details.')
   }
 
-  const activeBookingCount = await fetchClientAttorneyActiveBookingCount({
-    clientId: resolvedClientId,
-    attorneyId: normalizedPayload.attorney_id,
-  })
+  // Respect the admin "Prevent Multiple Active Bookings" toggle. When OFF,
+  // skip the per-attorney 2-booking cap entirely so the team can stress-test
+  // the booking flow without juggling test data.
+  const doubleBookingFlag = await getAppConfig('prevent_double_booking', true)
+  if (coerceFlag(doubleBookingFlag, true)) {
+    const activeBookingCount = await fetchClientAttorneyActiveBookingCount({
+      clientId: resolvedClientId,
+      attorneyId: normalizedPayload.attorney_id,
+    })
 
-  if (activeBookingCount >= 2) {
-    throw new Error('Booking limit reached. You can only keep up to 2 active bookings with the same attorney.')
+    if (activeBookingCount >= 2) {
+      throw new Error('Booking limit reached. You can only keep up to 2 active bookings with the same attorney.')
+    }
   }
 
   normalizedPayload.scheduled_at = scheduledIso
@@ -3709,6 +3719,27 @@ const APP_CONFIG_KNOWN_KEYS = ['prevent_double_booking', 'enforce_schedule_windo
 const appConfigCache = new Map()
 let appConfigLoadPromise = null
 let appConfigChannel = null
+
+// Coerces typical Postgres jsonb representations (true/false, "true"/"false",
+// 1/0) into a strict boolean. Used by the admin toggles.
+const coerceFlag = (value, fallback = true) => {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'number') return value !== 0
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    if (normalized === 'true' || normalized === '1') return true
+    if (normalized === 'false' || normalized === '0') return false
+  }
+  return fallback
+}
+
+// Synchronous, cache-only read of an admin feature flag. Used in render-loop
+// helpers that cannot await the network. ensureAppConfigLoaded() should have
+// been awaited by App.js on bootstrap; until then we fall back to the default.
+export const isAppConfigFlagOn = (key, fallback = true) => {
+  if (!appConfigCache.has(key)) return fallback
+  return coerceFlag(appConfigCache.get(key), fallback)
+}
 
 const fetchAppConfigValue = async (key) => {
   const { data, error } = await supabase.rpc('get_app_config', { p_key: key })
