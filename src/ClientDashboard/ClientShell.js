@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import './ClientShell.css';
+import './ClientTheme.css';
 import { fetchClientNotifications, subscribeToClientNotifications } from '../lib/userApi';
 
 const MENU_ITEMS = [
@@ -273,9 +274,11 @@ export default function ClientShell({
   useEffect(() => {
     const container = contentRef.current;
     if (container) {
-      container.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      // Use requestAnimationFrame to ensure DOM is ready
+      requestAnimationFrame(() => {
+        container.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+      });
     }
-    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }, [currentPage]);
 
   const handleNavigate = (nextPage, params = {}) => {
@@ -314,7 +317,7 @@ export default function ClientShell({
       <aside className={`client-shell-sidebar ${sidebarOpen ? 'open' : 'collapsed'}`}>
         <div className="client-shell-sidebar-header">
           <button type="button" className="client-shell-brand" onClick={() => handleNavigate('home-logged')}>
-            <span className="client-shell-brand-logo">A</span>
+            <img src="/logo/logo.jpg" alt="BatasMo" className="client-shell-brand-logo" />
             {sidebarOpen ? <span className="client-shell-brand-text">BATASMO</span> : null}
           </button>
         </div>

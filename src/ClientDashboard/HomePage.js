@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import './HomePage.css';
+import './ClientTheme.css';
 import { fetchClientHomeData, calendarDaysFromTodayLocal } from '../lib/userApi';
 import { initialChatbotMessages, sendChatbotMessage } from '../lib/chatbotService';
 
@@ -100,7 +101,7 @@ const ProfileIcon = () => (
 
 function HomePage({ onNavigate, profile, onSignOut }) {
   const [chatOpen, setChatOpen] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activePage, setActivePage] = useState('Dashboard');
   const [chatMsg, setChatMsg] = useState('');
   const [appointments, setAppointments] = useState([]);
@@ -271,10 +272,16 @@ function HomePage({ onNavigate, profile, onSignOut }) {
       {sidebarOpen && <div className="hp-sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
 
       {/* Sidebar */}
-      <aside className={`hp-sidebar ${sidebarOpen ? 'hp-sidebar--open' : ''}`}>
-        <div className="hp-sidebar__logo">
-          <ScalesIcon size={26} color="#f5a623" />
-          <span>BatasMo</span>
+      <aside className={`hp-sidebar ${!sidebarOpen ? 'hp-sidebar--closed' : ''}`}>
+        <div className="hp-sidebar__header">
+          <button className="hp-sidebar__toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>
+            <MenuIcon />
+          </button>
+          <div className="hp-sidebar__logo">
+            <img src="/logo/logo.jpg" alt="Logo" className="hp-sidebar__logo-img" />
+            <ScalesIcon size={26} color="#f5a623" />
+            <span>BatasMo</span>
+          </div>
         </div>
         <nav className="hp-sidebar__nav">
           {[
@@ -299,92 +306,15 @@ function HomePage({ onNavigate, profile, onSignOut }) {
         </nav>
       </aside>
 
-      {/* Topbar */}
-      <header className="hp-topbar">
-        <div className="hp-topbar__left">
-          <button className="hp-icon-btn" onClick={() => setSidebarOpen(!sidebarOpen)}><MenuIcon /></button>
-          <div className="hp-topbar__logo">
-            <ScalesIcon size={26} color="#f5a623" />
-            <span>BatasMo</span>
-          </div>
-        </div>
-        <div className="hp-topbar__right">
-          <button className="hp-icon-btn hp-msg-btn" onClick={() => onNavigate('chat-room')} title="Message Admin">
-            <MessageIcon />
-          </button>
-          <div className="hp-bell-wrapper">
-            <button className="hp-icon-btn hp-bell" onClick={() => setNotifOpen(!notifOpen)}>
-              <BellIcon />
-              {unreadCount > 0 && <span className="hp-bell__dot">{unreadCount}</span>}
-            </button>
-
-            {/* Notification Dropdown */}
-            {notifOpen && (
-              <>
-                <div className="hp-notif-overlay" onClick={() => setNotifOpen(false)} />
-                <div className="hp-notif-panel">
-                  <div className="hp-notif-panel__header">
-                    <h3>Notifications</h3>
-                    {unreadCount > 0 && (
-                      <button className="hp-notif-mark-all" onClick={markAllRead}>Mark all read</button>
-                    )}
-                  </div>
-                  <div className="hp-notif-panel__list">
-                    {notifications.length === 0 ? (
-                      <div className="hp-notif-empty">No notifications yet</div>
-                    ) : (
-                      notifications.map(n => (
-                        <div
-                          key={n.id}
-                          className={`hp-notif-item ${!n.read ? 'hp-notif-item--unread' : ''}`}
-                          onClick={() => {
-                            markAsRead(n.id);
-                            setNotifOpen(false);
-                            if (n.appointmentId) {
-                              onNavigate('client-logs', { appointmentId: n.appointmentId });
-                            } else {
-                              onNavigate('my-appointments');
-                            }
-                          }}
-                        >
-                          <div className="hp-notif-item__icon" style={{ background: getNotifColor(n.type) }}>
-                            {getNotifIcon(n.type)}
-                          </div>
-                          <div className="hp-notif-item__content">
-                            <span className="hp-notif-item__title">{n.title}</span>
-                            <p className="hp-notif-item__desc">{n.desc}</p>
-                            <div className="hp-notif-item__footer">
-                              <span className="hp-notif-item__time">{n.time}</span>
-                              <span className="hp-notif-item__cta">
-                                {n.appointmentId ? 'Open consultation logs' : 'View appointments'}
-                                <span className="hp-notif-item__cta-arrow" aria-hidden="true">→</span>
-                              </span>
-                            </div>
-                          </div>
-                          {!n.read && <span className="hp-notif-item__dot" />}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-          <div className="hp-profile" onClick={() => onNavigate('profile')} style={{ cursor: 'pointer' }}>
-            <div className="hp-profile__info">
-              <span className="hp-profile__name">{profile?.full_name || 'Client'}</span>
-            </div>
-            <div className="hp-avatar">{(profile?.full_name || 'C').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()}</div>
-          </div>
-        </div>
-      </header>
-
       {/* Content */}
       <main className="hp-main">
         {/* Welcome */}
         <div className="hp-welcome">
-          <h1>Welcome Back, {profile?.full_name || 'Client'}</h1>
-          <p>Here's what's happening with your legal matters today.</p>
+          <div className="hp-welcome__content">
+            <h1>Welcome Back, {profile?.full_name || 'Client'}</h1>
+            <p>Here's what's happening with your legal matters today.</p>
+          </div>
+          <img src="/lady-justice/lady justice.jpg" alt="Lady Justice" className="hp-welcome__image" />
         </div>
         {loadError ? <p>{loadError}</p> : null}
 

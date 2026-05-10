@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import './ClientLogs.css';
+import './ClientTheme.css';
 import { fetchClientConsultationLogs, fetchConsultationTranscriptForAppointment } from '../lib/userApi';
 
 const renderStars = (rating) => {

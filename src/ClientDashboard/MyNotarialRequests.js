@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import './MyNotarialRequests.css';
+import './ClientTheme.css';
 import { cancelNotarialRequest, fetchClientNotarialRequests, payForNotarialRequest } from '../lib/userApi';
 import { isValidPhoneNumber, VALID_PHONE_MESSAGE } from '../lib/validators';
 
@@ -91,7 +92,7 @@ const NoteIcon = () => (
 const filters = ['All', 'Pending', 'Approved', 'Completed', 'Rejected'];
 
 function MyNotarialRequests({ onNavigate, profile }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [requests, setRequests] = useState([]);
   const [activeFilter, setActiveFilter] = useState('All');
   const [expandedId, setExpandedId] = useState(null);
@@ -286,10 +287,16 @@ function MyNotarialRequests({ onNavigate, profile }) {
       {sidebarOpen && <div className="mnr-sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
 
       {/* Sidebar */}
-      <aside className={`mnr-sidebar ${sidebarOpen ? 'mnr-sidebar--open' : ''}`}>
-        <div className="mnr-sidebar__logo">
-          <ScalesIcon size={26} color="#f5a623" />
-          <span>BatasMo</span>
+      <aside className={`mnr-sidebar ${!sidebarOpen ? 'mnr-sidebar--closed' : ''}`}>
+        <div className="mnr-sidebar__header">
+          <button className="mnr-sidebar__toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>
+            <MenuIcon />
+          </button>
+          <div className="mnr-sidebar__logo">
+            <img src="/logo/logo.jpg" alt="Logo" className="mnr-sidebar__logo-img" />
+            <ScalesIcon size={26} color="#f5a623" />
+            <span>BatasMo</span>
+          </div>
         </div>
         <nav className="mnr-sidebar__nav">
           {[
@@ -312,31 +319,6 @@ function MyNotarialRequests({ onNavigate, profile }) {
           ))}
         </nav>
       </aside>
-
-      {/* Topbar */}
-      <header className="mnr-topbar">
-        <div className="mnr-topbar__left">
-          <button className="mnr-icon-btn" onClick={() => setSidebarOpen(!sidebarOpen)}><MenuIcon /></button>
-          <div className="mnr-breadcrumb">
-            <span className="mnr-breadcrumb__current">Notarial Requests</span>
-          </div>
-        </div>
-        <div className="mnr-topbar__right">
-          <button className="mnr-icon-btn" onClick={() => onNavigate('chat-room')} title="Message Admin">
-            <MessageIcon />
-          </button>
-          <button className="mnr-icon-btn mnr-bell" onClick={() => onNavigate('announcements')} title="Announcements">
-            <BellIcon />
-            <span className="mnr-bell__dot" />
-          </button>
-          <div className="mnr-profile" onClick={() => onNavigate('profile')} style={{ cursor: 'pointer' }}>
-            <div className="mnr-profile__info">
-              <span className="mnr-profile__name">{profile?.full_name || 'Client'}</span>
-            </div>
-            <div className="mnr-avatar">{(profile?.full_name || 'CL').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()}</div>
-          </div>
-        </div>
-      </header>
 
       {/* Main */}
       <main className="mnr-main">

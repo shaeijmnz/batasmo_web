@@ -114,7 +114,7 @@ const PersonSmIcon = () => (
 );
 
 function ProfilePage({ onNavigate, profile, onSignOut, onProfileUpdated }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeTab, setActiveTab] = useState('info');
   const [saved, setSaved] = useState(false);
   const [pwSaved, setPwSaved] = useState(false);
@@ -215,10 +215,16 @@ function ProfilePage({ onNavigate, profile, onSignOut, onProfileUpdated }) {
       {sidebarOpen && <div className="pp-sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
 
       {/* Sidebar */}
-      <aside className={`pp-sidebar ${sidebarOpen ? 'pp-sidebar--open' : ''}`}>
-        <div className="pp-sidebar__logo">
-          <ScalesIcon size={26} color="#f5a623" />
-          <span>BatasMo</span>
+      <aside className={`pp-sidebar ${!sidebarOpen ? 'pp-sidebar--closed' : ''}`}>
+        <div className="pp-sidebar__header">
+          <button className="pp-sidebar__toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>
+            <MenuIcon />
+          </button>
+          <div className="pp-sidebar__logo">
+            <img src="/logo/logo.jpg" alt="Logo" className="pp-sidebar__logo-img" />
+            <ScalesIcon size={26} color="#f5a623" />
+            <span>BatasMo</span>
+          </div>
         </div>
         <nav className="pp-sidebar__nav">
           {[
@@ -241,34 +247,6 @@ function ProfilePage({ onNavigate, profile, onSignOut, onProfileUpdated }) {
           ))}
         </nav>
       </aside>
-
-      {/* Topbar */}
-      <header className="pp-topbar">
-        <div className="pp-topbar__left">
-          <button className="pp-icon-btn" onClick={() => setSidebarOpen(!sidebarOpen)}><MenuIcon /></button>
-          <div className="pp-topbar__logo">
-            <ScalesIcon size={26} color="#f5a623" />
-            <span>BatasMo</span>
-          </div>
-        </div>
-        <div className="pp-topbar__right">
-          <button className="pp-icon-btn" onClick={() => onNavigate('chat-room')} title="Message Admin">
-            <MessageIcon />
-          </button>
-          <button className="pp-icon-btn pp-bell" onClick={() => onNavigate('announcements')} title="Announcements">
-            <BellIcon />
-            <span className="pp-bell__dot" />
-          </button>
-          <div className="pp-profile" onClick={() => onNavigate('profile')}>
-            <span className="pp-profile__name">{profile?.full_name || 'Client'}</span>
-            <div className="pp-avatar">{(profile?.full_name || 'C').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()}</div>
-          </div>
-          <button className="pp-signout-btn" onClick={handleSignOutClick} title="Sign Out">
-            <SignOutIcon />
-            <span>Sign Out</span>
-          </button>
-        </div>
-      </header>
 
       {/* Main */}
       <main className="pp-main">

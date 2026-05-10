@@ -78,7 +78,7 @@ const getTypeIcon = (type) => {
   if (type === 'consultation') {
     return (
       <div className="th-txn__icon th-txn__icon--consultation">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1a2d4a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
         </svg>
       </div>
@@ -111,7 +111,7 @@ const getMethodIcon = (method) => {
 };
 
 function TransactionHistory({ onNavigate, profile }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [allTransactions, setAllTransactions] = useState([]);
   const [activeFilter, setActiveFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
@@ -185,10 +185,16 @@ function TransactionHistory({ onNavigate, profile }) {
       {sidebarOpen && <div className="th-sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
 
       {/* Sidebar */}
-      <aside className={`th-sidebar ${sidebarOpen ? 'th-sidebar--open' : ''}`}>
-        <div className="th-sidebar__logo">
-          <ScalesIcon size={26} color="#f5a623" />
-          <span>BatasMo</span>
+      <aside className={`th-sidebar ${!sidebarOpen ? 'th-sidebar--closed' : ''}`}>
+        <div className="th-sidebar__header">
+          <button className="th-sidebar__toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>
+            <MenuIcon />
+          </button>
+          <div className="th-sidebar__logo">
+            <img src="/logo/logo.jpg" alt="Logo" className="th-sidebar__logo-img" />
+            <ScalesIcon size={26} color="#f5a623" />
+            <span>BatasMo</span>
+          </div>
         </div>
         <nav className="th-sidebar__nav">
           {[
@@ -211,31 +217,6 @@ function TransactionHistory({ onNavigate, profile }) {
           ))}
         </nav>
       </aside>
-
-      {/* Topbar */}
-      <header className="th-topbar">
-        <div className="th-topbar__left">
-          <button className="th-icon-btn" onClick={() => setSidebarOpen(!sidebarOpen)}><MenuIcon /></button>
-          <div className="th-breadcrumb">
-            <span className="th-breadcrumb__current">Transaction History</span>
-          </div>
-        </div>
-        <div className="th-topbar__right">
-          <button className="th-icon-btn" onClick={() => onNavigate('chat-room')} title="Message Admin">
-            <MessageIcon />
-          </button>
-          <button className="th-icon-btn th-bell" onClick={() => onNavigate('announcements')} title="Announcements">
-            <BellIcon />
-            <span className="th-bell__dot" />
-          </button>
-          <div className="th-profile" onClick={() => onNavigate('profile')} style={{ cursor: 'pointer' }}>
-            <div className="th-profile__info">
-              <span className="th-profile__name">{profile?.full_name || 'Client'}</span>
-            </div>
-            <div className="th-avatar">{(profile?.full_name || 'CL').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()}</div>
-          </div>
-        </div>
-      </header>
 
       {/* Main */}
       <main className="th-main">

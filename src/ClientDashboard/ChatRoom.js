@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import './ChatRoom.css';
+import './ClientTheme.css';
 import {
   deleteAppointmentMessage,
   fetchAppointmentMessages,
@@ -21,7 +22,7 @@ import {
 } from '../lib/userApi';
 const VideoCallModal = lazy(() => import('../components/VideoCallModal'));
 
-const ATTORNEY_AVATAR_BG = 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)';
+const ATTORNEY_AVATAR_BG = 'var(--ui-accent)';
 
 const messageDateLabel = (value) => {
   const parsed = new Date(value);

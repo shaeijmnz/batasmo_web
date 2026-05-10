@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import './MyAppointments.css';
+import './ClientTheme.css';
 import {
   fetchClientAppointmentsData,
   fetchClientForfeitedRescheduleAlerts,
@@ -82,7 +83,7 @@ const CalendarIcon = () => (
 );
 
 function MyAppointments({ onNavigate, profile }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [appointments, setAppointments] = useState([]);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedAppointmentForPayment, setSelectedAppointmentForPayment] = useState(null);
@@ -472,10 +473,16 @@ function MyAppointments({ onNavigate, profile }) {
       {sidebarOpen && <div className="ma-sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
 
       {/* Sidebar */}
-      <aside className={`ma-sidebar ${sidebarOpen ? 'ma-sidebar--open' : ''}`}>
-        <div className="ma-sidebar__logo">
-          <ScalesIcon size={26} color="#f5a623" />
-          <span>BatasMo</span>
+      <aside className={`ma-sidebar ${!sidebarOpen ? 'ma-sidebar--closed' : ''}`}>
+        <div className="ma-sidebar__header">
+          <button className="ma-sidebar__toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>
+            <MenuIcon />
+          </button>
+          <div className="ma-sidebar__logo">
+            <img src="/logo/logo.jpg" alt="Logo" className="ma-sidebar__logo-img" />
+            <ScalesIcon size={26} color="#f5a623" />
+            <span>BatasMo</span>
+          </div>
         </div>
         <nav className="ma-sidebar__nav">
           {[
@@ -499,31 +506,6 @@ function MyAppointments({ onNavigate, profile }) {
           ))}
         </nav>
       </aside>
-
-      {/* Topbar */}
-      <header className="ma-topbar">
-        <div className="ma-topbar__left">
-          <button className="ma-icon-btn" onClick={() => setSidebarOpen(!sidebarOpen)}><MenuIcon /></button>
-          <div className="ma-breadcrumb">
-            <span className="ma-breadcrumb__current">My Appointments</span>
-          </div>
-        </div>
-        <div className="ma-topbar__right">
-          <button className="ma-icon-btn" onClick={() => onNavigate('chat-room')} title="Message Admin">
-            <MessageIcon />
-          </button>
-          <button className="ma-icon-btn ma-bell" onClick={() => onNavigate('announcements')} title="Announcements">
-            <BellIcon />
-            <span className="ma-bell__dot" />
-          </button>
-          <div className="ma-profile" onClick={() => onNavigate('profile')} style={{ cursor: 'pointer' }}>
-            <div className="ma-profile__info">
-                <span className="ma-profile__name">{profile?.full_name || 'Client'}</span>
-            </div>
-              <div className="ma-avatar">{(profile?.full_name || 'CL').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()}</div>
-          </div>
-        </div>
-      </header>
 
       {/* Main */}
       <main className="ma-main">

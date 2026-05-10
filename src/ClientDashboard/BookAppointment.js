@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import './BookAppointment.css';
+import './ClientTheme.css';
 import {
   assertNoActiveAppointmentForClient,
   createAppointmentBooking,
@@ -100,7 +101,7 @@ const TimeSlotButton = ({ timeStr, isSelected, onClick }) => (
     onClick={onClick}
     style={{
       padding: '10px 8px',
-      border: isSelected ? '2px solid #3b82f6' : '1px solid #d1d5db',
+      border: isSelected ? '2px solid var(--ui-accent)' : '1px solid var(--ui-border)',
       background: isSelected ? '#dbeafe' : '#fff',
       borderRadius: 4,
       cursor: 'pointer',
@@ -143,7 +144,7 @@ const mapFutureTimeStrings = (slots, date) => {
 };
 
 function BookAppointment({ onNavigate, profile }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [attorneys, setAttorneys] = useState([]);
   const [attorneysLoading, setAttorneysLoading] = useState(true);
   const [showProfile, setShowProfile] = useState(false);
@@ -513,10 +514,16 @@ function BookAppointment({ onNavigate, profile }) {
       {sidebarOpen && <div className="ba-sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
 
       {/* Sidebar */}
-      <aside className={`ba-sidebar ${sidebarOpen ? 'ba-sidebar--open' : ''}`}>
-        <div className="ba-sidebar__logo">
-          <ScalesIcon size={26} color="#f5a623" />
-          <span>BatasMo</span>
+      <aside className={`ba-sidebar ${!sidebarOpen ? 'ba-sidebar--closed' : ''}`}>
+        <div className="ba-sidebar__header">
+          <button className="ba-sidebar__toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>
+            <MenuIcon />
+          </button>
+          <div className="ba-sidebar__logo">
+            <img src="/logo/logo.jpg" alt="Logo" className="ba-sidebar__logo-img" />
+            <ScalesIcon size={26} color="#f5a623" />
+            <span>BatasMo</span>
+          </div>
         </div>
         <nav className="ba-sidebar__nav">
           {[
@@ -540,31 +547,6 @@ function BookAppointment({ onNavigate, profile }) {
           ))}
         </nav>
       </aside>
-
-      {/* Topbar */}
-      <header className="ba-topbar">
-        <div className="ba-topbar__left">
-          <button className="ba-icon-btn" onClick={() => setSidebarOpen(!sidebarOpen)}><MenuIcon /></button>
-          <div className="ba-breadcrumb">
-            <span className="ba-breadcrumb__current">Book Appointment</span>
-          </div>
-        </div>
-        <div className="ba-topbar__right">
-          <button className="ba-icon-btn" onClick={() => onNavigate('chat-room')} title="Message Admin">
-            <MessageIcon />
-          </button>
-          <button className="ba-icon-btn ba-bell" onClick={() => onNavigate('announcements')} title="Announcements">
-            <BellIcon />
-            <span className="ba-bell__dot" />
-          </button>
-          <div className="ba-profile" onClick={() => onNavigate('profile')} style={{ cursor: 'pointer' }}>
-            <div className="ba-profile__info">
-              <span className="ba-profile__name">{profile?.full_name || 'Client'}</span>
-            </div>
-            <div className="ba-avatar">{(profile?.full_name || 'CL').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()}</div>
-          </div>
-        </div>
-      </header>
 
       {/* Main */}
       <main className="ba-main">
@@ -773,7 +755,6 @@ function BookAppointment({ onNavigate, profile }) {
                       >
                         <option value="GCash">GCash</option>
                         <option value="Maya">Maya</option>
-                        <option value="QRPh">QR Ph (QRPh)</option>
                       </select>
                     </div>
 
@@ -781,14 +762,7 @@ function BookAppointment({ onNavigate, profile }) {
                       <div style={{ color: '#cbd5e1', fontSize: '0.9rem' }}>
                         <div><strong>Date:</strong> {selectedDate}</div>
                         <div><strong>Time:</strong> {selectedTime}</div>
-                        <div>
-                          <strong>Amount:</strong>{' '}
-                          PHP{' '}
-                          {Number(bookingAttorney?.amount || 0).toLocaleString('en-PH', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
-                        </div>
+                        <div><strong>Amount:</strong> PHP 2,000.00</div>
                       </div>
                     </div>
 

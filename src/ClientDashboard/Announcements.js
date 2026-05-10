@@ -86,7 +86,7 @@ const getTypeIcon = (type) => {
     case 'update':
       return (
         <div className="ann-card__type-icon ann-card__type-icon--update">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1a2d4a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
           </svg>
         </div>
@@ -123,14 +123,14 @@ const getTypeLabel = (type) => {
 const getTypeColor = (type) => {
   switch (type) {
     case 'reschedule': return { bg: '#fef2f2', color: '#dc2626' };
-    case 'update': return { bg: '#eff6ff', color: '#2563eb' };
+    case 'update': return { bg: 'var(--ui-accent-glow)', color: 'var(--ui-accent)' };
     case 'reminder': return { bg: '#fffbeb', color: '#f59e0b' };
     case 'general': default: return { bg: '#eef2ff', color: '#6366f1' };
   }
 };
 
 function Announcements({ onNavigate, profile }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [announcements, setAnnouncements] = useState([]);
   const [loadError, setLoadError] = useState('');
 
@@ -203,10 +203,16 @@ function Announcements({ onNavigate, profile }) {
       {sidebarOpen && <div className="ann-sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
 
       {/* Sidebar */}
-      <aside className={`ann-sidebar ${sidebarOpen ? 'ann-sidebar--open' : ''}`}>
-        <div className="ann-sidebar__logo">
-          <ScalesIcon size={26} color="#f5a623" />
-          <span>BatasMo</span>
+      <aside className={`ann-sidebar ${!sidebarOpen ? 'ann-sidebar--closed' : ''}`}>
+        <div className="ann-sidebar__header">
+          <button className="ann-sidebar__toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>
+            <MenuIcon />
+          </button>
+          <div className="ann-sidebar__logo">
+            <img src="/logo/logo.jpg" alt="Logo" className="ann-sidebar__logo-img" />
+            <ScalesIcon size={26} color="#f5a623" />
+            <span>BatasMo</span>
+          </div>
         </div>
         <nav className="ann-sidebar__nav">
           {[
@@ -229,31 +235,6 @@ function Announcements({ onNavigate, profile }) {
           ))}
         </nav>
       </aside>
-
-      {/* Topbar */}
-      <header className="ann-topbar">
-        <div className="ann-topbar__left">
-          <button className="ann-icon-btn" onClick={() => setSidebarOpen(!sidebarOpen)}><MenuIcon /></button>
-          <div className="ann-breadcrumb">
-            <span className="ann-breadcrumb__current">Announcements</span>
-          </div>
-        </div>
-        <div className="ann-topbar__right">
-          <button className="ann-icon-btn" onClick={() => onNavigate('chat-room')} title="Message Admin">
-            <MessageIcon />
-          </button>
-          <button className="ann-icon-btn ann-bell" onClick={markAllRead} title="Mark notifications as read">
-            <BellIcon />
-            {unreadCount > 0 && <span className="ann-bell__dot" />}
-          </button>
-          <div className="ann-profile" onClick={() => onNavigate('profile')} style={{ cursor: 'pointer' }}>
-            <div className="ann-profile__info">
-              <span className="ann-profile__name">{profile?.full_name || 'Client'}</span>
-            </div>
-            <div className="ann-avatar">{(profile?.full_name || 'CL').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()}</div>
-          </div>
-        </div>
-      </header>
 
       {/* Main */}
       <main className="ann-main">

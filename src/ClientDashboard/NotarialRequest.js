@@ -67,7 +67,7 @@ const notarialServices = [
 ];
 
 function NotarialRequest({ onNavigate, profile }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [selectedService, setSelectedService] = useState(null);
   const [preferredDate, setPreferredDate] = useState('');
   const [uploadedFile, setUploadedFile] = useState(null);
@@ -112,7 +112,7 @@ function NotarialRequest({ onNavigate, profile }) {
         serviceType: selectedServiceRow?.name || 'Notarial Service',
         preferredDate,
         notes,
-        file: uploadedFile,
+        documentName: uploadedFile.name,
       });
       setShowConfirmation(true);
     } catch (error) {
@@ -143,10 +143,16 @@ function NotarialRequest({ onNavigate, profile }) {
       {sidebarOpen && <div className="nr-sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
 
       {/* Sidebar */}
-      <aside className={`nr-sidebar ${sidebarOpen ? 'nr-sidebar--open' : ''}`}>
-        <div className="nr-sidebar__logo">
-          <ScalesIcon size={26} color="#f5a623" />
-          <span>BatasMo</span>
+      <aside className={`nr-sidebar ${!sidebarOpen ? 'nr-sidebar--closed' : ''}`}>
+        <div className="nr-sidebar__header">
+          <button className="nr-sidebar__toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>
+            <MenuIcon />
+          </button>
+          <div className="nr-sidebar__logo">
+            <img src="/logo/logo.jpg" alt="Logo" className="nr-sidebar__logo-img" />
+            <ScalesIcon size={26} color="#f5a623" />
+            <span>BatasMo</span>
+          </div>
         </div>
         <nav className="nr-sidebar__nav">
           {[
@@ -169,31 +175,6 @@ function NotarialRequest({ onNavigate, profile }) {
           ))}
         </nav>
       </aside>
-
-      {/* Topbar */}
-      <header className="nr-topbar">
-        <div className="nr-topbar__left">
-          <button className="nr-icon-btn" onClick={() => setSidebarOpen(!sidebarOpen)}><MenuIcon /></button>
-          <div className="nr-breadcrumb">
-            <span className="nr-breadcrumb__current">Request Notarial Service</span>
-          </div>
-        </div>
-        <div className="nr-topbar__right">
-          <button className="nr-icon-btn" onClick={() => onNavigate('chat-room')} title="Message Admin">
-            <MessageIcon />
-          </button>
-          <button className="nr-icon-btn nr-bell" onClick={() => onNavigate('announcements')} title="Announcements">
-            <BellIcon />
-            <span className="nr-bell__dot" />
-          </button>
-          <div className="nr-profile" onClick={() => onNavigate('profile')} style={{ cursor: 'pointer' }}>
-            <div className="nr-profile__info">
-              <span className="nr-profile__name">{profile?.full_name || 'Client'}</span>
-            </div>
-            <div className="nr-avatar">{(profile?.full_name || 'CL').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()}</div>
-          </div>
-        </div>
-      </header>
 
       {/* Main */}
       <main className="nr-main">
