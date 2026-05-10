@@ -1124,8 +1124,9 @@ export async function saveAttorneyAvailabilitySlots({ attorneyId, slots }) {
 const normalizeDigitalPaymentMethod = (method) => {
   const value = String(method || '').trim().toLowerCase()
   if (value === 'gcash') return 'GCash'
-  if (value === 'maya') return 'Maya'
-  throw new Error('Only GCash or Maya payments are supported.')
+  if (value === 'maya' || value === 'paymaya') return 'Maya'
+  if (value === 'qrph' || value === 'qr_ph' || value === 'qr ph') return 'QRPh'
+  throw new Error('Supported payment methods are GCash, Maya, or QR Ph.')
 }
 
 const normalizeAppointmentStatus = (status) => {
