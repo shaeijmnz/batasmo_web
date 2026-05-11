@@ -755,6 +755,7 @@ function BookAppointment({ onNavigate, profile }) {
                       >
                         <option value="GCash">GCash</option>
                         <option value="Maya">Maya</option>
+                        <option value="QRPh">QR Ph</option>
                       </select>
                     </div>
 

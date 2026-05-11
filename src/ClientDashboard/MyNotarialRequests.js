@@ -535,6 +535,17 @@ function MyNotarialRequests({ onNavigate, profile }) {
                   </div>
                   <div className={`mnr-payment-option__radio ${selectedPaymentMethod === 'maya' ? 'mnr-payment-option__radio--active' : ''}`} />
                 </div>
+                <div
+                  className={`mnr-payment-option ${selectedPaymentMethod === 'qrph' ? 'mnr-payment-option--selected' : ''}`}
+                  onClick={() => setSelectedPaymentMethod('qrph')}
+                >
+                  <div className="mnr-payment-option__icon mnr-payment-option__icon--qrph">Q</div>
+                  <div className="mnr-payment-option__info">
+                    <span className="mnr-payment-option__name">QR Ph</span>
+                    <span className="mnr-payment-option__desc">Pay via any QR Ph–enabled bank or e-wallet</span>
+                  </div>
+                  <div className={`mnr-payment-option__radio ${selectedPaymentMethod === 'qrph' ? 'mnr-payment-option__radio--active' : ''}`} />
+                </div>
               </div>
             </div>
 
@@ -608,7 +619,7 @@ function MyNotarialRequests({ onNavigate, profile }) {
               </div>
               <div className="mnr-confirm-receipt__row">
                 <span>Payment Method</span>
-                <span>{selectedPaymentMethod === 'gcash' ? 'GCash' : 'Maya'}</span>
+                <span>{selectedPaymentMethod === 'gcash' ? 'GCash' : selectedPaymentMethod === 'maya' ? 'Maya' : 'QR Ph'}</span>
               </div>
               <div className="mnr-confirm-receipt__row">
                 <span>Date</span>
