@@ -68,11 +68,25 @@ const normalizeDateTimeForUi = (value) => {
   }
 }
 
-/** Positive-fee consultations only surface to the attorney after PayMongo (or legacy) marks the row paid. */
-const isConsultationVisibleToAttorneyAfterPayment = (appt) => {
+/** Positive-fee consultations only count towards analytics/profile totals after they are paid. */
+const isPaidOrFreeConsultation = (appt) => {
   const fee = Number(appt?.amount ?? 0)
   if (!Number.isFinite(fee) || fee <= 0) return true
   return Boolean(appt?.consultationPaid)
+}
+
+/**
+ * Time window during which a freshly cancelled appointment is still surfaced on
+ * the attorney's queue (so they see the booking flip to "Cancelled" before it
+ * naturally drops off). Kept in sync with the realtime refresh delay below.
+ */
+const RECENTLY_CANCELLED_WINDOW_MS = 10000
+
+const isRecentlyCancelledAppointment = (appt) => {
+  if (String(appt?.status || '').toLowerCase() !== 'cancelled') return false
+  const updatedAtMs = appt?.updated_at ? new Date(appt.updated_at).getTime() : 0
+  if (!Number.isFinite(updatedAtMs) || updatedAtMs <= 0) return false
+  return Date.now() - updatedAtMs < RECENTLY_CANCELLED_WINDOW_MS
 }
 
 async function fetchPaidAppointmentIdsForIdList(appointmentIds) {
@@ -134,7 +148,6 @@ const buildDerivedAttorneyNotifications = ({ appointments = [], paidTransactions
 
   const bookingEvents = (appointments || [])
     .filter((item) => {
-      if (!isConsultationVisibleToAttorneyAfterPayment(item)) return false
       const status = String(item?.status || '').toLowerCase()
       return status !== 'cancelled' && status !== 'rejected'
     })
@@ -595,21 +608,18 @@ export async function fetchAttorneyHomeData(userId, options = {}) {
   if (transactionsRes.error) throw transactionsRes.error
 
   const pendingCount = appointments.filter(
-    (a) =>
-      String(a.status || '').toLowerCase() === 'pending' &&
-      isConsultationVisibleToAttorneyAfterPayment(a),
+    (a) => String(a.status || '').toLowerCase() === 'pending',
   ).length
 
   const myAppointmentCount = appointments.filter((a) => {
     const status = String(a.status || '').toLowerCase()
-    if (!(status === 'confirmed' || status === 'rescheduled')) return false
-    return isConsultationVisibleToAttorneyAfterPayment(a)
+    return status === 'confirmed' || status === 'rescheduled'
   }).length
 
   const consultations = appointments
     .filter((a) => {
       const status = String(a.status || '').toLowerCase()
-      const statusOk =
+      if (
         status === 'pending' ||
         status === 'confirmed' ||
         status === 'rescheduled' ||
@@ -617,8 +627,10 @@ export async function fetchAttorneyHomeData(userId, options = {}) {
         status === 'in_progress' ||
         status === 'in-progress' ||
         status === 'active'
-      if (!statusOk) return false
-      return isConsultationVisibleToAttorneyAfterPayment(a)
+      ) {
+        return true
+      }
+      return isRecentlyCancelledAppointment(a)
     })
     .map((a) => ({
     id: a.id,
@@ -630,6 +642,7 @@ export async function fetchAttorneyHomeData(userId, options = {}) {
     slotDate: a.slot_date || null,
     slotTime: a.slot_time || null,
     status: a.status || 'pending',
+    paymentStatus: a.consultationPaid ? 'paid' : 'unpaid',
   }))
 
   const storedNotifications = (notificationsRes.data || []).map((n) => ({
@@ -701,8 +714,7 @@ export async function fetchAttorneyConsultationAnalyticsData(userId) {
   ;(apptsRes.data || []).forEach((row) => {
     const status = String(row?.status || '').toLowerCase()
     if (excludedStatuses.has(status)) return
-    const fee = Number(row?.amount || 0)
-    if (Number.isFinite(fee) && fee > 0 && !paidIds.has(row.id)) return
+    if (!isPaidOrFreeConsultation({ amount: row?.amount, consultationPaid: paidIds.has(row.id) })) return
 
     const typeLabel = normalizeConsultationTypeLabel(row?.title)
     countsByType.set(typeLabel, Number(countsByType.get(typeLabel) || 0) + 1)
@@ -757,11 +769,9 @@ export async function fetchAttorneyProfile(userId) {
   if (paidTxRes.error) throw paidTxRes.error
 
   const paidIds = new Set((paidTxRes.data || []).map((r) => r.appointment_id).filter(Boolean))
-  const consultationCount = (consultationsRes.data || []).filter((row) => {
-    const fee = Number(row?.amount || 0)
-    if (!Number.isFinite(fee) || fee <= 0) return true
-    return paidIds.has(row.id)
-  }).length
+  const consultationCount = (consultationsRes.data || []).filter((row) =>
+    isPaidOrFreeConsultation({ amount: row?.amount, consultationPaid: paidIds.has(row.id) }),
+  ).length
 
   return {
     profile: profileRes.data,
@@ -1598,9 +1608,45 @@ export async function getAppointmentPaymentStatus(transactionId) {
   }
 }
 
-// Sends the "New Consultation Booking" notification to the attorney only
-// after the client successfully completes payment. We dedupe by including the
-// appointment id in the body so retries during polling do not duplicate.
+// Internal: look up the existing "[appt:<id>]" notification for an attorney.
+async function findAttorneyAppointmentNotifications({ attorneyId, appointmentId }) {
+  if (!attorneyId || !appointmentId) return []
+  const dedupeMarker = `[appt:${appointmentId}]`
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('id')
+    .eq('user_id', attorneyId)
+    .eq('type', 'consultation')
+    .ilike('body', `%${dedupeMarker}%`)
+  if (error) {
+    console.warn('[booking] notification lookup failed', error)
+    return []
+  }
+  return (data || []).map((row) => row.id)
+}
+
+async function resolveClientDisplayName(clientId) {
+  if (!clientId) return 'A client'
+  try {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('full_name, email')
+      .eq('id', clientId)
+      .maybeSingle()
+    return (
+      String(profile?.full_name || '').trim() ||
+      String(profile?.email || '').trim() ||
+      'A client'
+    )
+  } catch (lookupError) {
+    console.warn('[booking] failed to resolve client name', lookupError)
+    return 'A client'
+  }
+}
+
+// Flips the "Pending Consultation Booking" notification on the attorney's
+// side to "Booking Confirmed" once payment has been recorded. Idempotent:
+// duplicate calls during polling will just no-op after the first update.
 export async function notifyAttorneyOfPaidBooking({ appointmentId }) {
   if (!appointmentId) return
 
@@ -1617,32 +1663,7 @@ export async function notifyAttorneyOfPaidBooking({ appointmentId }) {
   if (!appt?.attorney_id) return
 
   const dedupeMarker = `[appt:${appointmentId}]`
-
-  const { data: existing } = await supabase
-    .from('notifications')
-    .select('id')
-    .eq('user_id', appt.attorney_id)
-    .eq('type', 'consultation')
-    .ilike('body', `%${dedupeMarker}%`)
-    .limit(1)
-
-  if (existing && existing.length > 0) return
-
-  let clientName = 'A client'
-  try {
-    const { data: clientProfile } = await supabase
-      .from('profiles')
-      .select('full_name, email')
-      .eq('id', appt.client_id)
-      .maybeSingle()
-    clientName =
-      String(clientProfile?.full_name || '').trim() ||
-      String(clientProfile?.email || '').trim() ||
-      'A client'
-  } catch (lookupError) {
-    console.warn('[booking] failed to resolve client name for notification', lookupError)
-  }
-
+  const clientName = await resolveClientDisplayName(appt.client_id)
   const whenLabel = appt.scheduled_at
     ? new Date(appt.scheduled_at).toLocaleString('en-PH', {
         month: 'short',
@@ -1653,17 +1674,40 @@ export async function notifyAttorneyOfPaidBooking({ appointmentId }) {
       })
     : 'the scheduled time'
 
-  const { error: insertError } = await supabase.from('notifications').insert({
-    user_id: appt.attorney_id,
-    title: 'New Consultation Booking',
-    body: `${clientName} booked ${appt.title || 'a consultation'} on ${whenLabel}. ${dedupeMarker}`,
-    type: 'consultation',
-    is_read: false,
-    created_at: new Date().toISOString(),
+  const newTitle = 'Booking Confirmed'
+  const newBody = `${clientName} paid for ${appt.title || 'a consultation'} on ${whenLabel}. ${dedupeMarker}`
+  const nowIso = new Date().toISOString()
+
+  const existingIds = await findAttorneyAppointmentNotifications({
+    attorneyId: appt.attorney_id,
+    appointmentId,
   })
 
-  if (insertError) {
-    console.warn('[booking] failed to create attorney notification', insertError)
+  if (existingIds.length > 0) {
+    const { error: updateError } = await supabase
+      .from('notifications')
+      .update({
+        title: newTitle,
+        body: newBody,
+        is_read: false,
+        updated_at: nowIso,
+      })
+      .in('id', existingIds)
+    if (updateError) {
+      console.warn('[booking] failed to update attorney notification to confirmed', updateError)
+    }
+  } else {
+    const { error: insertError } = await supabase.from('notifications').insert({
+      user_id: appt.attorney_id,
+      title: newTitle,
+      body: newBody,
+      type: 'consultation',
+      is_read: false,
+      created_at: nowIso,
+    })
+    if (insertError) {
+      console.warn('[booking] failed to create attorney confirmed notification', insertError)
+    }
   }
 
   invalidateAttorneyAppointmentsCache(appt.attorney_id)
@@ -1690,7 +1734,7 @@ export async function cancelPendingUnpaidBooking({ appointmentId }) {
 
   const { data: appt, error: apptError } = await supabase
     .from('appointments')
-    .select('id, attorney_id, slot_id, slot_date, slot_time, status')
+    .select('id, attorney_id, client_id, title, scheduled_at, slot_id, slot_date, slot_time, status')
     .eq('id', appointmentId)
     .maybeSingle()
 
@@ -1712,6 +1756,59 @@ export async function cancelPendingUnpaidBooking({ appointmentId }) {
 
   if (updateError) {
     console.warn('[booking] cancel cleanup status update failed', updateError)
+  }
+
+  // Flip the attorney's pending notification to a "Cancelled" message so the
+  // popup updates live instead of disappearing without context.
+  try {
+    const dedupeMarker = `[appt:${appointmentId}]`
+    const clientName = await resolveClientDisplayName(appt.client_id)
+    const whenLabel = appt.scheduled_at
+      ? new Date(appt.scheduled_at).toLocaleString('en-PH', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+        })
+      : 'the scheduled time'
+
+    const existingIds = await findAttorneyAppointmentNotifications({
+      attorneyId: appt.attorney_id,
+      appointmentId,
+    })
+
+    const cancelTitle = 'Booking Cancelled'
+    const cancelBody = `${clientName} cancelled their booking for ${appt.title || 'a consultation'} on ${whenLabel}. ${dedupeMarker}`
+
+    if (existingIds.length > 0) {
+      const { error: notifUpdateError } = await supabase
+        .from('notifications')
+        .update({
+          title: cancelTitle,
+          body: cancelBody,
+          is_read: false,
+          updated_at: nowIso,
+        })
+        .in('id', existingIds)
+      if (notifUpdateError) {
+        console.warn('[booking] failed to update attorney notification to cancelled', notifUpdateError)
+      }
+    } else if (appt.attorney_id) {
+      const { error: notifInsertError } = await supabase.from('notifications').insert({
+        user_id: appt.attorney_id,
+        title: cancelTitle,
+        body: cancelBody,
+        type: 'consultation',
+        is_read: false,
+        created_at: nowIso,
+      })
+      if (notifInsertError) {
+        console.warn('[booking] failed to insert attorney cancellation notification', notifInsertError)
+      }
+    }
+  } catch (notifError) {
+    console.warn('[booking] cancel notification flip failed', notifError)
   }
 
   // Free the underlying availability slot so the time can be rebooked.
@@ -2007,16 +2104,19 @@ export async function fetchAttorneyConsultationRequests(userId, options = {}) {
 
   const requests = appointments
     .filter((item) => {
-      if (!isConsultationVisibleToAttorneyAfterPayment(item)) return false
       const status = String(item.status || '').toLowerCase()
-      return (
+      if (
+        status === 'pending' ||
         status === 'confirmed' ||
         status === 'rescheduled' ||
         status === 'started' ||
         status === 'in_progress' ||
         status === 'in-progress' ||
         status === 'active'
-      )
+      ) {
+        return true
+      }
+      return isRecentlyCancelledAppointment(item)
     })
     .sort((a, b) => {
       const aTime = a.parsed_scheduled_at?.getTime() || 0
@@ -2607,6 +2707,10 @@ export async function createAppointmentBooking({
 
   if (appointmentId) {
     try {
+      const rawClientName =
+        String(user.user_metadata?.full_name || '').trim() ||
+        String(user.email || '').trim() ||
+        'A client'
       const whenLabel = new Date(normalizedPayload.scheduled_at).toLocaleString('en-PH', {
         month: 'short',
         day: 'numeric',
@@ -2615,10 +2719,25 @@ export async function createAppointmentBooking({
         minute: '2-digit',
       })
 
-      // Attorney is intentionally NOT notified here. The "New Consultation
-      // Booking" notification is only emitted by notifyAttorneyOfPaidBooking()
-      // once the client successfully pays. This keeps the attorney queue and
-      // notification panel clean if the client cancels checkout.
+      // Attorney sees this immediately so they know a booking is in-progress.
+      // It later flips to "Booking Confirmed" or "Booking Cancelled" through
+      // notifyAttorneyOfPaidBooking() / cancelPendingUnpaidBooking().
+      const dedupeMarker = `[appt:${appointmentId}]`
+      const { error: notificationError } = await supabase
+        .from('notifications')
+        .insert({
+          user_id: normalizedPayload.attorney_id,
+          title: 'Pending Consultation Booking',
+          body: `${rawClientName} is booking ${normalizedPayload.title || 'a consultation'} on ${whenLabel}. Waiting for payment. ${dedupeMarker}`,
+          type: 'consultation',
+          is_read: false,
+          created_at: nowIso,
+        })
+
+      if (notificationError) {
+        console.warn('[booking] failed to create attorney pending notification', notificationError)
+      }
+
       const { error: clientBookingNotificationError } = await supabase
         .from('notifications')
         .insert({
@@ -3352,10 +3471,36 @@ export function subscribeToAttorneyAppointments(attorneyId, onChange) {
     return () => {}
   }
 
-  const notify = () => {
+  const pendingTimeouts = new Set()
+
+  const fireOnChange = () => {
     invalidateAttorneyAppointmentsCache(attorneyId)
     if (typeof onChange === 'function') {
-      onChange()
+      try {
+        onChange()
+      } catch (callbackError) {
+        console.warn('[realtime] attorney subscription callback error', callbackError)
+      }
+    }
+  }
+
+  const scheduleRefresh = (delayMs) => {
+    if (typeof window === 'undefined') return
+    const timeoutId = window.setTimeout(() => {
+      pendingTimeouts.delete(timeoutId)
+      fireOnChange()
+    }, delayMs)
+    pendingTimeouts.add(timeoutId)
+  }
+
+  const handleAppointmentChange = (payload) => {
+    fireOnChange()
+    const newStatus = String(payload?.new?.status || '').toLowerCase()
+    // When a row flips to cancelled, schedule a follow-up refresh slightly
+    // past the visibility window so the entry drops off the attorney queue
+    // automatically without needing the user to refresh manually.
+    if (newStatus === 'cancelled') {
+      scheduleRefresh(RECENTLY_CANCELLED_WINDOW_MS + 500)
     }
   }
 
@@ -3369,7 +3514,7 @@ export function subscribeToAttorneyAppointments(attorneyId, onChange) {
         table: 'appointments',
         filter: `attorney_id=eq.${attorneyId}`,
       },
-      notify,
+      handleAppointmentChange,
     )
     .on(
       'postgres_changes',
@@ -3379,11 +3524,17 @@ export function subscribeToAttorneyAppointments(attorneyId, onChange) {
         table: 'transactions',
         filter: `attorney_id=eq.${attorneyId}`,
       },
-      notify,
+      () => fireOnChange(),
     )
     .subscribe()
 
   return () => {
+    pendingTimeouts.forEach((id) => {
+      if (typeof window !== 'undefined') {
+        window.clearTimeout(id)
+      }
+    })
+    pendingTimeouts.clear()
     supabase.removeChannel(channel)
   }
 }
@@ -3449,9 +3600,11 @@ export async function fetchAttorneyUpcomingAppointments(userId, options = {}) {
 
   return appointments
     .filter((item) => {
-      if (!isConsultationVisibleToAttorneyAfterPayment(item)) return false
       const status = String(item.status || '').toLowerCase()
-      return status === 'pending' || status === 'confirmed' || status === 'rescheduled'
+      if (status === 'pending' || status === 'confirmed' || status === 'rescheduled') {
+        return true
+      }
+      return isRecentlyCancelledAppointment(item)
     })
     .sort((a, b) => {
       const aTime = a.parsed_scheduled_at?.getTime() || 0
