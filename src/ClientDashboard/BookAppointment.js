@@ -170,6 +170,8 @@ function BookAppointment({ onNavigate, profile }) {
   const [doubleBookingPrompt, setDoubleBookingPrompt] = useState(null);
   const pendingTimeoutsRef = useRef([]);
   const doubleBookingResolveRef = useRef(null);
+  const cancelRequestedRef = useRef(false);
+  const focusReturnedAtRef = useRef(null);
 
   const loadAttorneys = useCallback(async (options = {}) => {
     const silent = Boolean(options?.silent);
@@ -326,21 +328,11 @@ function BookAppointment({ onNavigate, profile }) {
     setDoubleBookingPrompt(null);
   }, []);
 
-  const handleDateChange = useCallback(async (e) => {
-    const date = e.target.value;
-    setSelectedDate(date);
-    setSelectedTime('');
-    setAvailableSlots([]);
-    setHiddenPastSlotsCount(0);
-
+  const reloadAvailableSlots = useCallback(async (date) => {
     if (!date || !bookingAttorney) return;
-
     try {
       setSlotsLoading(true);
-      
-      // Get slots from database (already filtered by is_booked=false)
       const slots = await getAvailability(bookingAttorney.id, date, { force: true });
-
       const { visibleTimes, hiddenPastCount } = mapFutureTimeStrings(slots, date);
       setAvailableSlots(visibleTimes);
       setHiddenPastSlotsCount(hiddenPastCount);
@@ -353,6 +345,16 @@ function BookAppointment({ onNavigate, profile }) {
       setSlotsLoading(false);
     }
   }, [bookingAttorney]);
+
+  const handleDateChange = useCallback(async (e) => {
+    const date = e.target.value;
+    setSelectedDate(date);
+    setSelectedTime('');
+    setAvailableSlots([]);
+    setHiddenPastSlotsCount(0);
+    if (!date || !bookingAttorney) return;
+    await reloadAvailableSlots(date);
+  }, [bookingAttorney, reloadAvailableSlots]);
 
   const buildScheduledIso = (dateStr, timeStr) => {
     const [time, meridiemRaw] = String(timeStr || '').split(' ');
@@ -380,6 +382,16 @@ function BookAppointment({ onNavigate, profile }) {
     let secondBookingConfirmed = false;
     let createdAppointmentId = null;
     let succeeded = false;
+
+    cancelRequestedRef.current = false;
+    focusReturnedAtRef.current = null;
+
+    const handleFocusReturn = () => {
+      if (focusReturnedAtRef.current === null) {
+        focusReturnedAtRef.current = Date.now();
+      }
+    };
+    window.addEventListener('focus', handleFocusReturn);
 
     try {
       setIsPaying(true);
@@ -456,10 +468,11 @@ function BookAppointment({ onNavigate, profile }) {
 
       const startedAt = Date.now();
       const timeoutMs = 5 * 60 * 1000;
-      // Once the popup is closed without paying, we only wait a short grace
-      // window before treating the booking as cancelled. Most successful
-      // flows confirm "paid" within this window via the backend webhook.
+      // Once the popup is closed (or the user returns focus to BatasMo)
+      // without paying, we only wait a short grace window before treating
+      // the booking as cancelled.
       const popupClosedGraceMs = 3000;
+      const focusReturnGraceMs = 5000;
       let popupClosedAt = null;
       let paid = false;
       let pollDelayMs = 1500;
@@ -467,6 +480,11 @@ function BookAppointment({ onNavigate, profile }) {
         new Promise((resolve) => setTimeout(resolve, delayMs));
 
       while (Date.now() - startedAt < timeoutMs) {
+        // Manual cancel button always wins.
+        if (cancelRequestedRef.current) {
+          throw new Error('Payment was cancelled. Your booking has been released.');
+        }
+
         // Detect popup close BEFORE waiting so we shrink the cancellation
         // window. If the popup is closed and we're still pending, switch to
         // a fast poll cadence so the grace window completes quickly.
@@ -476,6 +494,11 @@ function BookAppointment({ onNavigate, profile }) {
         }
 
         await waitForNextPoll(pollDelayMs);
+
+        if (cancelRequestedRef.current) {
+          throw new Error('Payment was cancelled. Your booking has been released.');
+        }
+
         const statusResult = await getAppointmentPaymentStatus(session.transactionId);
         const status = String(statusResult?.status || 'pending').toLowerCase();
 
@@ -496,6 +519,15 @@ function BookAppointment({ onNavigate, profile }) {
           } else if (Date.now() - popupClosedAt >= popupClosedGraceMs) {
             throw new Error('Payment was cancelled. Your booking has been released.');
           }
+        } else if (focusReturnedAtRef.current) {
+          // The BatasMo tab regained focus while payment is still pending.
+          // Some browsers detach the cross-origin popup reference after
+          // navigation, so we use focus-return as a second signal that the
+          // user has left the PayMongo tab without paying.
+          if (Date.now() - focusReturnedAtRef.current >= focusReturnGraceMs) {
+            throw new Error('Payment was cancelled. Your booking has been released.');
+          }
+          pollDelayMs = 700;
         } else {
           // Gradually slow polling while the popup is still open.
           pollDelayMs = Math.min(5000, pollDelayMs + 500);
@@ -529,6 +561,9 @@ function BookAppointment({ onNavigate, profile }) {
       }
       setSubmitError(error?.message || 'Unable to complete payment. Please try again.');
     } finally {
+      window.removeEventListener('focus', handleFocusReturn);
+      focusReturnedAtRef.current = null;
+      cancelRequestedRef.current = false;
       if (!succeeded && createdAppointmentId) {
         try {
           await cancelPendingUnpaidBooking({ appointmentId: createdAppointmentId });
@@ -540,9 +575,20 @@ function BookAppointment({ onNavigate, profile }) {
         } catch (cacheError) {
           console.warn('[booking] invalidate availability cache failed', cacheError);
         }
+        if (selectedDate) {
+          try {
+            await reloadAvailableSlots(selectedDate);
+          } catch (reloadError) {
+            console.warn('[booking] reload slots after cancel failed', reloadError);
+          }
+        }
       }
       setIsPaying(false);
     }
+  };
+
+  const handleCancelPayment = () => {
+    cancelRequestedRef.current = true;
   };
 
   const closeConfirmation = () => {
@@ -817,22 +863,38 @@ function BookAppointment({ onNavigate, profile }) {
                     </div>
 
                     <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-                      <button
-                        className="ba-booking-btn ba-booking-btn--cancel"
-                        onClick={() => setBookingStep(1)}
-                        disabled={isPaying}
-                      >
-                        ← Back
-                      </button>
-                      <button
-                        className="ba-booking-btn ba-booking-btn--submit"
-                        onClick={handlePayNow}
-                        disabled={isPaying}
-                        style={{ flex: 1 }}
-                      >
-                        {isPaying ? 'Processing...' : 'Pay Now'}
-                      </button>
+                      {isPaying ? (
+                        <button
+                          className="ba-booking-btn ba-booking-btn--cancel"
+                          onClick={handleCancelPayment}
+                          style={{ flex: 1 }}
+                          type="button"
+                        >
+                          Cancel Payment
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            className="ba-booking-btn ba-booking-btn--cancel"
+                            onClick={() => setBookingStep(1)}
+                          >
+                            ← Back
+                          </button>
+                          <button
+                            className="ba-booking-btn ba-booking-btn--submit"
+                            onClick={handlePayNow}
+                            style={{ flex: 1 }}
+                          >
+                            Pay Now
+                          </button>
+                        </>
+                      )}
                     </div>
+                    {isPaying && (
+                      <div style={{ color: '#94a3b8', fontSize: '0.85rem', marginTop: 12, textAlign: 'center' }}>
+                        Waiting for payment confirmation… If you closed the PayMongo tab, click <strong>Cancel Payment</strong>.
+                      </div>
+                    )}
                   </>
                 )}
               </div>
