@@ -456,17 +456,25 @@ function BookAppointment({ onNavigate, profile }) {
 
       const startedAt = Date.now();
       const timeoutMs = 5 * 60 * 1000;
-      // If the checkout popup is closed before payment is confirmed, give the
-      // gateway a short grace window so a successful "paid" status can still
-      // land (some flows close the popup immediately after success).
-      const popupClosedGraceMs = 8000;
+      // Once the popup is closed without paying, we only wait a short grace
+      // window before treating the booking as cancelled. Most successful
+      // flows confirm "paid" within this window via the backend webhook.
+      const popupClosedGraceMs = 3000;
       let popupClosedAt = null;
       let paid = false;
-      let pollDelayMs = 2500;
+      let pollDelayMs = 1500;
       const waitForNextPoll = (delayMs) =>
         new Promise((resolve) => setTimeout(resolve, delayMs));
 
       while (Date.now() - startedAt < timeoutMs) {
+        // Detect popup close BEFORE waiting so we shrink the cancellation
+        // window. If the popup is closed and we're still pending, switch to
+        // a fast poll cadence so the grace window completes quickly.
+        if (checkoutWindow && checkoutWindow.closed && popupClosedAt === null) {
+          popupClosedAt = Date.now();
+          pollDelayMs = 500;
+        }
+
         await waitForNextPoll(pollDelayMs);
         const statusResult = await getAppointmentPaymentStatus(session.transactionId);
         const status = String(statusResult?.status || 'pending').toLowerCase();
@@ -479,17 +487,19 @@ function BookAppointment({ onNavigate, profile }) {
           throw new Error('Payment failed. Please try again.');
         }
 
-        // Detect a client-initiated cancel (popup closed without paying).
+        // If the popup is closed and the grace window has elapsed without
+        // payment landing, treat as a client-initiated cancellation.
         if (checkoutWindow && checkoutWindow.closed) {
           if (popupClosedAt === null) {
             popupClosedAt = Date.now();
+            pollDelayMs = 500;
           } else if (Date.now() - popupClosedAt >= popupClosedGraceMs) {
             throw new Error('Payment was cancelled. Your booking has been released.');
           }
+        } else {
+          // Gradually slow polling while the popup is still open.
+          pollDelayMs = Math.min(5000, pollDelayMs + 500);
         }
-
-        // Gradually slow polling to reduce load while waiting.
-        pollDelayMs = Math.min(6000, pollDelayMs + 500);
       }
 
       if (!paid) {

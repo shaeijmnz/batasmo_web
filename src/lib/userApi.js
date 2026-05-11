@@ -1678,6 +1678,29 @@ export async function notifyAttorneyOfPaidBooking({ appointmentId }) {
   const newBody = `${clientName} paid for ${appt.title || 'a consultation'} on ${whenLabel}. ${dedupeMarker}`
   const nowIso = new Date().toISOString()
 
+  // Flip the appointment to "confirmed" once payment is captured. Skip when
+  // it has already moved past pending (e.g. cancelled by a race) so we don't
+  // accidentally resurrect a cancelled row.
+  try {
+    const { data: currentAppt } = await supabase
+      .from('appointments')
+      .select('status')
+      .eq('id', appointmentId)
+      .maybeSingle()
+    const currentStatus = String(currentAppt?.status || '').toLowerCase()
+    if (currentStatus === 'pending' || currentStatus === '') {
+      const { error: statusError } = await supabase
+        .from('appointments')
+        .update({ status: 'confirmed', updated_at: nowIso })
+        .eq('id', appointmentId)
+      if (statusError) {
+        console.warn('[booking] failed to flip status to confirmed', statusError)
+      }
+    }
+  } catch (statusFlipError) {
+    console.warn('[booking] confirmed status flip step failed', statusFlipError)
+  }
+
   const existingIds = await findAttorneyAppointmentNotifications({
     attorneyId: appt.attorney_id,
     appointmentId,
@@ -1811,23 +1834,55 @@ export async function cancelPendingUnpaidBooking({ appointmentId }) {
     console.warn('[booking] cancel notification flip failed', notifError)
   }
 
-  // Free the underlying availability slot so the time can be rebooked.
-  if (appt.slot_id) {
+  // Free the underlying availability slot so the time can be rebooked. We try
+  // multiple matching strategies because the `availability_slots.time` column
+  // may be stored as either a full ISO time ("09:00:00"), a 24-hour label
+  // ("09:00"), or an AM/PM label ("09:00 AM") depending on how the slot was
+  // seeded. We normalize both sides before comparing.
+  let slotIdToFree = appt.slot_id || null
+
+  if (!slotIdToFree && appt.attorney_id && appt.slot_date && appt.slot_time) {
+    const { data: candidateSlots, error: candidateError } = await supabase
+      .from('availability_slots')
+      .select('id, time')
+      .eq('attorney_id', appt.attorney_id)
+      .eq('date', appt.slot_date)
+
+    if (candidateError) {
+      console.warn('[booking] cancel cleanup candidate slot fetch failed', candidateError)
+    } else if (Array.isArray(candidateSlots) && candidateSlots.length) {
+      const targetParsed = parseSlotDateTime(appt.slot_date, appt.slot_time)
+      const targetMs = targetParsed?.getTime() || 0
+      const matchedSlot = candidateSlots.find((slot) => {
+        const slotParsed = parseSlotDateTime(appt.slot_date, slot?.time)
+        return slotParsed && slotParsed.getTime() === targetMs
+      })
+      slotIdToFree = matchedSlot?.id || null
+    }
+  }
+
+  if (slotIdToFree) {
     const { error: slotByIdError } = await supabase
       .from('availability_slots')
       .update({ is_booked: false, updated_at: nowIso })
-      .eq('id', appt.slot_id)
-    if (slotByIdError) console.warn('[booking] cancel cleanup slot free (by id) failed', slotByIdError)
+      .eq('id', slotIdToFree)
+    if (slotByIdError) {
+      console.warn('[booking] cancel cleanup slot free (by id) failed', slotByIdError)
+    }
   } else if (appt.attorney_id && appt.slot_date && appt.slot_time) {
+    // Fallback: best-effort raw match if normalization could not find the row.
     const { error: slotByMatchError } = await supabase
       .from('availability_slots')
       .update({ is_booked: false, updated_at: nowIso })
       .eq('attorney_id', appt.attorney_id)
       .eq('date', appt.slot_date)
       .eq('time', appt.slot_time)
-    if (slotByMatchError) console.warn('[booking] cancel cleanup slot free (by match) failed', slotByMatchError)
+    if (slotByMatchError) {
+      console.warn('[booking] cancel cleanup slot free (raw match) failed', slotByMatchError)
+    }
   }
 
+  invalidateAvailabilityCache(appt.attorney_id, appt.slot_date)
   invalidateAttorneyAppointmentsCache(appt.attorney_id)
 }
 
@@ -2556,7 +2611,8 @@ export async function createAppointmentBooking({
         scheduled_at: normalizedPayload.scheduled_at,
         duration_minutes: normalizedPayload.duration_minutes,
         amount: normalizedPayload.amount,
-        status: 'confirmed',
+        // 'pending' until PayMongo flips it to 'confirmed' via notifyAttorneyOfPaidBooking().
+        status: 'pending',
         created_at: nowIso,
         updated_at: nowIso,
       })
@@ -2625,7 +2681,9 @@ export async function createAppointmentBooking({
         notes: normalizedPayload.notes,
         duration_minutes: normalizedPayload.duration_minutes,
         amount: normalizedPayload.amount,
-        status: 'confirmed',
+        // Always start as 'pending'. notifyAttorneyOfPaidBooking() will flip
+        // this to 'confirmed' once the PayMongo transaction is marked paid.
+        status: 'pending',
         slot_id: resolvedSlotId,
         updated_at: nowIso,
       })
