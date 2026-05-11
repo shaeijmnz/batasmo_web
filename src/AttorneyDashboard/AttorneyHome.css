@@ -522,6 +522,16 @@
 	color: #f5d995;
 }
 
+.att-badge--confirmed {
+	background: rgba(34, 197, 94, 0.2);
+	color: #86efac;
+}
+
+.att-badge--cancelled {
+	background: rgba(248, 113, 113, 0.2);
+	color: #fecaca;
+}
+
 .att-queue-item__today-actions {
 	display: flex;
 	align-items: center;

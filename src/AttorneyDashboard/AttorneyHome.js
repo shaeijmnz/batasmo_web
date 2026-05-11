@@ -350,6 +350,14 @@ function AttorneyHome({ onNavigate, profile }) {
                   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
                 };
 
+                const rawStatus = String(c.status || '').toLowerCase();
+                const badgeClass =
+                  rawStatus === 'cancelled'
+                    ? 'att-badge att-badge--cancelled'
+                    : rawStatus === 'confirmed'
+                      ? 'att-badge att-badge--confirmed'
+                      : 'att-badge att-badge--pending';
+
                 return (
                   <div key={i} className={`att-queue-item ${isToday ? 'att-queue-item--today' : ''}`}>
                     <div className="att-queue-item__position">
@@ -370,7 +378,7 @@ function AttorneyHome({ onNavigate, profile }) {
                       </span>
                     </div>
                     <div className="att-queue-item__right">
-                      <span className="att-badge att-badge--pending">{c.status}</span>
+                      <span className={badgeClass}>{c.status}</span>
                       {canEnterChatroom ? (
                         <div className="att-queue-item__today-actions">
                           {isToday ? <span className="att-today-label">🔴 TODAY</span> : null}

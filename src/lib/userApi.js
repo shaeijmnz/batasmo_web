@@ -1608,6 +1608,21 @@ export async function getAppointmentPaymentStatus(transactionId) {
   }
 }
 
+// Cancels checkout server-side (service role). Required when Supabase RLS blocks
+// the browser from PATCHing appointments to cancelled.
+export async function abandonAppointmentCheckout({ appointmentId, clientId, transactionId }) {
+  if (!appointmentId) throw new Error('appointmentId is required.')
+  if (!clientId) throw new Error('clientId is required.')
+
+  const body = { appointmentId, clientId }
+  if (transactionId) body.transactionId = transactionId
+
+  return requestPaymentApi('/payments/appointments/abandon', {
+    method: 'POST',
+    body,
+  })
+}
+
 // Internal: look up the existing "[appt:<id>]" notification for an attorney.
 async function findAttorneyAppointmentNotifications({ attorneyId, appointmentId }) {
   if (!attorneyId || !appointmentId) return []

@@ -3,6 +3,7 @@ import './BookAppointment.css';
 import './ClientTheme.css';
 import {
   assertNoActiveAppointmentForClient,
+  abandonAppointmentCheckout,
   cancelPendingUnpaidBooking,
   createAppointmentBooking,
   fetchBookableAttorneys,
@@ -381,6 +382,7 @@ function BookAppointment({ onNavigate, profile }) {
     let checkoutWindow = null;
     let secondBookingConfirmed = false;
     let createdAppointmentId = null;
+    let paymentTransactionId = null;
     let succeeded = false;
 
     cancelRequestedRef.current = false;
@@ -457,6 +459,7 @@ function BookAppointment({ onNavigate, profile }) {
         amount: bookingAttorney.amount || 2000,
         method: paymentMethod,
       });
+      paymentTransactionId = session?.transactionId || null;
 
       if (session?.checkoutUrl && checkoutWindow) {
         checkoutWindow.location.href = session.checkoutUrl;
@@ -566,9 +569,18 @@ function BookAppointment({ onNavigate, profile }) {
       cancelRequestedRef.current = false;
       if (!succeeded && createdAppointmentId) {
         try {
-          await cancelPendingUnpaidBooking({ appointmentId: createdAppointmentId });
-        } catch (cleanupError) {
-          console.warn('[booking] cancel pending unpaid booking failed', cleanupError);
+          await abandonAppointmentCheckout({
+            appointmentId: createdAppointmentId,
+            clientId: profile.id,
+            transactionId: paymentTransactionId || undefined,
+          });
+        } catch (abandonErr) {
+          console.warn('[booking] backend abandon failed, falling back to client cleanup', abandonErr);
+          try {
+            await cancelPendingUnpaidBooking({ appointmentId: createdAppointmentId });
+          } catch (cleanupError) {
+            console.warn('[booking] cancel pending unpaid booking failed', cleanupError);
+          }
         }
         try {
           invalidateAvailabilityCache();

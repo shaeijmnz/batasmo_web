@@ -638,6 +638,233 @@ const supabaseConfirmAppointment = async ({ appointmentId }) => {
   }
 }
 
+const toTwoDigits = (n) => String(Number(n) || 0).padStart(2, '0')
+
+const parseSlotDateTimeNode = (dateValue, timeValue) => {
+  if (!dateValue || !timeValue) return null
+  const rawTime = String(timeValue).trim()
+  const ampmMatch = rawTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i)
+  if (ampmMatch) {
+    let hour = Number(ampmMatch[1])
+    const minute = Number(ampmMatch[2])
+    const meridiem = ampmMatch[3].toUpperCase()
+    if (meridiem === 'PM' && hour < 12) hour += 12
+    if (meridiem === 'AM' && hour === 12) hour = 0
+    const parsed = new Date(`${dateValue}T${toTwoDigits(hour)}:${toTwoDigits(minute)}:00`)
+    return Number.isNaN(parsed.getTime()) ? null : parsed
+  }
+  const m24 = rawTime.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/)
+  if (!m24) return null
+  const hour = Number(m24[1])
+  const minute = Number(m24[2])
+  if (!Number.isFinite(hour) || !Number.isFinite(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    return null
+  }
+  const parsed = new Date(`${dateValue}T${toTwoDigits(hour)}:${toTwoDigits(minute)}:00`)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+const supabaseRestGetMany = async ({ table, query }) => {
+  const endpoint = `${SUPABASE_URL}/rest/v1/${table}?${query}&select=*`
+  const response = await fetch(endpoint, { method: 'GET', headers: supabaseRestHeaders() })
+  const payload = await response.json().catch(() => [])
+  if (!response.ok) {
+    throw new Error(payload?.message || payload?.error || `Supabase list ${table} failed (${response.status})`)
+  }
+  return Array.isArray(payload) ? payload : []
+}
+
+const supabaseRestPatch = async ({ table, query, body }) => {
+  const endpoint = `${SUPABASE_URL}/rest/v1/${table}?${query}`
+  const response = await fetch(endpoint, {
+    method: 'PATCH',
+    headers: supabaseRestHeaders(),
+    body: JSON.stringify(body),
+  })
+  if (response.status === 204) {
+    return null
+  }
+  const payload = await response.json().catch(() => null)
+  if (!response.ok) {
+    throw new Error(payload?.message || payload?.error || `Supabase patch ${table} failed (${response.status})`)
+  }
+  return payload
+}
+
+const resolveClientDisplayNameForAbandon = async (clientId) => {
+  if (!clientId) return 'A client'
+  try {
+    const row = await supabaseSelectSingle({
+      table: 'profiles',
+      query: new URLSearchParams({ id: `eq.${clientId}` }).toString(),
+    })
+    return (
+      String(row?.full_name || '').trim() ||
+      String(row?.email || '').trim() ||
+      'A client'
+    )
+  } catch {
+    return 'A client'
+  }
+}
+
+/**
+ * Cancels a pending unpaid consultation using the service role (bypasses RLS).
+ * Frees the slot, marks pending transactions as failed, and flips the attorney
+ * notification to "Booking Cancelled".
+ */
+const supabaseAbandonPendingConsultation = async (appointmentId) => {
+  if (!appointmentId) return { ok: false, reason: 'missing_id' }
+
+  const appt = await supabaseSelectSingle({
+    table: 'appointments',
+    query: new URLSearchParams({ id: `eq.${appointmentId}` }).toString(),
+  })
+  if (!appt) return { ok: false, reason: 'appointment_not_found' }
+
+  const st = String(appt.status || '').toLowerCase()
+  if (st === 'cancelled' || st === 'completed') return { ok: true, reason: 'already_final' }
+
+  const paidRows = await supabaseRestGetMany({
+    table: 'transactions',
+    query: new URLSearchParams({
+      appointment_id: `eq.${appointmentId}`,
+      payment_status: 'eq.paid',
+    }).toString(),
+  })
+  if (paidRows.length > 0) return { ok: true, reason: 'already_paid' }
+
+  if (st !== 'pending') return { ok: true, reason: 'not_pending_status' }
+
+  const nowIso = new Date().toISOString()
+
+  await supabaseRestPatch({
+    table: 'appointments',
+    query: new URLSearchParams({ id: `eq.${appointmentId}` }).toString(),
+    body: { status: 'cancelled', updated_at: nowIso },
+  })
+
+  const pendingTxRows = await supabaseRestGetMany({
+    table: 'transactions',
+    query: new URLSearchParams({
+      appointment_id: `eq.${appointmentId}`,
+      payment_status: 'eq.pending',
+    }).toString(),
+  })
+  for (const row of pendingTxRows) {
+    if (!row?.id) continue
+    try {
+      await supabaseRestPatch({
+        table: 'transactions',
+        query: new URLSearchParams({ id: `eq.${row.id}` }).toString(),
+        body: { payment_status: 'failed', updated_at: nowIso },
+      })
+    } catch (e) {
+      console.warn('[payments] abandon: failed to mark transaction failed', row.id, e?.message || e)
+    }
+  }
+
+  let slotIdToFree = appt.slot_id || null
+  const attorneyId = appt.attorney_id
+  const slotDate = appt.slot_date
+  const slotTime = appt.slot_time
+
+  if (!slotIdToFree && attorneyId && slotDate && slotTime) {
+    try {
+      const candidateSlots = await supabaseRestGetMany({
+        table: 'availability_slots',
+        query: new URLSearchParams({
+          attorney_id: `eq.${attorneyId}`,
+          date: `eq.${slotDate}`,
+        }).toString(),
+      })
+      const targetParsed = parseSlotDateTimeNode(slotDate, slotTime)
+      const targetMs = targetParsed?.getTime() || 0
+      const matched = candidateSlots.find((slot) => {
+        const slotParsed = parseSlotDateTimeNode(slotDate, slot?.time)
+        return slotParsed && slotParsed.getTime() === targetMs
+      })
+      slotIdToFree = matched?.id || null
+    } catch (e) {
+      console.warn('[payments] abandon: slot candidate lookup failed', e?.message || e)
+    }
+  }
+
+  if (slotIdToFree) {
+    try {
+      await supabaseRestPatch({
+        table: 'availability_slots',
+        query: new URLSearchParams({ id: `eq.${slotIdToFree}` }).toString(),
+        body: { is_booked: false, updated_at: nowIso },
+      })
+    } catch (e) {
+      console.warn('[payments] abandon: slot free by id failed', e?.message || e)
+    }
+  } else if (attorneyId && slotDate && slotTime) {
+    try {
+      await supabaseRestPatch({
+        table: 'availability_slots',
+        query: new URLSearchParams({
+          attorney_id: `eq.${attorneyId}`,
+          date: `eq.${slotDate}`,
+          time: `eq.${slotTime}`,
+        }).toString(),
+        body: { is_booked: false, updated_at: nowIso },
+      })
+    } catch (e) {
+      console.warn('[payments] abandon: slot free raw match failed', e?.message || e)
+    }
+  }
+
+  if (attorneyId) {
+    try {
+      const clientName = await resolveClientDisplayNameForAbandon(appt.client_id)
+      const whenLabel = appt.scheduled_at
+        ? new Date(appt.scheduled_at).toLocaleString('en-PH', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+          })
+        : 'the scheduled time'
+      const dedupeMarker = `[appt:${appointmentId}]`
+      const notifRows = await supabaseRestGetMany({
+        table: 'notifications',
+        query: new URLSearchParams({
+          user_id: `eq.${attorneyId}`,
+          type: 'eq.consultation',
+          body: `ilike.*${appointmentId}*`,
+        }).toString(),
+      })
+      const cancelTitle = 'Booking Cancelled'
+      const cancelBody = `${clientName} cancelled their booking for ${appt.title || 'a consultation'} on ${whenLabel}. ${dedupeMarker}`
+
+      if (notifRows.length > 0) {
+        for (const n of notifRows) {
+          if (!n?.id) continue
+          await supabaseRestPatch({
+            table: 'notifications',
+            query: new URLSearchParams({ id: `eq.${n.id}` }).toString(),
+            body: { title: cancelTitle, body: cancelBody, is_read: false },
+          })
+        }
+      } else {
+        await supabaseInsertNotification({
+          userId: attorneyId,
+          title: cancelTitle,
+          body: cancelBody,
+          type: 'consultation',
+        })
+      }
+    } catch (e) {
+      console.warn('[payments] abandon: notification flip failed', e?.message || e)
+    }
+  }
+
+  return { ok: true, reason: 'cancelled' }
+}
+
 const supabaseInsertNotification = async ({ userId, title, body, type = 'general' }) => {
   if (!userId) return
   const endpoint = `${SUPABASE_URL}/rest/v1/notifications`
@@ -1012,6 +1239,51 @@ app.post('/payments/appointments/create-session', async (req, res) => {
   }
 })
 
+// Client abandoned PayMongo / closed checkout — uses service role so RLS
+// cannot block flipping the appointment to cancelled + freeing the slot.
+app.post('/payments/appointments/abandon', async (req, res) => {
+  try {
+    requirePaymentConfig()
+
+    const appointmentId = String(req.body?.appointmentId || '').trim()
+    const clientId = String(req.body?.clientId || '').trim()
+    const transactionId = String(req.body?.transactionId || '').trim()
+
+    if (!appointmentId || !clientId) {
+      return res.status(400).json({ error: 'appointmentId and clientId are required.' })
+    }
+
+    const appt = await supabaseSelectSingle({
+      table: 'appointments',
+      query: new URLSearchParams({ id: `eq.${appointmentId}` }).toString(),
+    })
+    if (!appt) {
+      return res.status(404).json({ error: 'Appointment not found.' })
+    }
+    if (String(appt.client_id) !== clientId) {
+      return res.status(403).json({ error: 'Not allowed to abandon this appointment.' })
+    }
+
+    if (transactionId) {
+      const tx = await supabaseSelectSingle({
+        table: 'transactions',
+        query: new URLSearchParams({ id: `eq.${transactionId}` }).toString(),
+      })
+      if (!tx) {
+        return res.status(404).json({ error: 'Transaction not found.' })
+      }
+      if (String(tx.client_id) !== clientId || String(tx.appointment_id) !== appointmentId) {
+        return res.status(403).json({ error: 'Transaction does not match appointment.' })
+      }
+    }
+
+    const result = await supabaseAbandonPendingConsultation(appointmentId)
+    return res.status(200).json(result)
+  } catch (error) {
+    return res.status(500).json({ error: error?.message || 'Unable to abandon checkout.' })
+  }
+})
+
 // ── Payment status sync (polling fallback if webhook not yet integrated) ─────
 app.get('/payments/appointments/status/:transactionId', async (req, res) => {
   try {
@@ -1060,6 +1332,14 @@ app.get('/payments/appointments/status/:transactionId', async (req, res) => {
           })
         } catch (notificationError) {
           console.warn('[payments] failed to create client payment notification', notificationError?.message || notificationError)
+        }
+      }
+
+      if (effectiveStatus === 'failed' && tx.appointment_id) {
+        try {
+          await supabaseAbandonPendingConsultation(tx.appointment_id)
+        } catch (abandonErr) {
+          console.warn('[payments] abandon after checkout failed', abandonErr?.message || abandonErr)
         }
       }
     }
