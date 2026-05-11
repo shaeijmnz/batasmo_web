@@ -388,13 +388,6 @@ function BookAppointment({ onNavigate, profile }) {
     cancelRequestedRef.current = false;
     focusReturnedAtRef.current = null;
 
-    const handleFocusReturn = () => {
-      if (focusReturnedAtRef.current === null) {
-        focusReturnedAtRef.current = Date.now();
-      }
-    };
-    window.addEventListener('focus', handleFocusReturn);
-
     try {
       setIsPaying(true);
       setSubmitError('');
@@ -471,29 +464,17 @@ function BookAppointment({ onNavigate, profile }) {
 
       const startedAt = Date.now();
       const timeoutMs = 5 * 60 * 1000;
-      // Once the popup is closed (or the user returns focus to BatasMo)
-      // without paying, we only wait a short grace window before treating
-      // the booking as cancelled.
-      const popupClosedGraceMs = 3000;
-      const focusReturnGraceMs = 5000;
-      let popupClosedAt = null;
       let paid = false;
-      let pollDelayMs = 1500;
+      let pollDelayMs = 2500;
       const waitForNextPoll = (delayMs) =>
         new Promise((resolve) => setTimeout(resolve, delayMs));
 
+      // Cancellation is fully manual now — the user must press the
+      // "Cancel Payment" button on the booking screen. We intentionally do
+      // NOT auto-cancel from popup close or window-focus events.
       while (Date.now() - startedAt < timeoutMs) {
-        // Manual cancel button always wins.
         if (cancelRequestedRef.current) {
           throw new Error('Payment was cancelled. Your booking has been released.');
-        }
-
-        // Detect popup close BEFORE waiting so we shrink the cancellation
-        // window. If the popup is closed and we're still pending, switch to
-        // a fast poll cadence so the grace window completes quickly.
-        if (checkoutWindow && checkoutWindow.closed && popupClosedAt === null) {
-          popupClosedAt = Date.now();
-          pollDelayMs = 500;
         }
 
         await waitForNextPoll(pollDelayMs);
@@ -513,28 +494,7 @@ function BookAppointment({ onNavigate, profile }) {
           throw new Error('Payment failed. Please try again.');
         }
 
-        // If the popup is closed and the grace window has elapsed without
-        // payment landing, treat as a client-initiated cancellation.
-        if (checkoutWindow && checkoutWindow.closed) {
-          if (popupClosedAt === null) {
-            popupClosedAt = Date.now();
-            pollDelayMs = 500;
-          } else if (Date.now() - popupClosedAt >= popupClosedGraceMs) {
-            throw new Error('Payment was cancelled. Your booking has been released.');
-          }
-        } else if (focusReturnedAtRef.current) {
-          // The BatasMo tab regained focus while payment is still pending.
-          // Some browsers detach the cross-origin popup reference after
-          // navigation, so we use focus-return as a second signal that the
-          // user has left the PayMongo tab without paying.
-          if (Date.now() - focusReturnedAtRef.current >= focusReturnGraceMs) {
-            throw new Error('Payment was cancelled. Your booking has been released.');
-          }
-          pollDelayMs = 700;
-        } else {
-          // Gradually slow polling while the popup is still open.
-          pollDelayMs = Math.min(5000, pollDelayMs + 500);
-        }
+        pollDelayMs = Math.min(6000, pollDelayMs + 500);
       }
 
       if (!paid) {
@@ -564,7 +524,6 @@ function BookAppointment({ onNavigate, profile }) {
       }
       setSubmitError(error?.message || 'Unable to complete payment. Please try again.');
     } finally {
-      window.removeEventListener('focus', handleFocusReturn);
       focusReturnedAtRef.current = null;
       cancelRequestedRef.current = false;
       if (!succeeded && createdAppointmentId) {
@@ -904,7 +863,7 @@ function BookAppointment({ onNavigate, profile }) {
                     </div>
                     {isPaying && (
                       <div style={{ color: '#94a3b8', fontSize: '0.85rem', marginTop: 12, textAlign: 'center' }}>
-                        Waiting for payment confirmation… If you closed the PayMongo tab, click <strong>Cancel Payment</strong>.
+                        Waiting for payment confirmation… Press <strong>Cancel Payment</strong> if you decide not to continue.
                       </div>
                     )}
                   </>
