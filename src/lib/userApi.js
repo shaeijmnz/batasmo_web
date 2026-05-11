@@ -1598,6 +1598,142 @@ export async function getAppointmentPaymentStatus(transactionId) {
   }
 }
 
+// Sends the "New Consultation Booking" notification to the attorney only
+// after the client successfully completes payment. We dedupe by including the
+// appointment id in the body so retries during polling do not duplicate.
+export async function notifyAttorneyOfPaidBooking({ appointmentId }) {
+  if (!appointmentId) return
+
+  const { data: appt, error: apptError } = await supabase
+    .from('appointments')
+    .select('id, attorney_id, client_id, title, scheduled_at')
+    .eq('id', appointmentId)
+    .maybeSingle()
+
+  if (apptError) {
+    console.warn('[booking] notifyAttorneyOfPaidBooking lookup failed', apptError)
+    return
+  }
+  if (!appt?.attorney_id) return
+
+  const dedupeMarker = `[appt:${appointmentId}]`
+
+  const { data: existing } = await supabase
+    .from('notifications')
+    .select('id')
+    .eq('user_id', appt.attorney_id)
+    .eq('type', 'consultation')
+    .ilike('body', `%${dedupeMarker}%`)
+    .limit(1)
+
+  if (existing && existing.length > 0) return
+
+  let clientName = 'A client'
+  try {
+    const { data: clientProfile } = await supabase
+      .from('profiles')
+      .select('full_name, email')
+      .eq('id', appt.client_id)
+      .maybeSingle()
+    clientName =
+      String(clientProfile?.full_name || '').trim() ||
+      String(clientProfile?.email || '').trim() ||
+      'A client'
+  } catch (lookupError) {
+    console.warn('[booking] failed to resolve client name for notification', lookupError)
+  }
+
+  const whenLabel = appt.scheduled_at
+    ? new Date(appt.scheduled_at).toLocaleString('en-PH', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      })
+    : 'the scheduled time'
+
+  const { error: insertError } = await supabase.from('notifications').insert({
+    user_id: appt.attorney_id,
+    title: 'New Consultation Booking',
+    body: `${clientName} booked ${appt.title || 'a consultation'} on ${whenLabel}. ${dedupeMarker}`,
+    type: 'consultation',
+    is_read: false,
+    created_at: new Date().toISOString(),
+  })
+
+  if (insertError) {
+    console.warn('[booking] failed to create attorney notification', insertError)
+  }
+
+  invalidateAttorneyAppointmentsCache(appt.attorney_id)
+}
+
+// Cancels an appointment that never received a paid transaction (e.g. the
+// client closed the PayMongo popup, the gateway returned failed, or polling
+// timed out). Frees the slot back to availability so it can be rebooked.
+export async function cancelPendingUnpaidBooking({ appointmentId }) {
+  if (!appointmentId) return
+
+  const { data: paidTx, error: txError } = await supabase
+    .from('transactions')
+    .select('id')
+    .eq('appointment_id', appointmentId)
+    .eq('payment_status', 'paid')
+    .limit(1)
+
+  if (txError) {
+    console.warn('[booking] cancel cleanup tx check failed', txError)
+    return
+  }
+  if (paidTx && paidTx.length > 0) return // already paid, do not cancel
+
+  const { data: appt, error: apptError } = await supabase
+    .from('appointments')
+    .select('id, attorney_id, slot_id, slot_date, slot_time, status')
+    .eq('id', appointmentId)
+    .maybeSingle()
+
+  if (apptError) {
+    console.warn('[booking] cancel cleanup appt lookup failed', apptError)
+    return
+  }
+  if (!appt) return
+
+  const currentStatus = String(appt.status || '').toLowerCase()
+  if (currentStatus === 'cancelled' || currentStatus === 'completed') return
+
+  const nowIso = new Date().toISOString()
+
+  const { error: updateError } = await supabase
+    .from('appointments')
+    .update({ status: 'cancelled', updated_at: nowIso })
+    .eq('id', appointmentId)
+
+  if (updateError) {
+    console.warn('[booking] cancel cleanup status update failed', updateError)
+  }
+
+  // Free the underlying availability slot so the time can be rebooked.
+  if (appt.slot_id) {
+    const { error: slotByIdError } = await supabase
+      .from('availability_slots')
+      .update({ is_booked: false, updated_at: nowIso })
+      .eq('id', appt.slot_id)
+    if (slotByIdError) console.warn('[booking] cancel cleanup slot free (by id) failed', slotByIdError)
+  } else if (appt.attorney_id && appt.slot_date && appt.slot_time) {
+    const { error: slotByMatchError } = await supabase
+      .from('availability_slots')
+      .update({ is_booked: false, updated_at: nowIso })
+      .eq('attorney_id', appt.attorney_id)
+      .eq('date', appt.slot_date)
+      .eq('time', appt.slot_time)
+    if (slotByMatchError) console.warn('[booking] cancel cleanup slot free (by match) failed', slotByMatchError)
+  }
+
+  invalidateAttorneyAppointmentsCache(appt.attorney_id)
+}
+
 export async function requestAppointmentReschedule({ appointmentId, scheduledAt, note }) {
   const { error } = await supabase
     .from('appointments')
@@ -2471,10 +2607,6 @@ export async function createAppointmentBooking({
 
   if (appointmentId) {
     try {
-      const rawClientName =
-        String(user.user_metadata?.full_name || '').trim() ||
-        String(user.email || '').trim() ||
-        'A client'
       const whenLabel = new Date(normalizedPayload.scheduled_at).toLocaleString('en-PH', {
         month: 'short',
         day: 'numeric',
@@ -2483,21 +2615,10 @@ export async function createAppointmentBooking({
         minute: '2-digit',
       })
 
-      const { error: notificationError } = await supabase
-        .from('notifications')
-        .insert({
-          user_id: normalizedPayload.attorney_id,
-          title: 'New Consultation Booking',
-          body: `${rawClientName} booked ${normalizedPayload.title || 'a consultation'} on ${whenLabel}.`,
-          type: 'consultation',
-          is_read: false,
-          created_at: nowIso,
-        })
-
-      if (notificationError) {
-        console.warn('[booking] failed to create attorney notification', notificationError)
-      }
-
+      // Attorney is intentionally NOT notified here. The "New Consultation
+      // Booking" notification is only emitted by notifyAttorneyOfPaidBooking()
+      // once the client successfully pays. This keeps the attorney queue and
+      // notification panel clean if the client cancels checkout.
       const { error: clientBookingNotificationError } = await supabase
         .from('notifications')
         .insert({

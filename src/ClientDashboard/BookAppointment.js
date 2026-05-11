@@ -3,11 +3,13 @@ import './BookAppointment.css';
 import './ClientTheme.css';
 import {
   assertNoActiveAppointmentForClient,
+  cancelPendingUnpaidBooking,
   createAppointmentBooking,
   fetchBookableAttorneys,
   getAppointmentPaymentStatus,
   getAvailability,
   invalidateAvailabilityCache,
+  notifyAttorneyOfPaidBooking,
   payForAppointment,
   subscribeToAvailabilitySlots,
 } from '../lib/userApi';
@@ -376,6 +378,8 @@ function BookAppointment({ onNavigate, profile }) {
 
     let checkoutWindow = null;
     let secondBookingConfirmed = false;
+    let createdAppointmentId = null;
+    let succeeded = false;
 
     try {
       setIsPaying(true);
@@ -432,6 +436,7 @@ function BookAppointment({ onNavigate, profile }) {
       if (!appointmentId) {
         throw new Error('Appointment was created but payment session could not start. Please try again.');
       }
+      createdAppointmentId = appointmentId;
 
       const session = await payForAppointment({
         appointmentId,
@@ -451,6 +456,11 @@ function BookAppointment({ onNavigate, profile }) {
 
       const startedAt = Date.now();
       const timeoutMs = 5 * 60 * 1000;
+      // If the checkout popup is closed before payment is confirmed, give the
+      // gateway a short grace window so a successful "paid" status can still
+      // land (some flows close the popup immediately after success).
+      const popupClosedGraceMs = 8000;
+      let popupClosedAt = null;
       let paid = false;
       let pollDelayMs = 2500;
       const waitForNextPoll = (delayMs) =>
@@ -468,6 +478,16 @@ function BookAppointment({ onNavigate, profile }) {
         if (status === 'failed') {
           throw new Error('Payment failed. Please try again.');
         }
+
+        // Detect a client-initiated cancel (popup closed without paying).
+        if (checkoutWindow && checkoutWindow.closed) {
+          if (popupClosedAt === null) {
+            popupClosedAt = Date.now();
+          } else if (Date.now() - popupClosedAt >= popupClosedGraceMs) {
+            throw new Error('Payment was cancelled. Your booking has been released.');
+          }
+        }
+
         // Gradually slow polling to reduce load while waiting.
         pollDelayMs = Math.min(6000, pollDelayMs + 500);
       }
@@ -475,6 +495,13 @@ function BookAppointment({ onNavigate, profile }) {
       if (!paid) {
         throw new Error('Payment is still pending. Complete checkout, then try again in a few seconds.');
       }
+
+      try {
+        await notifyAttorneyOfPaidBooking({ appointmentId });
+      } catch (notifyError) {
+        console.warn('[booking] notify attorney of paid booking failed', notifyError);
+      }
+      succeeded = true;
 
       const parsedDate = new Date(`${selectedDate}T00:00:00`);
       setConfirmedSlot({
@@ -492,6 +519,18 @@ function BookAppointment({ onNavigate, profile }) {
       }
       setSubmitError(error?.message || 'Unable to complete payment. Please try again.');
     } finally {
+      if (!succeeded && createdAppointmentId) {
+        try {
+          await cancelPendingUnpaidBooking({ appointmentId: createdAppointmentId });
+        } catch (cleanupError) {
+          console.warn('[booking] cancel pending unpaid booking failed', cleanupError);
+        }
+        try {
+          invalidateAvailabilityCache();
+        } catch (cacheError) {
+          console.warn('[booking] invalidate availability cache failed', cacheError);
+        }
+      }
       setIsPaying(false);
     }
   };
