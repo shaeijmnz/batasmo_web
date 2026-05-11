@@ -68,6 +68,35 @@ const normalizeDateTimeForUi = (value) => {
   }
 }
 
+/** Positive-fee consultations only surface to the attorney after PayMongo (or legacy) marks the row paid. */
+const isConsultationVisibleToAttorneyAfterPayment = (appt) => {
+  const fee = Number(appt?.amount ?? 0)
+  if (!Number.isFinite(fee) || fee <= 0) return true
+  return Boolean(appt?.consultationPaid)
+}
+
+async function fetchPaidAppointmentIdsForIdList(appointmentIds) {
+  const unique = [...new Set((appointmentIds || []).filter(Boolean))]
+  if (!unique.length) return new Set()
+
+  const paid = new Set()
+  const chunkSize = 120
+  for (let i = 0; i < unique.length; i += chunkSize) {
+    const chunk = unique.slice(i, i + chunkSize)
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('appointment_id')
+      .in('appointment_id', chunk)
+      .eq('payment_status', 'paid')
+
+    if (error) throw error
+    ;(data || []).forEach((row) => {
+      if (row?.appointment_id) paid.add(row.appointment_id)
+    })
+  }
+  return paid
+}
+
 const mapAppointmentRow = (row) => {
   const client = Array.isArray(row?.client) ? row.client[0] : row?.client
   const attorney = Array.isArray(row?.attorney) ? row.attorney[0] : row?.attorney
@@ -105,6 +134,7 @@ const buildDerivedAttorneyNotifications = ({ appointments = [], paidTransactions
 
   const bookingEvents = (appointments || [])
     .filter((item) => {
+      if (!isConsultationVisibleToAttorneyAfterPayment(item)) return false
       const status = String(item?.status || '').toLowerCase()
       return status !== 'cancelled' && status !== 'rejected'
     })
@@ -188,7 +218,12 @@ async function fetchAttorneyAppointments(userId, options = {}) {
 
   if (error) throw error
 
-  const mapped = (data || []).map(mapAppointmentRow)
+  const rows = data || []
+  const paidIds = await fetchPaidAppointmentIdsForIdList(rows.map((r) => r.id))
+  const mapped = rows.map((row) => ({
+    ...mapAppointmentRow(row),
+    consultationPaid: paidIds.has(row.id),
+  }))
   attorneyAppointmentsCache.set(userId, {
     data: mapped,
     updatedAt: now,
@@ -531,12 +566,12 @@ export function subscribeToClientNotifications(userId, onChange) {
   }
 }
 
-export async function fetchAttorneyHomeData(userId) {
+export async function fetchAttorneyHomeData(userId, options = {}) {
   const now = new Date()
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
 
   const [appointments, notificationsRes, notarialRes, transactionsRes] = await Promise.all([
-    fetchAttorneyAppointments(userId),
+    fetchAttorneyAppointments(userId, options),
     supabase
       .from('notifications')
       .select('id, title, body, is_read, created_at')
@@ -560,18 +595,21 @@ export async function fetchAttorneyHomeData(userId) {
   if (transactionsRes.error) throw transactionsRes.error
 
   const pendingCount = appointments.filter(
-    (a) => String(a.status || '').toLowerCase() === 'pending',
+    (a) =>
+      String(a.status || '').toLowerCase() === 'pending' &&
+      isConsultationVisibleToAttorneyAfterPayment(a),
   ).length
 
   const myAppointmentCount = appointments.filter((a) => {
     const status = String(a.status || '').toLowerCase()
-    return status === 'confirmed' || status === 'rescheduled'
+    if (!(status === 'confirmed' || status === 'rescheduled')) return false
+    return isConsultationVisibleToAttorneyAfterPayment(a)
   }).length
 
   const consultations = appointments
     .filter((a) => {
       const status = String(a.status || '').toLowerCase()
-      return (
+      const statusOk =
         status === 'pending' ||
         status === 'confirmed' ||
         status === 'rescheduled' ||
@@ -579,7 +617,8 @@ export async function fetchAttorneyHomeData(userId) {
         status === 'in_progress' ||
         status === 'in-progress' ||
         status === 'active'
-      )
+      if (!statusOk) return false
+      return isConsultationVisibleToAttorneyAfterPayment(a)
     })
     .map((a) => ({
     id: a.id,
@@ -638,19 +677,32 @@ const normalizeConsultationTypeLabel = (title) => {
 }
 
 export async function fetchAttorneyConsultationAnalyticsData(userId) {
-  const { data, error } = await supabase
-    .from('appointments')
-    .select('id, title, status, scheduled_at')
-    .eq('attorney_id', userId)
+  const [apptsRes, paidTxRes] = await Promise.all([
+    supabase
+      .from('appointments')
+      .select('id, title, status, scheduled_at, amount')
+      .eq('attorney_id', userId),
+    supabase
+      .from('transactions')
+      .select('appointment_id')
+      .eq('attorney_id', userId)
+      .eq('payment_status', 'paid')
+      .not('appointment_id', 'is', null),
+  ])
 
-  if (error) throw error
+  if (apptsRes.error) throw apptsRes.error
+  if (paidTxRes.error) throw paidTxRes.error
+
+  const paidIds = new Set((paidTxRes.data || []).map((r) => r.appointment_id).filter(Boolean))
 
   const excludedStatuses = new Set(['rejected', 'cancelled'])
   const countsByType = new Map()
 
-  ;(data || []).forEach((row) => {
+  ;(apptsRes.data || []).forEach((row) => {
     const status = String(row?.status || '').toLowerCase()
     if (excludedStatuses.has(status)) return
+    const fee = Number(row?.amount || 0)
+    if (Number.isFinite(fee) && fee > 0 && !paidIds.has(row.id)) return
 
     const typeLabel = normalizeConsultationTypeLabel(row?.title)
     countsByType.set(typeLabel, Number(countsByType.get(typeLabel) || 0) + 1)
@@ -671,7 +723,7 @@ export async function fetchAttorneyConsultationAnalyticsData(userId) {
 }
 
 export async function fetchAttorneyProfile(userId) {
-  const [profileRes, attorneyRes, consultationsRes, notarialRes] = await Promise.all([
+  const [profileRes, attorneyRes, consultationsRes, notarialRes, paidTxRes] = await Promise.all([
     supabase
       .from('profiles')
       .select('id, full_name, email, phone, address, avatar_url, role, age, guardian_name, guardian_contact')
@@ -684,23 +736,37 @@ export async function fetchAttorneyProfile(userId) {
       .maybeSingle(),
     supabase
       .from('appointments')
-      .select('id, status')
+      .select('id, amount')
       .eq('attorney_id', userId),
     supabase
       .from('notarial_requests')
       .select('id')
       .eq('attorney_id', userId),
+    supabase
+      .from('transactions')
+      .select('appointment_id')
+      .eq('attorney_id', userId)
+      .eq('payment_status', 'paid')
+      .not('appointment_id', 'is', null),
   ])
 
   if (profileRes.error) throw profileRes.error
   if (attorneyRes.error) throw attorneyRes.error
   if (consultationsRes.error) throw consultationsRes.error
   if (notarialRes.error) throw notarialRes.error
+  if (paidTxRes.error) throw paidTxRes.error
+
+  const paidIds = new Set((paidTxRes.data || []).map((r) => r.appointment_id).filter(Boolean))
+  const consultationCount = (consultationsRes.data || []).filter((row) => {
+    const fee = Number(row?.amount || 0)
+    if (!Number.isFinite(fee) || fee <= 0) return true
+    return paidIds.has(row.id)
+  }).length
 
   return {
     profile: profileRes.data,
     attorney: attorneyRes.data,
-    consultationCount: (consultationsRes.data || []).length,
+    consultationCount,
     notarialCount: (notarialRes.data || []).length,
   }
 }
@@ -1805,6 +1871,7 @@ export async function fetchAttorneyConsultationRequests(userId, options = {}) {
 
   const requests = appointments
     .filter((item) => {
+      if (!isConsultationVisibleToAttorneyAfterPayment(item)) return false
       const status = String(item.status || '').toLowerCase()
       return (
         status === 'confirmed' ||
@@ -3164,6 +3231,13 @@ export function subscribeToAttorneyAppointments(attorneyId, onChange) {
     return () => {}
   }
 
+  const notify = () => {
+    invalidateAttorneyAppointmentsCache(attorneyId)
+    if (typeof onChange === 'function') {
+      onChange()
+    }
+  }
+
   const channel = supabase
     .channel(`attorney-appointments:${attorneyId}`)
     .on(
@@ -3174,11 +3248,17 @@ export function subscribeToAttorneyAppointments(attorneyId, onChange) {
         table: 'appointments',
         filter: `attorney_id=eq.${attorneyId}`,
       },
-      () => {
-        if (typeof onChange === 'function') {
-          onChange()
-        }
+      notify,
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'transactions',
+        filter: `attorney_id=eq.${attorneyId}`,
       },
+      notify,
     )
     .subscribe()
 
@@ -3248,6 +3328,7 @@ export async function fetchAttorneyUpcomingAppointments(userId, options = {}) {
 
   return appointments
     .filter((item) => {
+      if (!isConsultationVisibleToAttorneyAfterPayment(item)) return false
       const status = String(item.status || '').toLowerCase()
       return status === 'pending' || status === 'confirmed' || status === 'rescheduled'
     })
