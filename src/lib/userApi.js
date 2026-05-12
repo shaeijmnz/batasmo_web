@@ -2831,16 +2831,58 @@ export async function requestAppointmentReschedule({ appointmentId, scheduledAt,
 // Client-initiated reschedule: same shape as requestAppointmentReschedule but
 // kept under a separate name to match the consumer (MyAppointments.js).
 export async function rescheduleClientAppointment({ appointmentId, scheduledAt, note }) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user?.id) throw new Error('Not authenticated.')
+
+  const { data: appt, error: fetchErr } = await supabase
+    .from('appointments')
+    .select('id, client_id, attorney_id, title, scheduled_at, status, amount')
+    .eq('id', appointmentId)
+    .maybeSingle()
+
+  if (fetchErr) throw fetchErr
+  if (!appt) throw new Error('Appointment not found.')
+  if (String(appt.client_id) !== String(user.id)) {
+    throw new Error('You can only reschedule your own appointments.')
+  }
+
+  const rawStatus = String(appt.status || '').toLowerCase()
+  if (rawStatus === 'completed' || rawStatus === 'cancelled' || rawStatus === 'rejected') {
+    throw new Error('This appointment can no longer be rescheduled.')
+  }
+  if (rawStatus === 'rescheduled') {
+    throw new Error('This appointment was already rescheduled once. Contact admin for further changes.')
+  }
+
+  const schedTs = appt.scheduled_at ? new Date(appt.scheduled_at).getTime() : NaN
+  if (!Number.isFinite(schedTs)) throw new Error('Invalid appointment schedule.')
+  const msUntil = schedTs - Date.now()
+  if (msUntil <= 0) {
+    throw new Error('This consultation date has already passed.')
+  }
+  if (msUntil < 24 * 60 * 60 * 1000) {
+    throw new Error('Rescheduling is only allowed at least 1 day before your consultation.')
+  }
+
+  const amount = Number(appt.amount || 0)
+  if (amount > 0) {
+    const { data: txs, error: txErr } = await supabase
+      .from('transactions')
+      .select('payment_status')
+      .eq('appointment_id', appointmentId)
+    if (txErr) throw txErr
+    const paid = (txs || []).some((t) => String(t.payment_status || '').toLowerCase() === 'paid')
+    if (!paid) {
+      throw new Error('Pay your consultation fee first before rescheduling.')
+    }
+  }
+
   await requestAppointmentReschedule({ appointmentId, scheduledAt, note })
 
   // Notify the attorney so it lands in the bell + queue immediately.
   try {
-    const { data: appt } = await supabase
-      .from('appointments')
-      .select('id, attorney_id, client_id, title')
-      .eq('id', appointmentId)
-      .maybeSingle()
-
     if (appt?.attorney_id) {
       const clientName = await resolveClientDisplayName(appt.client_id)
       const whenLabel = scheduledAt

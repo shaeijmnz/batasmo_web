@@ -209,7 +209,20 @@ function MyAppointments({ onNavigate, profile }) {
         reason: 'Your consultation schedule has already passed. Please contact BatasMo Admin for further reschedule assistance.',
       };
     }
-    if (appointment.hasClientRescheduled) {
+    const amount = Number(appointment.amount || 0);
+    const isPaid = String(appointment.payment || '').toUpperCase() === 'PAID';
+    const isFreeConsultation = amount <= 0;
+    if (!isFreeConsultation && !isPaid) {
+      return {
+        can: false,
+        type: 'policy',
+        title: 'Payment Required',
+        reason:
+          'You can reschedule only after your consultation fee is paid. Complete payment first, then try again.',
+      };
+    }
+    // Any prior reschedule (client or admin) leaves DB status as `rescheduled`.
+    if (status === 'rescheduled') {
       return {
         can: false,
         type: 'admin',
@@ -530,7 +543,7 @@ function MyAppointments({ onNavigate, profile }) {
           <section className="ma-reschedule-note" aria-label="Reschedule notice">
             <p className="ma-reschedule-note__title">Need to reschedule?</p>
             <p className="ma-reschedule-note__text">
-              Clients may reschedule <strong>once only</strong>, and requests must be submitted at least <strong>1 day before</strong> the scheduled consultation.
+              You can reschedule <strong>once only</strong> after your consultation fee is <strong>paid</strong> (free consultations are exempt), and only if you submit the request at least <strong>1 day before</strong> the scheduled time.
               For additional changes, please contact <strong>admin support</strong>.
             </p>
           </section>
