@@ -663,7 +663,7 @@ function MyAppointments({ onNavigate, profile }) {
                   className="ma-btn--submit"
                   onClick={() => {
                     closeReschedulePolicyNotice();
-                    onNavigate('announcements');
+                    onNavigate('support-messages');
                   }}
                 >
                   Contact Admin
