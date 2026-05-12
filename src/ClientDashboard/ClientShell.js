@@ -1,11 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import './ClientShell.css';
 import './ClientTheme.css';
-import { fetchClientNotifications, subscribeToClientNotifications } from '../lib/userApi';
+import {
+  fetchClientNotifications,
+  fetchClientSupportUnreadCount,
+  subscribeToClientNotifications,
+  subscribeToClientSupport,
+} from '../lib/userApi';
 
 const MENU_ITEMS = [
   { key: 'dashboard', label: 'Dashboard', page: 'home-logged' },
   { key: 'booking', label: 'Book Consultation', page: 'book-appointment' },
+  { key: 'messages', label: 'Messages', page: 'support-messages' },
   { key: 'announcements', label: 'Announcement', page: 'announcements' },
   { key: 'history', label: 'Transaction History', page: 'transaction-history' },
   { key: 'logs', label: 'Logs', page: 'client-logs' },
@@ -22,6 +28,7 @@ const PAGE_COPY = {
   profile: 'Manage account preferences and security.',
   'my-notarial-requests': 'Track your consultations and notary services.',
   'notarial-request': 'Track your consultations and notary services.',
+  'support-messages': 'Message BatasMo Admin for help or follow-ups.',
 };
 
 const ACTIVE_MENU_BY_PAGE = {
@@ -35,6 +42,7 @@ const ACTIVE_MENU_BY_PAGE = {
   'client-logs': 'logs',
   announcements: 'announcements',
   profile: 'dashboard',
+  'support-messages': 'messages',
 };
 
 function SidebarIcon({ type }) {
@@ -230,6 +238,7 @@ export default function ClientShell({
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [notifError, setNotifError] = useState('');
+  const [supportUnread, setSupportUnread] = useState(0);
   const contentRef = useRef(null);
   const activeMenu = ACTIVE_MENU_BY_PAGE[currentPage] || 'dashboard';
   const subtitle = PAGE_COPY[currentPage] || PAGE_COPY['home-logged'];
@@ -270,6 +279,31 @@ export default function ClientShell({
       unsubscribe();
     };
   }, [profile?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const refreshSupportUnread = async () => {
+      if (!profile?.id) {
+        setSupportUnread(0);
+        return;
+      }
+      try {
+        const count = await fetchClientSupportUnreadCount(profile.id);
+        if (!cancelled) setSupportUnread(count);
+      } catch {
+        if (!cancelled) setSupportUnread(0);
+      }
+    };
+
+    refreshSupportUnread();
+    const unsubscribe = subscribeToClientSupport(profile?.id, refreshSupportUnread);
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [profile?.id, currentPage]);
 
   useEffect(() => {
     const container = contentRef.current;
@@ -325,6 +359,7 @@ export default function ClientShell({
         <nav className="client-shell-nav" aria-label="Client menu">
           {MENU_ITEMS.map((item) => {
             const isActive = activeMenu === item.key;
+            const showSupportBadge = item.key === 'messages' && supportUnread > 0 && currentPage !== 'support-messages';
             return (
               <button
                 key={item.key}
@@ -334,6 +369,11 @@ export default function ClientShell({
               >
                 <span className="client-shell-nav-icon">
                   <SidebarIcon type={item.key} />
+                  {showSupportBadge ? (
+                    <span className="client-shell-nav-icon__dot" aria-label={`${supportUnread} unread`}>
+                      {supportUnread > 9 ? '9+' : supportUnread}
+                    </span>
+                  ) : null}
                 </span>
                 {sidebarOpen ? <span className="client-shell-nav-label">{item.label}</span> : null}
               </button>

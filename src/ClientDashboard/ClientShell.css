@@ -154,6 +154,25 @@
   display: inline-flex;
   width: 20px;
   height: 20px;
+  position: relative;
+}
+
+.client-shell-nav-icon__dot {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
 }
 
 .client-shell-nav-icon svg {

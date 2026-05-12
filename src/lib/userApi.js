@@ -216,6 +216,305 @@ async function fetchAdminUserIds() {
   return (data || []).map((row) => row?.id).filter(Boolean)
 }
 
+/* ============================================================================
+ * SUPPORT MESSAGES (Client ↔ Admin)
+ * ----------------------------------------------------------------------------
+ * Table: public.support_messages
+ *   id, client_id, sender_id, sender_role ('client'|'admin'), message,
+ *   is_read, created_at
+ *
+ * Realtime is enabled via `alter publication supabase_realtime add table ...`
+ * in the migration. The migration also adds RLS so clients only see/insert
+ * their own thread and admins can read/write all.
+ * ==========================================================================*/
+
+const SUPPORT_TABLE = 'support_messages'
+
+const mapSupportMessage = (row) => ({
+  id: row.id,
+  clientId: row.client_id,
+  senderId: row.sender_id,
+  senderRole: row.sender_role,
+  message: row.message || '',
+  isRead: Boolean(row.is_read),
+  createdAt: row.created_at || null,
+})
+
+export async function fetchClientSupportThread(clientId, options = {}) {
+  if (!clientId) return []
+  const limit = Number(options?.limit || 200)
+
+  const { data, error } = await supabase
+    .from(SUPPORT_TABLE)
+    .select('id, client_id, sender_id, sender_role, message, is_read, created_at')
+    .eq('client_id', clientId)
+    .order('created_at', { ascending: true })
+    .limit(Number.isFinite(limit) ? limit : 200)
+
+  if (error) {
+    if (isMissingRelationError(error)) return []
+    throw error
+  }
+
+  return (data || []).map(mapSupportMessage)
+}
+
+export async function fetchClientSupportUnreadCount(clientId) {
+  if (!clientId) return 0
+  const { count, error } = await supabase
+    .from(SUPPORT_TABLE)
+    .select('id', { count: 'exact', head: true })
+    .eq('client_id', clientId)
+    .eq('sender_role', 'admin')
+    .eq('is_read', false)
+  if (error) {
+    if (isMissingRelationError(error)) return 0
+    console.warn('[support] fetchClientSupportUnreadCount failed', error)
+    return 0
+  }
+  return Number(count || 0)
+}
+
+export async function sendClientSupportMessage({ clientId, message }) {
+  if (!clientId) throw new Error('clientId is required.')
+  const body = String(message || '').trim()
+  if (!body) throw new Error('Message cannot be empty.')
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user?.id) throw new Error('Not authenticated.')
+  if (String(user.id) !== String(clientId)) {
+    throw new Error('You can only send messages from your own account.')
+  }
+
+  const { data, error } = await supabase
+    .from(SUPPORT_TABLE)
+    .insert({
+      client_id: clientId,
+      sender_id: user.id,
+      sender_role: 'client',
+      message: body,
+      is_read: false,
+    })
+    .select('id, client_id, sender_id, sender_role, message, is_read, created_at')
+    .single()
+
+  if (error) throw error
+
+  try {
+    const clientName = await resolveClientDisplayName(clientId)
+    const adminIds = await fetchAdminUserIds()
+    await insertNotificationsForUserIds(adminIds, {
+      title: 'New support message',
+      body: `${clientName}: ${body.slice(0, 140)} [support:${clientId}]`,
+      type: 'admin_general',
+    })
+  } catch (notifyError) {
+    console.warn('[support] admin notify after client send failed', notifyError)
+  }
+
+  return mapSupportMessage(data)
+}
+
+export async function markClientSupportMessagesAsRead(clientId) {
+  if (!clientId) return
+  const { error } = await supabase
+    .from(SUPPORT_TABLE)
+    .update({ is_read: true })
+    .eq('client_id', clientId)
+    .eq('sender_role', 'admin')
+    .eq('is_read', false)
+  if (error && !isMissingRelationError(error)) {
+    console.warn('[support] markClientSupportMessagesAsRead failed', error)
+  }
+}
+
+export function subscribeToClientSupport(clientId, onChange) {
+  if (!clientId) return () => {}
+  const channel = supabase
+    .channel(`support_client_${clientId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: SUPPORT_TABLE,
+        filter: `client_id=eq.${clientId}`,
+      },
+      () => {
+        try {
+          onChange?.()
+        } catch (err) {
+          console.warn('[support] client subscriber callback error', err)
+        }
+      },
+    )
+    .subscribe()
+
+  return () => {
+    try {
+      supabase.removeChannel(channel)
+    } catch {
+      // ignore
+    }
+  }
+}
+
+/** Admin side: list all clients who have a thread, with the latest message preview + unread count from client. */
+export async function fetchAdminSupportThreads(options = {}) {
+  const limit = Number(options?.limit || 100)
+
+  const { data, error } = await supabase
+    .from(SUPPORT_TABLE)
+    .select('id, client_id, sender_id, sender_role, message, is_read, created_at')
+    .order('created_at', { ascending: false })
+    .limit(Number.isFinite(limit) ? limit : 100)
+
+  if (error) {
+    if (isMissingRelationError(error)) return []
+    throw error
+  }
+
+  const byClient = new Map()
+  for (const row of data || []) {
+    const cid = row.client_id
+    if (!cid) continue
+    const existing = byClient.get(cid)
+    if (!existing) {
+      byClient.set(cid, {
+        clientId: cid,
+        lastMessage: row.message || '',
+        lastSenderRole: row.sender_role,
+        lastAt: row.created_at,
+        unreadFromClient: row.sender_role === 'client' && !row.is_read ? 1 : 0,
+      })
+    } else if (row.sender_role === 'client' && !row.is_read) {
+      existing.unreadFromClient += 1
+    }
+  }
+
+  const clientIds = [...byClient.keys()]
+  if (!clientIds.length) return []
+
+  const { data: profiles, error: profilesError } = await supabase
+    .from('profiles')
+    .select('id, full_name, email')
+    .in('id', clientIds)
+  if (profilesError) {
+    console.warn('[support] fetchAdminSupportThreads profile lookup failed', profilesError)
+  }
+  const profileById = new Map((profiles || []).map((p) => [p.id, p]))
+
+  return [...byClient.values()]
+    .map((row) => {
+      const profile = profileById.get(row.clientId)
+      return {
+        ...row,
+        clientName: profile?.full_name || profile?.email || 'Client',
+      }
+    })
+    .sort((a, b) => String(b.lastAt || '').localeCompare(String(a.lastAt || '')))
+}
+
+export async function fetchAdminSupportMessages(clientId) {
+  if (!clientId) return []
+  const { data, error } = await supabase
+    .from(SUPPORT_TABLE)
+    .select('id, client_id, sender_id, sender_role, message, is_read, created_at')
+    .eq('client_id', clientId)
+    .order('created_at', { ascending: true })
+    .limit(500)
+
+  if (error) {
+    if (isMissingRelationError(error)) return []
+    throw error
+  }
+  return (data || []).map(mapSupportMessage)
+}
+
+export async function sendAdminSupportMessage({ clientId, message }) {
+  if (!clientId) throw new Error('clientId is required.')
+  const body = String(message || '').trim()
+  if (!body) throw new Error('Message cannot be empty.')
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user?.id) throw new Error('Not authenticated.')
+
+  const { data, error } = await supabase
+    .from(SUPPORT_TABLE)
+    .insert({
+      client_id: clientId,
+      sender_id: user.id,
+      sender_role: 'admin',
+      message: body,
+      is_read: false,
+    })
+    .select('id, client_id, sender_id, sender_role, message, is_read, created_at')
+    .single()
+
+  if (error) throw error
+
+  try {
+    await supabase.from('notifications').insert({
+      user_id: clientId,
+      title: 'Message from BatasMo Admin',
+      body: `${body.slice(0, 140)} [support:${clientId}]`,
+      type: 'admin_general',
+      is_read: false,
+      created_at: new Date().toISOString(),
+    })
+  } catch (e) {
+    console.warn('[support] client notify after admin send failed', e)
+  }
+
+  return mapSupportMessage(data)
+}
+
+export async function markAdminSupportMessagesAsRead(clientId) {
+  if (!clientId) return
+  const { error } = await supabase
+    .from(SUPPORT_TABLE)
+    .update({ is_read: true })
+    .eq('client_id', clientId)
+    .eq('sender_role', 'client')
+    .eq('is_read', false)
+  if (error && !isMissingRelationError(error)) {
+    console.warn('[support] markAdminSupportMessagesAsRead failed', error)
+  }
+}
+
+export function subscribeToAdminSupport(onChange) {
+  const channel = supabase
+    .channel('support_admin_all')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: SUPPORT_TABLE,
+      },
+      () => {
+        try {
+          onChange?.()
+        } catch (err) {
+          console.warn('[support] admin subscriber callback error', err)
+        }
+      },
+    )
+    .subscribe()
+
+  return () => {
+    try {
+      supabase.removeChannel(channel)
+    } catch {
+      // ignore
+    }
+  }
+}
+
 async function insertNotificationsForUserIds(userIds, { title, body, type = 'general' }) {
   const unique = [...new Set((userIds || []).filter(Boolean))]
   if (!unique.length) return

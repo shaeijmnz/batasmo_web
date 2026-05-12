@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import AttorneyNotificationDropdown from '../AttorneyDashboard/AttorneyNotificationDropdown';
+import AdminSupportDrawer from './AdminSupportDrawer';
 import {
   fetchAdminHomeNotifications,
   markAdminNotificationsAsRead,
@@ -170,6 +171,8 @@ const Dashboard = ({ onNavigate }) => {
   const [adminNotifOpen, setAdminNotifOpen] = useState(false);
   const [adminMarkAllReadCutoffIso, setAdminMarkAllReadCutoffIso] = useState('');
   const [isMarkingAdminNotificationsRead, setIsMarkingAdminNotificationsRead] = useState(false);
+  const [supportOpen, setSupportOpen] = useState(false);
+  const [supportUnreadCount, setSupportUnreadCount] = useState(0);
   const adminMarkAllReadStorageKey = `admin-notifications-read-cutoff:${adminUserId || 'unknown'}`;
 
   const showToast = (message, type = 'success') => {
@@ -974,6 +977,18 @@ const Dashboard = ({ onNavigate }) => {
                 <button
                   type="button"
                   className="adm-icon-btn"
+                  onClick={() => setSupportOpen(true)}
+                  aria-label="Client messages"
+                  title="Client messages"
+                >
+                  <MessageSquare size={20} />
+                  {supportUnreadCount > 0 ? (
+                    <span className="adm-notif-badge">{formatNotifBadgeCount(supportUnreadCount)}</span>
+                  ) : null}
+                </button>
+                <button
+                  type="button"
+                  className="adm-icon-btn"
                   onClick={() => setAdminNotifOpen((v) => !v)}
                   aria-expanded={adminNotifOpen}
                   aria-haspopup="dialog"
@@ -1125,6 +1140,12 @@ const Dashboard = ({ onNavigate }) => {
           onClose={() => setActiveModal(null)}
         />
       )}
+
+      <AdminSupportDrawer
+        open={supportOpen}
+        onClose={() => setSupportOpen(false)}
+        onUnreadChange={setSupportUnreadCount}
+      />
 
       {documentPreview.open ? (
         <DocumentPreviewModal
