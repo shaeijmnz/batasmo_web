@@ -303,6 +303,13 @@
   font-size: 14px;
 }
 
+.adm-support-sched__hint {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: #4b5563;
+}
+
 .adm-support-sched__head button {
   border: 0;
   background: transparent;

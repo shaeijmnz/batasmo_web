@@ -184,6 +184,14 @@ export default function AdminSupportDrawer({ open, onClose, onUnreadChange }) {
   }, [scheduleOpen, activeClientId]);
 
   useEffect(() => {
+    if (!pickedAppointmentId || !clientAppointments.length) return;
+    const appt = clientAppointments.find((a) => a.id === pickedAppointmentId);
+    if (appt?.attorneyId) {
+      setPickedAttorneyId((prev) => (prev === appt.attorneyId ? prev : appt.attorneyId));
+    }
+  }, [pickedAppointmentId, clientAppointments]);
+
+  useEffect(() => {
     if (!scheduleOpen || !pickedAttorneyId || !pickedDate) {
       setFreeSlots([]);
       setSelectedSlotIds([]);
@@ -442,6 +450,12 @@ export default function AdminSupportDrawer({ open, onClose, onUnreadChange }) {
                         ✕
                       </button>
                     </div>
+                    <p className="adm-support-sched__hint">
+                      After the client replies with a time, pick the <strong>same date</strong> here, tick{' '}
+                      <strong>exactly one</strong> matching slot, choose their appointment below, then click{' '}
+                      <strong>Set as new schedule</strong>. That updates the appointment for both the client and
+                      attorney queues and sends notifications.
+                    </p>
 
                     <div className="adm-support-sched__row">
                       <label>

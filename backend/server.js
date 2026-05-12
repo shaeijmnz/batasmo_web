@@ -514,6 +514,12 @@ const requirePaymentConfig = () => {
   }
 }
 
+const requireSupabaseServiceConfig = () => {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error('SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY are not configured.')
+  }
+}
+
 const supabaseRestHeaders = () => ({
   apikey: SUPABASE_SERVICE_ROLE_KEY,
   Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
@@ -689,6 +695,209 @@ const supabaseRestPatch = async ({ table, query, body }) => {
     throw new Error(payload?.message || payload?.error || `Supabase patch ${table} failed (${response.status})`)
   }
   return payload
+}
+
+const resolveNewScheduledFromSlotRow = (slot) => {
+  if (!slot) return null
+  if (slot.date && slot.time) {
+    return parseSlotDateTimeNode(slot.date, slot.time)
+  }
+  if (slot.start_time) {
+    const d = new Date(slot.start_time)
+    return Number.isNaN(d.getTime()) ? null : d
+  }
+  return null
+}
+
+const verifySupabaseUserJwt = async (jwt) => {
+  if (!jwt || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error('Missing auth token or Supabase configuration.')
+  }
+  const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${jwt}`,
+    },
+  })
+  const payload = await response.json().catch(() => null)
+  if (!response.ok) {
+    throw new Error(payload?.msg || payload?.message || 'Invalid or expired session.')
+  }
+  if (!payload?.id) throw new Error('Invalid session user.')
+  return payload
+}
+
+const verifyCallerIsAdmin = async (jwt) => {
+  const user = await verifySupabaseUserJwt(jwt)
+  const profile = await supabaseSelectSingle({
+    table: 'profiles',
+    query: new URLSearchParams({ id: `eq.${user.id}` }).toString(),
+  })
+  const role = String(profile?.role || '').toLowerCase()
+  if (role !== 'admin') {
+    throw new Error('Only Admin users can reschedule appointments this way.')
+  }
+  return user.id
+}
+
+/**
+ * Admin reschedule using the service role (bypasses RLS on appointments / slots).
+ */
+const supabaseAdminRescheduleConsultation = async ({ appointmentId, newSlotId }) => {
+  const appt = await supabaseSelectSingle({
+    table: 'appointments',
+    query: new URLSearchParams({ id: `eq.${appointmentId}` }).toString(),
+  })
+  if (!appt) throw new Error('Appointment not found.')
+
+  const newSlot = await supabaseSelectSingle({
+    table: 'availability_slots',
+    query: new URLSearchParams({ id: `eq.${newSlotId}` }).toString(),
+  })
+  if (!newSlot) throw new Error('Selected slot no longer exists.')
+  if (newSlot.is_booked) throw new Error('Selected slot is already booked.')
+  if (appt.attorney_id && newSlot.attorney_id && appt.attorney_id !== newSlot.attorney_id) {
+    throw new Error('Selected slot belongs to a different attorney than this appointment.')
+  }
+
+  const parsedStart = resolveNewScheduledFromSlotRow(newSlot)
+  if (!parsedStart) throw new Error('Selected slot has invalid date/time.')
+  const newScheduledIso = parsedStart.toISOString()
+  const nowIso = new Date().toISOString()
+
+  let oldSlotIdToFree = appt.slot_id || null
+  if (!oldSlotIdToFree && appt.attorney_id && appt.slot_date && appt.slot_time) {
+    const candidates = await supabaseRestGetMany({
+      table: 'availability_slots',
+      query: new URLSearchParams({
+        attorney_id: `eq.${appt.attorney_id}`,
+        date: `eq.${appt.slot_date}`,
+      }).toString(),
+    })
+    const targetMs = parseSlotDateTimeNode(appt.slot_date, appt.slot_time)?.getTime() || 0
+    const match = candidates.find((row) => {
+      const parsed = parseSlotDateTimeNode(appt.slot_date, row.time)
+      return parsed && parsed.getTime() === targetMs
+    })
+    oldSlotIdToFree = match?.id || null
+  }
+
+  if (oldSlotIdToFree && oldSlotIdToFree !== newSlot.id) {
+    try {
+      await supabaseRestPatch({
+        table: 'availability_slots',
+        query: new URLSearchParams({ id: `eq.${oldSlotIdToFree}` }).toString(),
+        body: { is_booked: false, updated_at: nowIso },
+      })
+    } catch (e) {
+      console.warn('[admin-reschedule] free old slot failed', e?.message || e)
+    }
+  }
+
+  await supabaseRestPatch({
+    table: 'availability_slots',
+    query: new URLSearchParams({ id: `eq.${newSlot.id}`, is_booked: 'eq.false' }).toString(),
+    body: { is_booked: true, updated_at: nowIso },
+  })
+
+  const slotDate = newSlot.date || (newSlot.start_time ? newScheduledIso.slice(0, 10) : null)
+  const slotTime =
+    newSlot.time ||
+    (newSlot.start_time
+      ? (() => {
+          const d = new Date(newSlot.start_time)
+          const h = d.getHours()
+          const m = d.getMinutes()
+          const period = h >= 12 ? 'PM' : 'AM'
+          const nh = h % 12 || 12
+          return `${toTwoDigits(nh)}:${toTwoDigits(m)} ${period}`
+        })()
+      : null)
+
+  const richUpdate = {
+    scheduled_at: newScheduledIso,
+    slot_id: newSlot.id,
+    slot_date: slotDate,
+    slot_time: slotTime,
+    status: 'rescheduled',
+    updated_at: nowIso,
+  }
+
+  try {
+    await supabaseRestPatch({
+      table: 'appointments',
+      query: new URLSearchParams({ id: `eq.${appointmentId}` }).toString(),
+      body: richUpdate,
+    })
+  } catch (e) {
+    console.warn('[admin-reschedule] full appointment update failed, retrying minimal', e?.message || e)
+    try {
+      await supabaseRestPatch({
+        table: 'appointments',
+        query: new URLSearchParams({ id: `eq.${appointmentId}` }).toString(),
+        body: {
+          scheduled_at: newScheduledIso,
+          status: 'rescheduled',
+          updated_at: nowIso,
+        },
+      })
+    } catch (e2) {
+      await supabaseRestPatch({
+        table: 'availability_slots',
+        query: new URLSearchParams({ id: `eq.${newSlot.id}` }).toString(),
+        body: { is_booked: false, updated_at: nowIso },
+      })
+      throw e2
+    }
+  }
+
+  const whenLabel = parsedStart.toLocaleString('en-PH', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+
+  const clientName = await resolveClientDisplayNameForAbandon(appt.client_id)
+  const marker = `[adminresched:${appointmentId}:${newScheduledIso.slice(0, 24)}]`
+
+  if (appt.attorney_id) {
+    await supabaseInsertNotification({
+      userId: appt.attorney_id,
+      title: 'Appointment rescheduled by Admin',
+      body: `${clientName}'s ${appt.title || 'consultation'} was moved to ${whenLabel} by an admin.`,
+      type: 'consultation',
+    })
+  }
+  if (appt.client_id) {
+    await supabaseInsertNotification({
+      userId: appt.client_id,
+      title: 'Your consultation was rescheduled',
+      body: `Admin moved your ${appt.title || 'consultation'} to ${whenLabel}.`,
+      type: 'reschedule',
+    })
+  }
+
+  const admins = await supabaseRestGetMany({
+    table: 'profiles',
+    query: new URLSearchParams({ role: 'eq.Admin' }).toString(),
+  })
+  for (const row of admins) {
+    if (!row?.id) continue
+    try {
+      await supabaseInsertNotification({
+        userId: row.id,
+        title: 'Admin reschedule recorded',
+        body: `Appointment ${String(appointmentId).slice(0, 8)}… moved to ${whenLabel}. ${marker}`,
+        type: 'admin_general',
+      })
+    } catch (e) {
+      console.warn('[admin-reschedule] admin echo notify failed', row.id, e?.message || e)
+    }
+  }
+
+  return { newScheduledIso, slotId: newSlot.id, whenLabel }
 }
 
 const resolveClientDisplayNameForAbandon = async (clientId) => {
@@ -1281,6 +1490,39 @@ app.post('/payments/appointments/abandon', async (req, res) => {
     return res.status(200).json(result)
   } catch (error) {
     return res.status(500).json({ error: error?.message || 'Unable to abandon checkout.' })
+  }
+})
+
+// Admin reschedules a client's consultation — service role bypasses RLS.
+app.post('/admin/appointments/reschedule', async (req, res) => {
+  try {
+    requireSupabaseServiceConfig()
+
+    const authHeader = String(req.headers.authorization || '').trim()
+    const jwt = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
+    if (!jwt) {
+      return res.status(401).json({ error: 'Authorization Bearer token is required.' })
+    }
+
+    await verifyCallerIsAdmin(jwt)
+
+    const appointmentId = String(req.body?.appointmentId || '').trim()
+    const newSlotId = String(req.body?.newSlotId || '').trim()
+    if (!appointmentId || !newSlotId) {
+      return res.status(400).json({ error: 'appointmentId and newSlotId are required.' })
+    }
+
+    const result = await supabaseAdminRescheduleConsultation({ appointmentId, newSlotId })
+    return res.status(200).json(result)
+  } catch (error) {
+    const msg = error?.message || 'Unable to reschedule appointment.'
+    const status =
+      msg.includes('Only Admin') || msg.includes('Invalid') || msg.includes('session')
+        ? 403
+        : msg.includes('Not authenticated') || msg.includes('Bearer')
+          ? 401
+          : 500
+    return res.status(status).json({ error: msg })
   }
 })
 

@@ -627,8 +627,43 @@ export async function fetchClientActiveAppointmentsForAdmin(clientId) {
  * Admin-driven reschedule: frees the old slot, books the new slot, updates the
  * appointment to point at the new slot, and notifies the client + attorney +
  * other admins.
+ *
+ * Prefer the Render backend (`POST /admin/appointments/reschedule`) so updates
+ * succeed even when RLS blocks the browser Supabase client; falls back to the
+ * browser client if the backend is unreachable.
  */
 export async function adminRescheduleAppointment({ appointmentId, newSlotId }) {
+  const session = (await supabase.auth.getSession())?.data?.session
+  if (session?.access_token) {
+    try {
+      const baseUrl = resolvePaymentApiBaseUrl()
+      const response = await fetch(`${baseUrl}/admin/appointments/reschedule`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ appointmentId, newSlotId }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (response.ok) {
+        return {
+          newScheduledIso: payload.newScheduledIso,
+          slotId: payload.slotId,
+        }
+      }
+      if (response.status === 401 || response.status === 403) {
+        throw new Error(payload?.error || payload?.message || 'Not authorized to reschedule.')
+      }
+      console.warn('[admin-schedule] backend reschedule HTTP', response.status, payload?.error || payload)
+    } catch (e) {
+      if (e?.message && (e.message.includes('Not authorized') || e.message.includes('Invalid session'))) {
+        throw e
+      }
+      console.warn('[admin-schedule] backend reschedule request failed, using direct Supabase', e?.message || e)
+    }
+  }
+
   if (!appointmentId) throw new Error('appointmentId required')
   if (!newSlotId) throw new Error('newSlotId required')
 
@@ -642,7 +677,7 @@ export async function adminRescheduleAppointment({ appointmentId, newSlotId }) {
 
   const { data: newSlot, error: newSlotErr } = await supabase
     .from('availability_slots')
-    .select('id, attorney_id, date, time, is_booked')
+    .select('*')
     .eq('id', newSlotId)
     .maybeSingle()
   if (newSlotErr) throw newSlotErr
@@ -652,10 +687,22 @@ export async function adminRescheduleAppointment({ appointmentId, newSlotId }) {
     throw new Error('Selected slot belongs to a different attorney than this appointment.')
   }
 
-  const parsedStart = parseSlotDateTime(newSlot.date, newSlot.time)
+  let parsedStart = parseSlotDateTime(newSlot.date, newSlot.time)
+  if (!parsedStart && newSlot.start_time) {
+    const d = new Date(newSlot.start_time)
+    parsedStart = Number.isNaN(d.getTime()) ? null : d
+  }
   if (!parsedStart) throw new Error('Selected slot has invalid date/time.')
   const newScheduledIso = parsedStart.toISOString()
   const nowIso = new Date().toISOString()
+
+  const slotDateForUpdate =
+    newSlot.date || (newSlot.start_time ? newScheduledIso.slice(0, 10) : null)
+  const slotTimeForUpdate =
+    newSlot.time ||
+    (newSlot.start_time
+      ? formatSlotTime(new Date(newSlot.start_time))
+      : null)
 
   // Free the previous slot first so it can be rebooked by others. Best-effort.
   let oldSlotIdToFree = appt.slot_id || null
@@ -698,8 +745,8 @@ export async function adminRescheduleAppointment({ appointmentId, newSlotId }) {
   const richUpdate = {
     scheduled_at: newScheduledIso,
     slot_id: newSlot.id,
-    slot_date: newSlot.date,
-    slot_time: newSlot.time,
+    slot_date: slotDateForUpdate,
+    slot_time: slotTimeForUpdate,
     status: 'rescheduled',
     updated_at: nowIso,
   }
@@ -729,7 +776,7 @@ export async function adminRescheduleAppointment({ appointmentId, newSlotId }) {
 
   // Cache invalidation
   invalidateAvailabilityCache(appt.attorney_id, appt.slot_date)
-  invalidateAvailabilityCache(newSlot.attorney_id || appt.attorney_id, newSlot.date)
+  invalidateAvailabilityCache(newSlot.attorney_id || appt.attorney_id, newSlot.date || slotDateForUpdate)
   invalidateAttorneyAppointmentsCache(appt.attorney_id)
 
   // Notifications
