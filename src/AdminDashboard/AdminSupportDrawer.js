@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  adminRescheduleAppointment,
   fetchAdminSupportMessages,
   fetchAdminSupportThreads,
+  fetchAttorneyFreeSlotsForDate,
+  fetchAttorneysForAdminPicker,
+  fetchClientActiveAppointmentsForAdmin,
   markAdminSupportMessagesAsRead,
   sendAdminSupportMessage,
   subscribeToAdminSupport,
@@ -28,6 +32,27 @@ function formatTimeLabel(value) {
   });
 }
 
+function formatScheduleDateLabel(value) {
+  if (!value) return 'TBD';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return 'TBD';
+  return parsed.toLocaleString('en-PH', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function todayIso() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 export default function AdminSupportDrawer({ open, onClose, onUnreadChange }) {
   const [threads, setThreads] = useState([]);
   const [activeClientId, setActiveClientId] = useState('');
@@ -36,6 +61,18 @@ export default function AdminSupportDrawer({ open, onClose, onUnreadChange }) {
   const [sending, setSending] = useState(false);
   const [loadError, setLoadError] = useState('');
   const scrollRef = useRef(null);
+
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [attorneys, setAttorneys] = useState([]);
+  const [pickedAttorneyId, setPickedAttorneyId] = useState('');
+  const [pickedDate, setPickedDate] = useState(todayIso());
+  const [freeSlots, setFreeSlots] = useState([]);
+  const [selectedSlotIds, setSelectedSlotIds] = useState([]);
+  const [clientAppointments, setClientAppointments] = useState([]);
+  const [pickedAppointmentId, setPickedAppointmentId] = useState('');
+  const [scheduleBusy, setScheduleBusy] = useState(false);
+  const [scheduleError, setScheduleError] = useState('');
+  const [scheduleNotice, setScheduleNotice] = useState('');
 
   const totalUnread = useMemo(
     () => threads.reduce((acc, t) => acc + (t.unreadFromClient || 0), 0),
@@ -70,6 +107,16 @@ export default function AdminSupportDrawer({ open, onClose, onUnreadChange }) {
   }, [totalUnread, onUnreadChange]);
 
   useEffect(() => {
+    // Reset the schedule panel state whenever the admin switches threads.
+    setScheduleOpen(false);
+    setSelectedSlotIds([]);
+    setPickedAppointmentId('');
+    setPickedAttorneyId('');
+    setScheduleError('');
+    setScheduleNotice('');
+  }, [activeClientId]);
+
+  useEffect(() => {
     if (!open || !activeClientId) return;
     let cancelled = false;
     const load = async () => {
@@ -94,6 +141,170 @@ export default function AdminSupportDrawer({ open, onClose, onUnreadChange }) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages.length]);
+
+  useEffect(() => {
+    if (!scheduleOpen) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await fetchAttorneysForAdminPicker();
+        if (cancelled) return;
+        setAttorneys(list);
+      } catch (err) {
+        if (!cancelled) setScheduleError(err.message || 'Failed to load attorneys.');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [scheduleOpen]);
+
+  useEffect(() => {
+    if (!scheduleOpen || !activeClientId) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await fetchClientActiveAppointmentsForAdmin(activeClientId);
+        if (cancelled) return;
+        setClientAppointments(list);
+        if (list.length === 1) {
+          setPickedAppointmentId(list[0].id);
+          if (!pickedAttorneyId && list[0].attorneyId) {
+            setPickedAttorneyId(list[0].attorneyId);
+          }
+        }
+      } catch (err) {
+        if (!cancelled) setScheduleError(err.message || 'Failed to load client appointments.');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scheduleOpen, activeClientId]);
+
+  useEffect(() => {
+    if (!scheduleOpen || !pickedAttorneyId || !pickedDate) {
+      setFreeSlots([]);
+      setSelectedSlotIds([]);
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        setScheduleError('');
+        const slots = await fetchAttorneyFreeSlotsForDate(pickedAttorneyId, pickedDate);
+        if (cancelled) return;
+        setFreeSlots(slots);
+        setSelectedSlotIds([]);
+      } catch (err) {
+        if (!cancelled) setScheduleError(err.message || 'Failed to load slots.');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [scheduleOpen, pickedAttorneyId, pickedDate]);
+
+  const toggleSlot = (slotId) => {
+    setSelectedSlotIds((previous) =>
+      previous.includes(slotId) ? previous.filter((id) => id !== slotId) : [...previous, slotId],
+    );
+  };
+
+  const resetSchedulePanel = () => {
+    setScheduleOpen(false);
+    setScheduleError('');
+    setScheduleNotice('');
+    setSelectedSlotIds([]);
+    setPickedAppointmentId('');
+  };
+
+  const selectedAttorneyName = useMemo(() => {
+    const found = attorneys.find((a) => a.id === pickedAttorneyId);
+    return found?.name || '';
+  }, [attorneys, pickedAttorneyId]);
+
+  const composeSlotsMessage = () => {
+    const chosen = freeSlots.filter((s) => selectedSlotIds.includes(s.id));
+    if (!chosen.length) return '';
+    const lines = chosen.map((s) => `• ${pickedDate} at ${s.label}`);
+    const header = `Available schedule with ${selectedAttorneyName || 'the attorney'}:`;
+    const footer = 'Please reply with your preferred slot so we can confirm the reschedule.';
+    return `${header}\n${lines.join('\n')}\n\n${footer}`;
+  };
+
+  const handleSendSlotsToChat = async () => {
+    if (!activeClientId) return;
+    const body = composeSlotsMessage();
+    if (!body) {
+      setScheduleError('Pick at least one slot first.');
+      return;
+    }
+    try {
+      setScheduleBusy(true);
+      setScheduleError('');
+      const sent = await sendAdminSupportMessage({ clientId: activeClientId, message: body });
+      setMessages((previous) => (previous.some((m) => m.id === sent.id) ? previous : [...previous, sent]));
+      setScheduleNotice('Sent to client chat.');
+      refreshThreads();
+    } catch (err) {
+      setScheduleError(err.message || 'Failed to send.');
+    } finally {
+      setScheduleBusy(false);
+    }
+  };
+
+  const handleSetNewSchedule = async () => {
+    if (!activeClientId) return;
+    if (selectedSlotIds.length !== 1) {
+      setScheduleError('Pick exactly one slot to set as the new schedule.');
+      return;
+    }
+    if (!pickedAppointmentId) {
+      setScheduleError('Pick which client appointment to reschedule.');
+      return;
+    }
+    const slotId = selectedSlotIds[0];
+    try {
+      setScheduleBusy(true);
+      setScheduleError('');
+      const result = await adminRescheduleAppointment({
+        appointmentId: pickedAppointmentId,
+        newSlotId: slotId,
+      });
+
+      // Also drop a confirmation message in the chat thread for paper trail.
+      const slot = freeSlots.find((s) => s.id === slotId);
+      const whenLabel = formatScheduleDateLabel(result.newScheduledIso);
+      const body =
+        `Reschedule confirmed by Admin.\n` +
+        `New schedule: ${whenLabel}${selectedAttorneyName ? ` with ${selectedAttorneyName}` : ''}.\n` +
+        `(Slot: ${pickedDate} at ${slot?.label || ''})`;
+      try {
+        const sent = await sendAdminSupportMessage({ clientId: activeClientId, message: body });
+        setMessages((previous) =>
+          previous.some((m) => m.id === sent.id) ? previous : [...previous, sent],
+        );
+      } catch (err) {
+        console.warn('[support] reschedule chat ack failed', err);
+      }
+
+      setScheduleNotice('Schedule updated. Client & attorney notified.');
+      setSelectedSlotIds([]);
+      // Refresh free-slots so the booked one disappears.
+      const fresh = await fetchAttorneyFreeSlotsForDate(pickedAttorneyId, pickedDate);
+      setFreeSlots(fresh);
+      // Refresh client's appointment list.
+      const refreshedAppts = await fetchClientActiveAppointmentsForAdmin(activeClientId);
+      setClientAppointments(refreshedAppts);
+      refreshThreads();
+    } catch (err) {
+      setScheduleError(err.message || 'Failed to reschedule.');
+    } finally {
+      setScheduleBusy(false);
+    }
+  };
 
   const handleSend = async (event) => {
     event.preventDefault();
@@ -196,6 +407,14 @@ export default function AdminSupportDrawer({ open, onClose, onUnreadChange }) {
                 </div>
 
                 <form className="adm-support-drawer__composer" onSubmit={handleSend}>
+                  <button
+                    type="button"
+                    className="adm-support-drawer__sched-btn"
+                    onClick={() => setScheduleOpen((v) => !v)}
+                    title="Send available schedule or set a new schedule"
+                  >
+                    {scheduleOpen ? 'Hide schedule helper' : 'Send available schedule'}
+                  </button>
                   <textarea
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
@@ -214,6 +433,121 @@ export default function AdminSupportDrawer({ open, onClose, onUnreadChange }) {
                     {sending ? 'Sending…' : 'Send'}
                   </button>
                 </form>
+
+                {scheduleOpen ? (
+                  <div className="adm-support-sched">
+                    <div className="adm-support-sched__head">
+                      <strong>Schedule helper</strong>
+                      <button type="button" onClick={resetSchedulePanel} aria-label="Close">
+                        ✕
+                      </button>
+                    </div>
+
+                    <div className="adm-support-sched__row">
+                      <label>
+                        <span>Attorney</span>
+                        <select
+                          value={pickedAttorneyId}
+                          onChange={(e) => setPickedAttorneyId(e.target.value)}
+                        >
+                          <option value="">Select attorney</option>
+                          {attorneys.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        <span>Date</span>
+                        <input
+                          type="date"
+                          value={pickedDate}
+                          min={todayIso()}
+                          onChange={(e) => setPickedDate(e.target.value)}
+                        />
+                      </label>
+                    </div>
+
+                    <div className="adm-support-sched__slots">
+                      {pickedAttorneyId ? (
+                        freeSlots.length ? (
+                          freeSlots.map((s) => {
+                            const checked = selectedSlotIds.includes(s.id);
+                            return (
+                              <label
+                                key={s.id}
+                                className={`adm-support-sched__slot ${checked ? 'adm-support-sched__slot--on' : ''}`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => toggleSlot(s.id)}
+                                />
+                                <span>{s.label}</span>
+                              </label>
+                            );
+                          })
+                        ) : (
+                          <p className="adm-support-sched__empty">
+                            No open slots for this attorney on the selected date.
+                          </p>
+                        )
+                      ) : (
+                        <p className="adm-support-sched__empty">Pick an attorney to see slots.</p>
+                      )}
+                    </div>
+
+                    {clientAppointments.length > 0 ? (
+                      <label className="adm-support-sched__appt">
+                        <span>Reschedule which appointment?</span>
+                        <select
+                          value={pickedAppointmentId}
+                          onChange={(e) => setPickedAppointmentId(e.target.value)}
+                        >
+                          <option value="">— select appointment —</option>
+                          {clientAppointments.map((appt) => (
+                            <option key={appt.id} value={appt.id}>
+                              {appt.title} • {formatScheduleDateLabel(appt.scheduledAt)}
+                              {appt.attorneyName ? ` (${appt.attorneyName})` : ''} —{' '}
+                              {appt.status}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
+
+                    {scheduleError ? (
+                      <div className="adm-support-sched__error">{scheduleError}</div>
+                    ) : null}
+                    {scheduleNotice ? (
+                      <div className="adm-support-sched__notice">{scheduleNotice}</div>
+                    ) : null}
+
+                    <div className="adm-support-sched__actions">
+                      <button
+                        type="button"
+                        className="adm-support-sched__btn adm-support-sched__btn--ghost"
+                        disabled={scheduleBusy || selectedSlotIds.length === 0}
+                        onClick={handleSendSlotsToChat}
+                      >
+                        Send to chat
+                      </button>
+                      <button
+                        type="button"
+                        className="adm-support-sched__btn adm-support-sched__btn--primary"
+                        disabled={
+                          scheduleBusy ||
+                          selectedSlotIds.length !== 1 ||
+                          !pickedAppointmentId
+                        }
+                        onClick={handleSetNewSchedule}
+                      >
+                        {scheduleBusy ? 'Saving…' : 'Set as new schedule'}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
               </>
             )}
           </div>

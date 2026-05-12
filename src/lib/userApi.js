@@ -515,6 +515,267 @@ export function subscribeToAdminSupport(onChange) {
   }
 }
 
+/* ============================================================================
+ * ADMIN SCHEDULE HELPER (used inside the admin support drawer)
+ * --------------------------------------------------------------------------*/
+
+export async function fetchAttorneysForAdminPicker() {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, full_name, email')
+    .eq('role', 'Attorney')
+    .order('full_name', { ascending: true })
+
+  if (error) {
+    console.warn('[admin-schedule] fetchAttorneysForAdminPicker failed', error)
+    return []
+  }
+  return (data || []).map((row) => ({
+    id: row.id,
+    name: row.full_name || row.email || 'Attorney',
+  }))
+}
+
+export async function fetchAttorneyFreeSlotsForDate(attorneyId, dateIso) {
+  if (!attorneyId || !dateIso) return []
+
+  const { data, error } = await supabase
+    .from('availability_slots')
+    .select('id, date, time, is_booked')
+    .eq('attorney_id', attorneyId)
+    .eq('date', dateIso)
+    .eq('is_booked', false)
+    .order('time', { ascending: true })
+
+  if (error && !isMissingColumnError(error, 'date') && !isMissingColumnError(error, 'time')) {
+    throw error
+  }
+
+  if (data && !error) {
+    return (data || []).map((slot) => {
+      const start = parseSlotDateTime(slot.date, slot.time)
+      return {
+        id: slot.id,
+        date: slot.date || dateIso,
+        time: slot.time || '',
+        startIso: start ? start.toISOString() : '',
+        label: start
+          ? start.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' })
+          : slot.time || 'TBD',
+      }
+    })
+  }
+
+  // Fallback for schemas using start_time
+  const dayStart = new Date(`${dateIso}T00:00:00`).toISOString()
+  const dayEnd = new Date(`${dateIso}T23:59:59`).toISOString()
+  const { data: fallback, error: fbErr } = await supabase
+    .from('availability_slots')
+    .select('id, start_time, is_booked')
+    .eq('attorney_id', attorneyId)
+    .eq('is_booked', false)
+    .gte('start_time', dayStart)
+    .lte('start_time', dayEnd)
+    .order('start_time', { ascending: true })
+  if (fbErr) throw fbErr
+  return (fallback || []).map((slot) => {
+    const start = slot.start_time ? new Date(slot.start_time) : null
+    return {
+      id: slot.id,
+      date: dateIso,
+      time: start ? formatSlotTime(start) : '',
+      startIso: start ? start.toISOString() : '',
+      label: start
+        ? start.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' })
+        : 'TBD',
+    }
+  })
+}
+
+export async function fetchClientActiveAppointmentsForAdmin(clientId) {
+  if (!clientId) return []
+  const { data, error } = await supabase
+    .from('appointments')
+    .select(
+      'id, title, status, scheduled_at, slot_id, slot_date, slot_time, attorney_id, attorney:attorney_id(full_name)',
+    )
+    .eq('client_id', clientId)
+    .order('scheduled_at', { ascending: true })
+
+  if (error) {
+    console.warn('[admin-schedule] fetchClientActiveAppointmentsForAdmin failed', error)
+    return []
+  }
+
+  const FINAL = new Set(['cancelled', 'rejected', 'completed'])
+  return (data || [])
+    .filter((row) => !FINAL.has(String(row.status || '').toLowerCase()))
+    .map((row) => ({
+      id: row.id,
+      title: row.title || 'Consultation',
+      status: row.status || '',
+      scheduledAt: row.scheduled_at || '',
+      slotId: row.slot_id || '',
+      slotDate: row.slot_date || '',
+      slotTime: row.slot_time || '',
+      attorneyId: row.attorney_id || '',
+      attorneyName: row.attorney?.full_name || '',
+    }))
+}
+
+/**
+ * Admin-driven reschedule: frees the old slot, books the new slot, updates the
+ * appointment to point at the new slot, and notifies the client + attorney +
+ * other admins.
+ */
+export async function adminRescheduleAppointment({ appointmentId, newSlotId }) {
+  if (!appointmentId) throw new Error('appointmentId required')
+  if (!newSlotId) throw new Error('newSlotId required')
+
+  const { data: appt, error: apptErr } = await supabase
+    .from('appointments')
+    .select('id, attorney_id, client_id, title, slot_id, slot_date, slot_time, scheduled_at, status')
+    .eq('id', appointmentId)
+    .maybeSingle()
+  if (apptErr) throw apptErr
+  if (!appt) throw new Error('Appointment not found.')
+
+  const { data: newSlot, error: newSlotErr } = await supabase
+    .from('availability_slots')
+    .select('id, attorney_id, date, time, is_booked')
+    .eq('id', newSlotId)
+    .maybeSingle()
+  if (newSlotErr) throw newSlotErr
+  if (!newSlot) throw new Error('Selected slot no longer exists.')
+  if (newSlot.is_booked) throw new Error('Selected slot is already booked.')
+  if (appt.attorney_id && newSlot.attorney_id && appt.attorney_id !== newSlot.attorney_id) {
+    throw new Error('Selected slot belongs to a different attorney than this appointment.')
+  }
+
+  const parsedStart = parseSlotDateTime(newSlot.date, newSlot.time)
+  if (!parsedStart) throw new Error('Selected slot has invalid date/time.')
+  const newScheduledIso = parsedStart.toISOString()
+  const nowIso = new Date().toISOString()
+
+  // Free the previous slot first so it can be rebooked by others. Best-effort.
+  let oldSlotIdToFree = appt.slot_id || null
+  if (!oldSlotIdToFree && appt.attorney_id && appt.slot_date && appt.slot_time) {
+    const { data: candidates } = await supabase
+      .from('availability_slots')
+      .select('id, time')
+      .eq('attorney_id', appt.attorney_id)
+      .eq('date', appt.slot_date)
+    if (Array.isArray(candidates) && candidates.length) {
+      const targetMs = parseSlotDateTime(appt.slot_date, appt.slot_time)?.getTime() || 0
+      const match = candidates.find((row) => {
+        const parsed = parseSlotDateTime(appt.slot_date, row.time)
+        return parsed && parsed.getTime() === targetMs
+      })
+      oldSlotIdToFree = match?.id || null
+    }
+  }
+  if (oldSlotIdToFree && oldSlotIdToFree !== newSlot.id) {
+    const { error: freeErr } = await supabase
+      .from('availability_slots')
+      .update({ is_booked: false, updated_at: nowIso })
+      .eq('id', oldSlotIdToFree)
+    if (freeErr) console.warn('[admin-schedule] free old slot failed', freeErr)
+  }
+
+  // Book the new slot
+  const { error: bookErr } = await supabase
+    .from('availability_slots')
+    .update({ is_booked: true, updated_at: nowIso })
+    .eq('id', newSlot.id)
+    .eq('is_booked', false)
+  if (bookErr) {
+    console.warn('[admin-schedule] new slot booking failed', bookErr)
+    throw new Error('Failed to reserve the new slot. It may have just been booked.')
+  }
+
+  // Build the appointment update payload. Try the rich version first; fall
+  // back to the minimal version if some columns do not exist on this DB.
+  const richUpdate = {
+    scheduled_at: newScheduledIso,
+    slot_id: newSlot.id,
+    slot_date: newSlot.date,
+    slot_time: newSlot.time,
+    status: 'rescheduled',
+    updated_at: nowIso,
+  }
+
+  let { error: updateErr } = await supabase
+    .from('appointments')
+    .update(richUpdate)
+    .eq('id', appointmentId)
+
+  if (updateErr) {
+    console.warn('[admin-schedule] full update failed, retrying minimal', updateErr)
+    const minimalUpdate = {
+      scheduled_at: newScheduledIso,
+      status: 'rescheduled',
+      updated_at: nowIso,
+    }
+    const retry = await supabase.from('appointments').update(minimalUpdate).eq('id', appointmentId)
+    if (retry.error) {
+      // Roll back the new slot booking so we don't strand it.
+      await supabase
+        .from('availability_slots')
+        .update({ is_booked: false, updated_at: nowIso })
+        .eq('id', newSlot.id)
+      throw retry.error
+    }
+  }
+
+  // Cache invalidation
+  invalidateAvailabilityCache(appt.attorney_id, appt.slot_date)
+  invalidateAvailabilityCache(newSlot.attorney_id || appt.attorney_id, newSlot.date)
+  invalidateAttorneyAppointmentsCache(appt.attorney_id)
+
+  // Notifications
+  const whenLabel = parsedStart.toLocaleString('en-PH', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+
+  try {
+    const clientName = await resolveClientDisplayName(appt.client_id)
+    if (appt.attorney_id) {
+      await supabase.from('notifications').insert({
+        user_id: appt.attorney_id,
+        title: 'Appointment rescheduled by Admin',
+        body: `${clientName}'s ${appt.title || 'consultation'} was moved to ${whenLabel} by an admin.`,
+        type: 'consultation',
+        is_read: false,
+        created_at: nowIso,
+      })
+    }
+    if (appt.client_id) {
+      await supabase.from('notifications').insert({
+        user_id: appt.client_id,
+        title: 'Your consultation was rescheduled',
+        body: `Admin moved your ${appt.title || 'consultation'} to ${whenLabel}.`,
+        type: 'reschedule',
+        is_read: false,
+        created_at: nowIso,
+      })
+    }
+    await notifyAdminsWithBodyMarker({
+      title: 'Admin reschedule recorded',
+      body: `Appointment ${String(appointmentId).slice(0, 8)}… moved to ${whenLabel}.`,
+      type: 'admin_general',
+      marker: `[adminresched:${appointmentId}:${newScheduledIso.slice(0, 24)}]`,
+    })
+  } catch (notifErr) {
+    console.warn('[admin-schedule] notify after reschedule failed', notifErr)
+  }
+
+  return { newScheduledIso, slotId: newSlot.id }
+}
+
 async function insertNotificationsForUserIds(userIds, { title, body, type = 'general' }) {
   const unique = [...new Set((userIds || []).filter(Boolean))]
   if (!unique.length) return
