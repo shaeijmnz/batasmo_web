@@ -8,6 +8,7 @@ import {
   subscribeToAttorneyAppointments,
   subscribeToAttorneyNotifications,
   calendarDaysFromTodayLocal,
+  runAttorneyConsultationScheduleNotifications,
 } from '../lib/userApi';
 import AttorneyNotificationDropdown from './AttorneyNotificationDropdown';
 
@@ -137,6 +138,16 @@ function AttorneyHome({ onNavigate, profile }) {
       unsubscribe();
       unsubscribeNotifications();
     };
+  }, [profile?.id]);
+
+  useEffect(() => {
+    if (!profile?.id) return undefined;
+    const tick = () => {
+      void runAttorneyConsultationScheduleNotifications(profile.id).catch(() => {});
+    };
+    tick();
+    const id = window.setInterval(tick, 60000);
+    return () => window.clearInterval(id);
   }, [profile?.id]);
 
   const stats = [

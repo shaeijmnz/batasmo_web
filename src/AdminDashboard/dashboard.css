@@ -383,6 +383,62 @@ body { font-family: 'Inter', sans-serif; background: #F5F1EB; color: #0B0F19; }
 /* Welcome Section */
 .welcome-section { margin-bottom: 24px; }
 
+.welcome-section__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.welcome-section__row .header-container {
+  flex: 1;
+  min-width: 260px;
+  margin-bottom: 0;
+}
+
+.adm-notif-wrap {
+  position: relative;
+  flex-shrink: 0;
+  padding-top: 8px;
+}
+
+.adm-icon-btn {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid rgba(21, 34, 56, 0.12);
+  background: rgba(255, 255, 255, 0.95);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #475569;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.adm-icon-btn:hover {
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(21, 34, 56, 0.1);
+}
+
+.adm-notif-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+
 /* Header Container */
 .header-container {
   position: relative;

@@ -556,6 +556,47 @@ const Reports = ({ onNavigate }) => {
       const { error } = await supabase.from('notifications').insert(payload);
       if (error) throw error;
 
+      const annType = toAnnouncementType(announcementForm.type);
+      const [{ data: attorneyRows }, { data: adminRows }] = await Promise.all([
+        supabase.from('profiles').select('id').eq('role', 'Attorney').limit(500),
+        supabase.from('profiles').select('id').eq('role', 'Admin').limit(50),
+      ]);
+
+      const extraRows = [];
+      const clientCount = payload.length;
+      (attorneyRows || []).forEach((row) => {
+        if (!row?.id) return;
+        extraRows.push({
+          user_id: row.id,
+          title: `Admin announcement: ${title}`,
+          body,
+          type: annType,
+          is_read: false,
+          created_at: nowIso,
+        });
+      });
+      (adminRows || []).forEach((row) => {
+        if (!row?.id) return;
+        extraRows.push({
+          user_id: row.id,
+          title: 'Announcement published',
+          body: `An admin sent "${title}" to ${clientCount} client(s). [admAnnounceEcho:${nowIso}]`,
+          type: 'admin_general',
+          is_read: false,
+          created_at: nowIso,
+        });
+      });
+
+      if (extraRows.length) {
+        const chunkSize = 80;
+        for (let i = 0; i < extraRows.length; i += chunkSize) {
+          const { error: extraError } = await supabase.from('notifications').insert(extraRows.slice(i, i + chunkSize));
+          if (extraError) {
+            console.warn('[announce] attorney/admin mirror insert failed', extraError);
+          }
+        }
+      }
+
       setAnnouncementSuccess(
         targetMode === 'single'
           ? 'Announcement sent to selected client.'

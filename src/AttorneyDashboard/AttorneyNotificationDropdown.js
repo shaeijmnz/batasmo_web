@@ -55,6 +55,36 @@ function NotificationGlyph({ type }) {
       </svg>
     );
   }
+  if (t === 'notarial_update') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" width={20} height={20} {...common}>
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+      </svg>
+    );
+  }
+  if (t === 'public_rating') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" width={20} height={20} {...common}>
+        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+      </svg>
+    );
+  }
+  if (t === 'reminder') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" width={20} height={20} {...common}>
+        <circle cx="12" cy="12" r="10" />
+        <polyline points="12 6 12 12 16 14" />
+      </svg>
+    );
+  }
+  if (t.startsWith('admin_') || t === 'admin_general') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" width={20} height={20} {...common}>
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+      </svg>
+    );
+  }
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" width={20} height={20} {...common}>
       <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
@@ -68,6 +98,9 @@ function glyphClass(type) {
   if (t === 'payment') return 'atty-notif-item__glyph--payment';
   if (t === 'booking') return 'atty-notif-item__glyph--booking';
   if (t === 'consultation') return 'atty-notif-item__glyph--consultation';
+  if (t === 'notarial_update') return 'atty-notif-item__glyph--booking';
+  if (t === 'public_rating') return 'atty-notif-item__glyph--payment';
+  if (t.startsWith('admin_')) return 'atty-notif-item__glyph--default';
   return 'atty-notif-item__glyph--default';
 }
 
@@ -77,6 +110,9 @@ function typePillLabel(type) {
   if (t === 'booking') return 'Booking';
   if (t === 'consultation') return 'Consultation';
   if (t === 'reminder') return 'Reminder';
+  if (t === 'notarial_update') return 'Notary';
+  if (t === 'public_rating') return 'Rating';
+  if (t.startsWith('admin_')) return 'Admin';
   return 'Update';
 }
 

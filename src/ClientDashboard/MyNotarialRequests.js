@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import './MyNotarialRequests.css';
 import './ClientTheme.css';
-import { cancelNotarialRequest, fetchClientNotarialRequests, payForNotarialRequest } from '../lib/userApi';
+import { cancelNotarialRequest, fetchClientNotarialRequests, payForNotarialRequest, replaceClientNotarialRequestDocument } from '../lib/userApi';
 import { isValidPhoneNumber, VALID_PHONE_MESSAGE } from '../lib/validators';
 
 const ScalesIcon = ({ size = 24, color = '#f5a623' }) => (
@@ -111,6 +111,7 @@ function MyNotarialRequests({ onNavigate, profile }) {
   // Cancel confirmation
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelTarget, setCancelTarget] = useState(null);
+  const [docUploadingId, setDocUploadingId] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -454,6 +455,37 @@ function MyNotarialRequests({ onNavigate, profile }) {
 
                         {/* Action Buttons */}
                         <div className="mnr-card__actions">
+                          {(req.status === 'PENDING' || (req.status === 'APPROVED' && req.payment === 'UNPAID')) && (
+                            <label
+                              className="mnr-btn mnr-btn--secondary"
+                              style={{ cursor: docUploadingId === req.id ? 'wait' : 'pointer' }}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <input
+                                type="file"
+                                style={{ display: 'none' }}
+                                accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx"
+                                disabled={docUploadingId === req.id}
+                                onChange={async (e) => {
+                                  const f = e.target.files?.[0];
+                                  e.target.value = '';
+                                  if (!f || !profile?.id) return;
+                                  try {
+                                    setDocUploadingId(req.id);
+                                    await replaceClientNotarialRequestDocument({ requestId: req.id, file: f });
+                                    const rows = await fetchClientNotarialRequests(profile.id);
+                                    setRequests(rows);
+                                    setLoadError('');
+                                  } catch (err) {
+                                    setLoadError(err.message || 'Unable to upload document.');
+                                  } finally {
+                                    setDocUploadingId(null);
+                                  }
+                                }}
+                              />
+                              {docUploadingId === req.id ? 'Uploading…' : 'Replace document'}
+                            </label>
+                          )}
                           {req.status === 'APPROVED' && req.payment === 'UNPAID' && (
                             <button className="mnr-btn mnr-btn--primary" onClick={() => openPaymentModal(req)}>
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2" /><line x1="1" y1="10" x2="23" y2="10" /></svg>

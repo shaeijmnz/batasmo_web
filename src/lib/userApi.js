@@ -204,6 +204,212 @@ export const resetUserApiRuntimeState = () => {
   lastSessionProfileTime = 0
 }
 
+/** Appointment statuses treated as an active live consultation (chat alerts suppressed for client). */
+const CONSULTATION_IN_CALL_STATUSES = new Set(['started', 'in_progress', 'in-progress', 'active'])
+
+async function fetchAdminUserIds() {
+  const { data, error } = await supabase.from('profiles').select('id').eq('role', 'Admin')
+  if (error) {
+    console.warn('[notify] fetchAdminUserIds failed', error)
+    return []
+  }
+  return (data || []).map((row) => row?.id).filter(Boolean)
+}
+
+async function insertNotificationsForUserIds(userIds, { title, body, type = 'general' }) {
+  const unique = [...new Set((userIds || []).filter(Boolean))]
+  if (!unique.length) return
+  const nowIso = new Date().toISOString()
+  const chunkSize = 80
+  for (let i = 0; i < unique.length; i += chunkSize) {
+    const slice = unique.slice(i, i + chunkSize)
+    const rows = slice.map((user_id) => ({
+      user_id,
+      title: String(title || 'Notification'),
+      body: String(body || ''),
+      type: String(type || 'general'),
+      is_read: false,
+      created_at: nowIso,
+    }))
+    const { error } = await supabase.from('notifications').insert(rows)
+    if (error) console.warn('[notify] insertNotificationsForUserIds failed', error)
+  }
+}
+
+/** One notification per admin user, skipped if that admin already has this marker in any notification body. */
+async function notifyAdminsWithBodyMarker({ title, body, type = 'admin_general', marker }) {
+  if (!marker) return
+  const adminIds = await fetchAdminUserIds()
+  for (const uid of adminIds) {
+    try {
+      const { data: existing } = await supabase
+        .from('notifications')
+        .select('id')
+        .eq('user_id', uid)
+        .ilike('body', `%${marker}%`)
+        .limit(1)
+      if (existing?.length) continue
+      await insertNotificationsForUserIds([uid], {
+        title,
+        body: `${body} ${marker}`.trim(),
+        type,
+      })
+    } catch (e) {
+      console.warn('[notify] admin marker notify failed', e)
+    }
+  }
+}
+
+async function throttleUpdateOrInsertAttorneyNotify({ attorneyId, marker, title, body, type, windowMs }) {
+  if (!attorneyId || !marker) return
+  const { data: rows } = await supabase
+    .from('notifications')
+    .select('id, created_at')
+    .eq('user_id', attorneyId)
+    .ilike('body', `%${marker}%`)
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  const nowIso = new Date().toISOString()
+  if (rows?.length) {
+    const row = rows[0]
+    const t = new Date(row.created_at).getTime()
+    if (Number.isFinite(t) && Date.now() - t < windowMs) {
+      const { error } = await supabase
+        .from('notifications')
+        .update({ title, body: `${body} ${marker}`.trim(), is_read: false })
+        .eq('id', row.id)
+      if (error) console.warn('[notify] throttle update failed', error)
+      return
+    }
+  }
+  const { error } = await supabase.from('notifications').insert({
+    user_id: attorneyId,
+    title,
+    body: `${body} ${marker}`.trim(),
+    type,
+    is_read: false,
+    created_at: nowIso,
+  })
+  if (error) console.warn('[notify] throttle insert failed', error)
+}
+
+async function notifyConsultationChatOutsideActiveCall({ appointmentId, senderId, preview }) {
+  if (!appointmentId || !senderId) return
+  try {
+    const { data: appt } = await supabase
+      .from('appointments')
+      .select('id, attorney_id, client_id, title, status')
+      .eq('id', appointmentId)
+      .maybeSingle()
+    if (!appt?.attorney_id) return
+    if (String(senderId) !== String(appt.client_id)) return
+    const st = String(appt.status || '').toLowerCase()
+    if (CONSULTATION_IN_CALL_STATUSES.has(st)) return
+    const clientName = await resolveClientDisplayName(appt.client_id)
+    const clip = String(preview || '').trim().slice(0, 120)
+    const marker = `[chatwait:${appointmentId}]`
+    const title = 'New chat message (outside live call)'
+    const bodyText = `${clientName} sent a message in ${appt.title || 'consultation'} chat.${clip ? ` "${clip}"` : ''}`
+    await throttleUpdateOrInsertAttorneyNotify({
+      attorneyId: appt.attorney_id,
+      marker,
+      title,
+      body: bodyText,
+      type: 'consultation',
+      windowMs: 180000,
+    })
+    const bucket = Math.floor(Date.now() / 180000)
+    await notifyAdminsWithBodyMarker({
+      title: 'Client chat (consultation room)',
+      body: `${clientName} — ${appt.title || 'consultation'} (${String(appointmentId).slice(0, 8)}…).${clip ? ` ${clip}` : ''}`,
+      type: 'admin_general',
+      marker: `[admchat:${appointmentId}:${bucket}]`,
+    })
+  } catch (e) {
+    console.warn('[notify] chat outside call failed', e)
+  }
+}
+
+/**
+ * Reminder (15–30 minutes before start) and possible no-show alerts for the
+ * attorney. Safe to call on an interval from the attorney dashboard.
+ */
+export async function runAttorneyConsultationScheduleNotifications(attorneyId) {
+  if (!attorneyId) return
+  try {
+    const appointments = await fetchAttorneyAppointments(attorneyId, { force: false })
+    const now = Date.now()
+    for (const a of appointments) {
+      const st = String(a.status || '').toLowerCase()
+      if (st === 'cancelled' || st === 'completed') continue
+      const schedMs = a.parsed_scheduled_at?.getTime()
+      if (!schedMs || Number.isNaN(schedMs)) continue
+
+      const windowStart = schedMs - 30 * 60 * 1000
+      const windowEnd = schedMs - 15 * 60 * 1000
+      if (now >= windowStart && now <= windowEnd) {
+        const eligible =
+          st === 'confirmed' ||
+          st === 'rescheduled' ||
+          (st === 'pending' && isPaidOrFreeConsultation(a))
+        if (!eligible) continue
+        const marker = `[schreminder:${a.id}]`
+        const { data: ex } = await supabase
+          .from('notifications')
+          .select('id')
+          .eq('user_id', attorneyId)
+          .ilike('body', `%${marker}%`)
+          .limit(1)
+        if (ex?.length) continue
+        const label = a.client_name || 'Client'
+        await supabase.from('notifications').insert({
+          user_id: attorneyId,
+          title: 'Upcoming consultation',
+          body: `Reminder: ${label} — ${a.title || 'Consultation'} starts in 15–30 minutes. ${marker}`,
+          type: 'reminder',
+          is_read: false,
+          created_at: new Date().toISOString(),
+        })
+      }
+
+      const pastGrace = schedMs + 15 * 60 * 1000
+      if (
+        now >= pastGrace &&
+        (st === 'confirmed' || st === 'rescheduled') &&
+        isPaidOrFreeConsultation(a) &&
+        !CONSULTATION_IN_CALL_STATUSES.has(st)
+      ) {
+        const marker = `[noshow:${a.id}]`
+        const { data: ex } = await supabase
+          .from('notifications')
+          .select('id')
+          .eq('user_id', attorneyId)
+          .ilike('body', `%${marker}%`)
+          .limit(1)
+        if (ex?.length) continue
+        const label = a.client_name || 'Client'
+        await supabase.from('notifications').insert({
+          user_id: attorneyId,
+          title: 'Possible client no-show',
+          body: `15+ minutes past the scheduled time for ${label} (${a.title || 'consultation'}) and the session is not in progress. ${marker}`,
+          type: 'consultation',
+          is_read: false,
+          created_at: new Date().toISOString(),
+        })
+        await notifyAdminsWithBodyMarker({
+          title: 'Possible no-show (consultation)',
+          body: `Appointment ${String(a.id).slice(0, 8)}… is past start without in-progress status.`,
+          type: 'admin_general',
+          marker: `[admnoshow:${a.id}]`,
+        })
+      }
+    }
+  } catch (e) {
+    console.warn('[schedule-notifs] runAttorneyConsultationScheduleNotifications failed', e)
+  }
+}
+
 async function fetchAttorneyAppointments(userId, options = {}) {
   const force = Boolean(options?.force)
   const cached = attorneyAppointmentsCache.get(userId)
@@ -587,7 +793,7 @@ export async function fetchAttorneyHomeData(userId, options = {}) {
     fetchAttorneyAppointments(userId, options),
     supabase
       .from('notifications')
-      .select('id, title, body, is_read, created_at')
+      .select('id, title, body, type, is_read, created_at')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(20),
@@ -647,8 +853,12 @@ export async function fetchAttorneyHomeData(userId, options = {}) {
 
   const storedNotifications = (notificationsRes.data || []).map((n) => ({
     id: n.id,
+    title: n.title,
+    body: n.body,
+    type: n.type || 'general',
     text: `${n.title}: ${n.body}`,
     time: formatNotificationTimestamp(n.created_at),
+    createdAt: n.created_at,
     unread: !n.is_read,
   }))
 
@@ -1659,6 +1869,136 @@ async function resolveClientDisplayName(clientId) {
   }
 }
 
+/** Fan-out helper: insert one notification row per attorney user_id. */
+async function insertNotificationForAttorneys({ attorneyIds, title, body, type = 'general' }) {
+  const unique = [...new Set((attorneyIds || []).filter(Boolean))]
+  if (!unique.length) return
+
+  const nowIso = new Date().toISOString()
+  const rows = unique.map((userId) => ({
+    user_id: userId,
+    title: String(title || 'Notification'),
+    body: String(body || ''),
+    type: String(type || 'general'),
+    is_read: false,
+    created_at: nowIso,
+  }))
+
+  const { error } = await supabase.from('notifications').insert(rows)
+  if (error) {
+    console.warn('[notify] attorney fan-out insert failed', error)
+  }
+}
+
+/** Lookup verified attorneys so we can broadcast notarial-request alerts. */
+async function fetchVerifiedAttorneyUserIds() {
+  const { data, error } = await supabase
+    .from('attorney_profiles')
+    .select('user_id')
+    .eq('is_verified', true)
+
+  if (error) {
+    console.warn('[notify] failed to load verified attorneys', error)
+    return []
+  }
+  return (data || []).map((row) => row?.user_id).filter(Boolean)
+}
+
+/**
+ * Idempotent insert of a "Client Feedback Received" notification for the
+ * attorney. Includes the appointment id marker so polling/retries do not
+ * create duplicate rows.
+ */
+async function notifyAttorneyOfClientFeedback({ attorneyId, clientId, appointmentId, rating, comment }) {
+  if (!attorneyId || !appointmentId) return
+
+  const dedupeMarker = `[feedback:${appointmentId}]`
+
+  try {
+    const { data: existing } = await supabase
+      .from('notifications')
+      .select('id')
+      .eq('user_id', attorneyId)
+      .ilike('body', `%${dedupeMarker}%`)
+      .limit(1)
+    if (existing && existing.length > 0) return
+  } catch (lookupError) {
+    console.warn('[feedback] dedupe lookup failed', lookupError)
+  }
+
+  const clientName = await resolveClientDisplayName(clientId)
+  const ratingLabel = Number(rating) > 0 ? `${rating}-star` : 'a'
+  const commentSuffix = comment ? ` "${String(comment).slice(0, 140)}"` : ''
+
+  const { error: insertError } = await supabase.from('notifications').insert({
+    user_id: attorneyId,
+    title: 'Client Feedback Received',
+    body: `${clientName} left ${ratingLabel} feedback for the consultation.${commentSuffix} ${dedupeMarker}`,
+    type: 'consultation',
+    is_read: false,
+    created_at: new Date().toISOString(),
+  })
+
+  if (insertError) {
+    console.warn('[feedback] attorney notification insert failed', insertError)
+    return
+  }
+
+  await notifyAttorneyOfPublicReviewRating({ attorneyId, clientId, appointmentId, rating, comment })
+  await notifyAdminsWithBodyMarker({
+    title: 'Client consultation feedback',
+    body: `${clientName} submitted ${ratingLabel} feedback (appointment ${String(appointmentId).slice(0, 8)}…).`,
+    type: 'admin_general',
+    marker: `[admfb:${appointmentId}]`,
+  })
+}
+
+/**
+ * Separate bell item: rating is persisted and contributes to public-facing metrics.
+ */
+async function notifyAttorneyOfPublicReviewRating({ attorneyId, clientId, appointmentId, rating, comment }) {
+  if (!attorneyId || !appointmentId) return
+
+  const dedupeMarker = `[pubreview:${appointmentId}]`
+
+  try {
+    const { data: existing } = await supabase
+      .from('notifications')
+      .select('id')
+      .eq('user_id', attorneyId)
+      .ilike('body', `%${dedupeMarker}%`)
+      .limit(1)
+    if (existing && existing.length > 0) return
+  } catch (lookupError) {
+    console.warn('[pubreview] dedupe lookup failed', lookupError)
+  }
+
+  const clientName = await resolveClientDisplayName(clientId)
+  const stars = Number(rating) > 0 ? `${rating}-star` : 'a'
+  const shortComment = comment ? ` "${String(comment).slice(0, 100)}"` : ''
+
+  const { error: insertError } = await supabase.from('notifications').insert({
+    user_id: attorneyId,
+    title: 'Public review & rating recorded',
+    body: `${clientName}'s ${stars} rating is saved and counts toward your public profile metrics.${shortComment} ${dedupeMarker}`,
+    type: 'public_rating',
+    is_read: false,
+    created_at: new Date().toISOString(),
+  })
+
+  if (insertError) {
+    console.warn('[pubreview] attorney notification insert failed', insertError)
+    return
+  }
+
+  await notifyAdminsWithBodyMarker({
+    title: 'Consultation rating submitted',
+    body: `${clientName} left a ${stars} rating (appointment ${String(appointmentId).slice(0, 8)}…).`,
+    type: 'admin_general',
+    marker: `[admfbrv:${appointmentId}]`,
+  })
+}
+
 // Flips the "Pending Consultation Booking" notification on the attorney's
 // side to "Booking Confirmed" once payment has been recorded. Idempotent:
 // duplicate calls during polling will just no-op after the first update.
@@ -1749,6 +2089,13 @@ export async function notifyAttorneyOfPaidBooking({ appointmentId }) {
   }
 
   invalidateAttorneyAppointmentsCache(appt.attorney_id)
+
+  await notifyAdminsWithBodyMarker({
+    title: 'Consultation payment received',
+    body: `${clientName} paid for ${appt.title || 'a consultation'} (${whenLabel}).`,
+    type: 'admin_general',
+    marker: `[adminpaid:${appointmentId}]`,
+  })
 }
 
 // Cancels an appointment that never received a paid transaction (e.g. the
@@ -1849,6 +2196,17 @@ export async function cancelPendingUnpaidBooking({ appointmentId }) {
     console.warn('[booking] cancel notification flip failed', notifError)
   }
 
+  try {
+    await notifyAdminsWithBodyMarker({
+      title: 'Consultation booking cancelled',
+      body: `A pending consultation booking was cancelled before payment (appointment ${String(appointmentId).slice(0, 8)}…).`,
+      type: 'admin_general',
+      marker: `[admincxl:${appointmentId}]`,
+    })
+  } catch (e) {
+    console.warn('[booking] admin cancel notify failed', e)
+  }
+
   // Free the underlying availability slot so the time can be rebooked. We try
   // multiple matching strategies because the `availability_slots.time` column
   // may be stored as either a full ISO time ("09:00:00"), a 24-hour label
@@ -1913,7 +2271,51 @@ export async function requestAppointmentReschedule({ appointmentId, scheduledAt,
 // Client-initiated reschedule: same shape as requestAppointmentReschedule but
 // kept under a separate name to match the consumer (MyAppointments.js).
 export async function rescheduleClientAppointment({ appointmentId, scheduledAt, note }) {
-  return requestAppointmentReschedule({ appointmentId, scheduledAt, note })
+  await requestAppointmentReschedule({ appointmentId, scheduledAt, note })
+
+  // Notify the attorney so it lands in the bell + queue immediately.
+  try {
+    const { data: appt } = await supabase
+      .from('appointments')
+      .select('id, attorney_id, client_id, title')
+      .eq('id', appointmentId)
+      .maybeSingle()
+
+    if (appt?.attorney_id) {
+      const clientName = await resolveClientDisplayName(appt.client_id)
+      const whenLabel = scheduledAt
+        ? new Date(scheduledAt).toLocaleString('en-PH', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+          })
+        : 'a new schedule'
+
+      const { error: notifError } = await supabase.from('notifications').insert({
+        user_id: appt.attorney_id,
+        title: 'Appointment Reschedule Request',
+        body: `${clientName} is requesting to reschedule ${appt.title || 'a consultation'} to ${whenLabel}.`,
+        type: 'consultation',
+        is_read: false,
+        created_at: new Date().toISOString(),
+      })
+      if (notifError) {
+        console.warn('[reschedule] attorney notify insert failed', notifError)
+      }
+      invalidateAttorneyAppointmentsCache(appt.attorney_id)
+
+      await notifyAdminsWithBodyMarker({
+        title: 'Client requested reschedule',
+        body: `${clientName} rescheduled ${appt.title || 'a consultation'} to ${whenLabel}.`,
+        type: 'admin_general',
+        marker: `[adminresched:${appointmentId}:${String(scheduledAt || '').slice(0, 24)}]`,
+      })
+    }
+  } catch (notifyError) {
+    console.warn('[reschedule] attorney notify step failed', notifyError)
+  }
 }
 
 // Throws when prevent_double_booking is ON and the client already has an
@@ -2037,6 +2439,38 @@ export async function payForNotarialRequest({ requestId, clientId, attorneyId, a
     .eq('id', requestId)
 
   if (reqError) throw reqError
+
+  try {
+    const { data: row } = await supabase
+      .from('notarial_requests')
+      .select('id, service_type, attorney_id')
+      .eq('id', requestId)
+      .maybeSingle()
+    const clientName = await resolveClientDisplayName(clientId)
+    const amt = Number(amount || 0)
+    const amtLabel = amt > 0 ? `PHP ${amt.toLocaleString()}` : 'the agreed fee'
+    const svc = row?.service_type || 'notarial request'
+    const aid = row?.attorney_id || attorneyId
+    if (aid) {
+      const { error: nErr } = await supabase.from('notifications').insert({
+        user_id: aid,
+        title: 'Notarial payment received',
+        body: `${clientName} paid ${amtLabel} for ${svc}. [notarialpaid:${requestId}]`,
+        type: 'payment',
+        is_read: false,
+        created_at: now,
+      })
+      if (nErr) console.warn('[notarial] attorney payment notify failed', nErr)
+    }
+    await notifyAdminsWithBodyMarker({
+      title: 'Notarial payment received',
+      body: `${clientName} paid ${amtLabel} for ${svc} (request ${String(requestId).slice(0, 8)}…).`,
+      type: 'admin_general',
+      marker: `[adminnotpaid:${requestId}]`,
+    })
+  } catch (e) {
+    console.warn('[notarial] payment notify failed', e)
+  }
 }
 
 export async function cancelNotarialRequest(requestId) {
@@ -2156,7 +2590,7 @@ export async function fetchAttorneyConsultationRequests(userId, options = {}) {
     fetchAttorneyAppointments(userId, options),
     supabase
       .from('notifications')
-      .select('id, title, body, is_read, created_at')
+      .select('id, title, body, type, is_read, created_at')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(6),
@@ -2213,8 +2647,12 @@ export async function fetchAttorneyConsultationRequests(userId, options = {}) {
 
   const storedNotifications = (notificationsRes.data || []).map((item) => ({
     id: item.id,
+    title: item.title,
+    body: item.body,
+    type: item.type || 'general',
     text: `${item.title}: ${item.body}`,
     time: formatNotificationTimestamp(item.created_at),
+    createdAt: item.created_at,
     unread: !item.is_read,
   }))
 
@@ -3037,6 +3475,12 @@ export async function sendAppointmentMessage(appointmentId, messageText) {
 
   if (error) throw error
 
+  void notifyConsultationChatOutsideActiveCall({
+    appointmentId,
+    senderId: user.id,
+    preview: body,
+  }).catch(() => {})
+
   return mapRoomMessage(data, room.id, Boolean(room.is_closed), user.id)
 }
 
@@ -3103,6 +3547,12 @@ export async function sendAppointmentAttachment(appointmentId, file, caption = '
     .single()
 
   if (error) throw new Error(error.message)
+
+  void notifyConsultationChatOutsideActiveCall({
+    appointmentId,
+    senderId: user.id,
+    preview: normalizedCaption || file?.name || (messageType === 'image' ? 'Photo' : 'File attachment'),
+  }).catch(() => {})
 
   return mapRoomMessage(data, room.id, Boolean(room.is_closed), user.id)
 }
@@ -3371,6 +3821,13 @@ export async function submitConsultationFeedback({ appointmentId, rating, commen
   const { error: insertFeedbackError } = await supabase.from('consultation_feedback').insert(payload)
   if (!insertFeedbackError) {
     await finalizeAppointmentAsCompleted()
+    await notifyAttorneyOfClientFeedback({
+      attorneyId: appointment.attorney_id,
+      clientId: appointment.client_id,
+      appointmentId,
+      rating: normalizedRating,
+      comment: normalizedComment,
+    })
     return true
   }
 
@@ -3393,11 +3850,25 @@ export async function submitConsultationFeedback({ appointmentId, rating, commen
 
     if (!updateFeedbackError) {
       await finalizeAppointmentAsCompleted()
+      await notifyAttorneyOfClientFeedback({
+        attorneyId: appointment.attorney_id,
+        clientId: appointment.client_id,
+        appointmentId,
+        rating: normalizedRating,
+        comment: normalizedComment,
+      })
       return true
     }
     console.warn('[feedback] consultation_feedback update failed, falling back to notes', updateFeedbackError)
     await writeFeedbackToAppointmentNotes()
     await finalizeAppointmentAsCompleted()
+    await notifyAttorneyOfClientFeedback({
+      attorneyId: appointment.attorney_id,
+      clientId: appointment.client_id,
+      appointmentId,
+      rating: normalizedRating,
+      comment: normalizedComment,
+    })
     return true
   }
 
@@ -3407,6 +3878,13 @@ export async function submitConsultationFeedback({ appointmentId, rating, commen
 
   await writeFeedbackToAppointmentNotes()
   await finalizeAppointmentAsCompleted()
+  await notifyAttorneyOfClientFeedback({
+    attorneyId: appointment.attorney_id,
+    clientId: appointment.client_id,
+    appointmentId,
+    rating: normalizedRating,
+    comment: normalizedComment,
+  })
   return true
 }
 
@@ -3666,6 +4144,105 @@ export async function createNotarialRequest({ clientId, serviceType, preferredDa
   })
 
   if (error) throw error
+
+  // Notify all verified attorneys so a new notarial request is visible in
+  // every attorney's bell as soon as the client submits it.
+  try {
+    const [clientName, attorneyIds] = await Promise.all([
+      resolveClientDisplayName(clientId),
+      fetchVerifiedAttorneyUserIds(),
+    ])
+    const preferredLabel = preferredDate
+      ? new Date(preferredDate).toLocaleDateString('en-PH', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        })
+      : 'an unspecified date'
+
+    await insertNotificationForAttorneys({
+      attorneyIds,
+      title: 'New Notarial Request',
+      body: `${clientName} submitted a ${serviceType || 'notarial'} request for ${preferredLabel}.`,
+      type: 'notarial_update',
+    })
+
+    await notifyAdminsWithBodyMarker({
+      title: 'New notarial request',
+      body: `${clientName} submitted a ${serviceType || 'notarial'} request for ${preferredLabel}.`,
+      type: 'admin_general',
+      marker: `[adminnewnot:${clientId}:${Date.now()}]`,
+    })
+  } catch (notifyError) {
+    console.warn('[notarial] attorney notify failed', notifyError)
+  }
+}
+
+/**
+ * Client uploads a replacement document on an existing notarial request.
+ */
+export async function replaceClientNotarialRequestDocument({ requestId, file, documentName }) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user?.id) throw new Error('Not authenticated')
+  if (!requestId) throw new Error('requestId is required.')
+
+  const { data: existing, error: exErr } = await supabase
+    .from('notarial_requests')
+    .select('id, client_id, attorney_id, service_type')
+    .eq('id', requestId)
+    .maybeSingle()
+  if (exErr) throw exErr
+  if (!existing) throw new Error('Request not found.')
+  if (String(existing.client_id) !== String(user.id)) {
+    throw new Error('You can only update your own requests.')
+  }
+
+  let documentUrl = documentName || null
+  if (file instanceof File) {
+    const ext = file.name.split('.').pop() || 'bin'
+    const filePath = `${user.id}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+    const { error: uploadError } = await supabase.storage
+      .from('notarial-documents')
+      .upload(filePath, file, { contentType: file.type || `application/${ext}`, upsert: false })
+    if (uploadError) throw uploadError
+    const { data: urlData } = supabase.storage.from('notarial-documents').getPublicUrl(filePath)
+    documentUrl = urlData?.publicUrl || filePath
+  }
+  if (!documentUrl) throw new Error('No document provided.')
+
+  const { error: upErr } = await supabase
+    .from('notarial_requests')
+    .update({ document_url: documentUrl, updated_at: new Date().toISOString() })
+    .eq('id', requestId)
+    .eq('client_id', user.id)
+  if (upErr) throw upErr
+
+  try {
+    const clientName = await resolveClientDisplayName(user.id)
+    const svc = existing.service_type || 'notarial request'
+    const marker = `[notdoc:${requestId}:${Date.now()}]`
+    if (existing.attorney_id) {
+      const { error: nErr } = await supabase.from('notifications').insert({
+        user_id: existing.attorney_id,
+        title: 'Notarial document updated',
+        body: `${clientName} uploaded a new or revised document for ${svc}. ${marker}`,
+        type: 'notarial_update',
+        is_read: false,
+        created_at: new Date().toISOString(),
+      })
+      if (nErr) console.warn('[notarial] attorney doc-update notify failed', nErr)
+    }
+    await notifyAdminsWithBodyMarker({
+      title: 'Notarial document updated',
+      body: `${clientName} replaced the document for ${svc} (request ${String(requestId).slice(0, 8)}…).`,
+      type: 'admin_general',
+      marker,
+    })
+  } catch (e) {
+    console.warn('[notarial] document replace notify failed', e)
+  }
 }
 
 export async function fetchAttorneyUpcomingAppointments(userId, options = {}) {
@@ -4318,6 +4895,74 @@ export async function saveAttorneyConsultationSummary({ appointmentId, summary }
   })
 
   if (error) throw error
+}
+
+export async function fetchAdminHomeNotifications(adminUserId) {
+  if (!adminUserId) return []
+
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('id, title, body, type, is_read, created_at')
+    .eq('user_id', adminUserId)
+    .order('created_at', { ascending: false })
+    .limit(40)
+
+  if (error) throw error
+
+  return (data || []).map((n) => ({
+    id: n.id,
+    title: n.title,
+    body: n.body,
+    type: n.type || 'general',
+    text: `${n.title}: ${n.body}`,
+    time: formatNotificationTimestamp(n.created_at),
+    createdAt: n.created_at,
+    unread: !n.is_read,
+  }))
+}
+
+export async function markAdminNotificationsAsRead(adminUserId) {
+  if (!adminUserId) return
+
+  const { error } = await supabase
+    .from('notifications')
+    .update({ is_read: true })
+    .eq('user_id', adminUserId)
+    .eq('is_read', false)
+
+  if (error) throw error
+}
+
+export function subscribeToAdminNotifications(adminUserId, onChange) {
+  if (!adminUserId) return () => {}
+
+  const channel = supabase
+    .channel(`admin_notifications_${adminUserId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'notifications',
+        filter: `user_id=eq.${adminUserId}`,
+      },
+      () => {
+        try {
+          onChange?.()
+        } catch (err) {
+          console.warn('[admin-notifications] subscriber callback error', err)
+        }
+      },
+    )
+    .subscribe()
+
+  return () => {
+    try {
+      supabase.removeChannel(channel)
+    } catch {
+      // ignore
+    }
+  }
 }
 
 // Marks every notification belonging to the given attorney as read.

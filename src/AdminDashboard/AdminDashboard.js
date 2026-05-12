@@ -2,9 +2,15 @@ import React, { useEffect, useState } from 'react';
 import {
   LayoutDashboard, Users, Scale, FileText, MessageSquare,
   BarChart3, Settings, LogOut, Menu, Star,
-  X, Send, Trash2, Eye, AlertCircle, CheckCircle, Calendar
+  X, Send, Trash2, Eye, AlertCircle, CheckCircle, Calendar, Bell,
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import AttorneyNotificationDropdown from '../AttorneyDashboard/AttorneyNotificationDropdown';
+import {
+  fetchAdminHomeNotifications,
+  markAdminNotificationsAsRead,
+  subscribeToAdminNotifications,
+} from '../lib/userApi';
 import './AdminTheme.css';
 import './dashboard.css';
 
@@ -91,6 +97,13 @@ const getWeekWindow = () => {
 
 const dayToMondayFirstIndex = (day) => (day === 0 ? 6 : day - 1);
 
+const formatNotifBadgeCount = (count) => {
+  const safeCount = Number(count || 0);
+  if (safeCount <= 0) return '';
+  if (safeCount > 99) return '99+';
+  return String(safeCount);
+};
+
 const normalizeRequestStatusForUi = (status) => {
   const value = String(status || '').toLowerCase();
   if (value === 'started' || value === 'in_progress' || value === 'in-progress' || value === 'active') {
@@ -151,6 +164,13 @@ const Dashboard = ({ onNavigate }) => {
   const [weekData, setWeekData] = useState([0, 0, 0, 0, 0, 0, 0]);
   const [recentRequests, setRecentRequests] = useState([]);
   const [topAttorneys, setTopAttorneys] = useState([]);
+
+  const [adminUserId, setAdminUserId] = useState('');
+  const [adminNotifications, setAdminNotifications] = useState([]);
+  const [adminNotifOpen, setAdminNotifOpen] = useState(false);
+  const [adminMarkAllReadCutoffIso, setAdminMarkAllReadCutoffIso] = useState('');
+  const [isMarkingAdminNotificationsRead, setIsMarkingAdminNotificationsRead] = useState(false);
+  const adminMarkAllReadStorageKey = `admin-notifications-read-cutoff:${adminUserId || 'unknown'}`;
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -798,6 +818,85 @@ const Dashboard = ({ onNavigate }) => {
     };
   }, []);
 
+  useEffect(() => {
+    if (!adminUserId) {
+      setAdminMarkAllReadCutoffIso('');
+      return;
+    }
+    try {
+      setAdminMarkAllReadCutoffIso(window.localStorage.getItem(adminMarkAllReadStorageKey) || '');
+    } catch {
+      setAdminMarkAllReadCutoffIso('');
+    }
+  }, [adminMarkAllReadStorageKey, adminUserId]);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadSession = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (mounted && user?.id) setAdminUserId(user.id);
+    };
+    loadSession();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!adminUserId) return undefined;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const rows = await fetchAdminHomeNotifications(adminUserId);
+        if (!cancelled) setAdminNotifications(rows);
+      } catch {
+        if (!cancelled) setAdminNotifications([]);
+      }
+    };
+    load();
+    const unsub = subscribeToAdminNotifications(adminUserId, load);
+    return () => {
+      cancelled = true;
+      unsub();
+    };
+  }, [adminUserId]);
+
+  const cutoffTime = adminMarkAllReadCutoffIso ? new Date(adminMarkAllReadCutoffIso).getTime() : 0;
+  const displayAdminNotifications = adminNotifications.map((n) => {
+    const notificationTime = new Date(n.createdAt || 0).getTime() || 0;
+    const unread = Boolean(n.unread) && notificationTime > cutoffTime;
+    return { ...n, unread };
+  });
+  const adminUnreadCount = displayAdminNotifications.filter((n) => n.unread).length;
+
+  const handleMarkAllAdminNotificationsRead = async () => {
+    if (!adminUserId || isMarkingAdminNotificationsRead) return;
+    setIsMarkingAdminNotificationsRead(true);
+    const nowIso = new Date().toISOString();
+    setAdminMarkAllReadCutoffIso(nowIso);
+    try {
+      window.localStorage.setItem(adminMarkAllReadStorageKey, nowIso);
+    } catch {
+      // ignore
+    }
+    setAdminNotifications((prev) => prev.map((item) => (item.unread ? { ...item, unread: false } : item)));
+    try {
+      await markAdminNotificationsAsRead(adminUserId);
+    } catch {
+      setAdminMarkAllReadCutoffIso('');
+      try {
+        window.localStorage.removeItem(adminMarkAllReadStorageKey);
+      } catch {
+        // ignore
+      }
+      setAdminNotifications((prev) => prev.map((item) => ({ ...item, unread: true })));
+    } finally {
+      setIsMarkingAdminNotificationsRead(false);
+    }
+  };
+
   const navItems = [
     { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/' },
     { label: 'Clients', icon: <Users size={20} />, path: '/clients' },
@@ -863,12 +962,36 @@ const Dashboard = ({ onNavigate }) => {
         <div className="content-wrapper">
           {/* Welcome Section */}
           <section className="welcome-section">
-            <div className="header-container">
-              <div className="header-content">
-                <h1>Welcome Back, Admin</h1>
-                <p>Here's what's happening with your legal matters today.</p>
+            <div className="welcome-section__row">
+              <div className="header-container">
+                <div className="header-content">
+                  <h1>Welcome Back, Admin</h1>
+                  <p>Here's what's happening with your legal matters today.</p>
+                </div>
+                <div className="header-overlay"></div>
               </div>
-              <div className="header-overlay"></div>
+              <div className="adm-notif-wrap">
+                <button
+                  type="button"
+                  className="adm-icon-btn"
+                  onClick={() => setAdminNotifOpen((v) => !v)}
+                  aria-expanded={adminNotifOpen}
+                  aria-haspopup="dialog"
+                  aria-label="Notifications"
+                >
+                  <Bell size={20} />
+                  {adminUnreadCount > 0 ? (
+                    <span className="adm-notif-badge">{formatNotifBadgeCount(adminUnreadCount)}</span>
+                  ) : null}
+                </button>
+                <AttorneyNotificationDropdown
+                  open={adminNotifOpen}
+                  onClose={() => setAdminNotifOpen(false)}
+                  notifications={displayAdminNotifications}
+                  onMarkAllRead={handleMarkAllAdminNotificationsRead}
+                  isMarkingAllRead={isMarkingAdminNotificationsRead}
+                />
+              </div>
             </div>
           </section>
 
