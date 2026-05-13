@@ -414,34 +414,6 @@ export default function AdminSupportDrawer({ open, onClose, onUnreadChange }) {
                   )}
                 </div>
 
-                <form className="adm-support-drawer__composer" onSubmit={handleSend}>
-                  <button
-                    type="button"
-                    className="adm-support-drawer__sched-btn"
-                    onClick={() => setScheduleOpen((v) => !v)}
-                    title="Send available schedule or set a new schedule"
-                  >
-                    {scheduleOpen ? 'Hide schedule helper' : 'Send available schedule'}
-                  </button>
-                  <textarea
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSend(e);
-                      }
-                    }}
-                    rows={2}
-                    placeholder="Reply to client..."
-                    disabled={sending}
-                    maxLength={2000}
-                  />
-                  <button type="submit" disabled={sending || !draft.trim()}>
-                    {sending ? 'Sending…' : 'Send'}
-                  </button>
-                </form>
-
                 {scheduleOpen ? (
                   <div className="adm-support-sched">
                     <div className="adm-support-sched__head">
@@ -586,6 +558,46 @@ export default function AdminSupportDrawer({ open, onClose, onUnreadChange }) {
                     </div>
                   </div>
                 ) : null}
+
+                <div className="adm-support-drawer__composer-wrap">
+                  <div className="adm-support-drawer__composer-actions">
+                    <button
+                      type="button"
+                      className={`adm-support-drawer__sched-btn ${scheduleOpen ? 'adm-support-drawer__sched-btn--on' : ''}`}
+                      onClick={() => setScheduleOpen((v) => !v)}
+                      title="Send available schedule or set a new schedule"
+                    >
+                      {scheduleOpen ? (
+                        <>
+                          <span aria-hidden="true">−</span> Hide schedule helper
+                        </>
+                      ) : (
+                        <>
+                          <span aria-hidden="true">+</span> Schedule helper
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <form className="adm-support-drawer__composer" onSubmit={handleSend}>
+                    <textarea
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSend(e);
+                        }
+                      }}
+                      rows={2}
+                      placeholder="Reply to client..."
+                      disabled={sending}
+                      maxLength={2000}
+                    />
+                    <button type="submit" disabled={sending || !draft.trim()}>
+                      {sending ? 'Sending…' : 'Send'}
+                    </button>
+                  </form>
+                </div>
               </>
             )}
           </div>
