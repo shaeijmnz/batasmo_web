@@ -149,7 +149,6 @@ const Dashboard = ({ onNavigate }) => {
     };
     onNavigate?.(pageMap[path] || 'admin-home');
   };
-  const handleQuickAction = (message) => window.alert(message);
 
   const [clients, setClients] = useState([]);
   const [totalClients, setTotalClients] = useState(0);
