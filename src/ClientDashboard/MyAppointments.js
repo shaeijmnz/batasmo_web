@@ -364,8 +364,18 @@ function MyAppointments({ onNavigate, profile }) {
     }
   };
 
+  const requestRescheduleViaAdmin = (appointment) => {
+    const attorneyName = formatAttorneyName(appointment.attorney);
+    const draft =
+      `Hi BatasMo Admin, I'd like to request a reschedule for my consultation` +
+      `${attorneyName ? ` with Atty. ${attorneyName}` : ''}` +
+      `${appointment.date ? ` on ${appointment.date}` : ''}` +
+      `${appointment.time ? ` at ${appointment.time}` : ''}.` +
+      ` Please help me set a new schedule. Thank you!`;
+    onNavigate('support-messages', { draft });
+  };
+
   const renderAppointmentCard = (appointment) => {
-    const reschedulePolicy = getReschedulePolicyState(appointment);
     const canEnterChat = appointment.chatAccessible && appointment.payment === 'PAID' && appointment.status !== 'COMPLETED';
     const attorneyName = formatAttorneyName(appointment.attorney);
     const areaLabel = String(appointment.specialty || 'Consultation').toUpperCase();
@@ -388,9 +398,9 @@ function MyAppointments({ onNavigate, profile }) {
 
           <div className="ma-queue-card__btns">
             <button
-              className={`ma-btn ma-btn--queue-secondary ${reschedulePolicy.can ? '' : 'ma-btn--needs-assistance'}`}
-              title={reschedulePolicy.can ? 'Reschedule this appointment' : reschedulePolicy.reason}
-              onClick={() => openRescheduleModal(appointment)}
+              className="ma-btn ma-btn--queue-secondary"
+              title="Message BatasMo Admin to set a new schedule"
+              onClick={() => requestRescheduleViaAdmin(appointment)}
             >
               RESCHEDULE
             </button>
@@ -569,8 +579,7 @@ function MyAppointments({ onNavigate, profile }) {
           <section className="ma-reschedule-note" aria-label="Reschedule notice">
             <p className="ma-reschedule-note__title">Need to reschedule?</p>
             <p className="ma-reschedule-note__text">
-              You can reschedule <strong>once only</strong> after your consultation fee is <strong>paid</strong> (free consultations are exempt), and only if you submit the request at least <strong>1 day before</strong> the consultation date (same-day reschedules are not allowed).
-              For additional changes, please contact <strong>admin support</strong>.
+              Tap <strong>RESCHEDULE</strong> on your appointment to message <strong>BatasMo Admin</strong>. Admin will confirm a new slot and update your consultation queue automatically. Requests must be submitted at least <strong>1 day before</strong> the consultation date (same-day reschedules are not allowed).
             </p>
           </section>
 

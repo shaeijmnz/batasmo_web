@@ -27,12 +27,33 @@ function formatTimeLabel(value) {
   });
 }
 
-export default function SupportMessages({ profile }) {
+export default function SupportMessages({ profile, initialDraft = '' }) {
   const [messages, setMessages] = useState([]);
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useState(() => initialDraft || '');
   const [sending, setSending] = useState(false);
   const [loadError, setLoadError] = useState('');
   const scrollRef = useRef(null);
+  const composerRef = useRef(null);
+  const consumedDraftRef = useRef(false);
+
+  useEffect(() => {
+    if (consumedDraftRef.current) return;
+    if (!initialDraft) return;
+    consumedDraftRef.current = true;
+    setDraft((prev) => (prev && prev.trim().length > 0 ? prev : initialDraft));
+    // Focus composer so the client can edit / send immediately.
+    requestAnimationFrame(() => {
+      if (composerRef.current) {
+        composerRef.current.focus();
+        const len = composerRef.current.value.length;
+        try {
+          composerRef.current.setSelectionRange(len, len);
+        } catch (_e) {
+          /* ignore */
+        }
+      }
+    });
+  }, [initialDraft]);
 
   const refreshAndMarkRead = useCallback(async () => {
     if (!profile?.id) return;
@@ -121,6 +142,7 @@ export default function SupportMessages({ profile }) {
 
       <form className="support-messages__composer" onSubmit={handleSend}>
         <textarea
+          ref={composerRef}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
