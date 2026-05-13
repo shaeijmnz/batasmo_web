@@ -53,7 +53,7 @@ function todayIso() {
   return `${y}-${m}-${day}`;
 }
 
-export default function AdminSupportDrawer({ open, onClose, onUnreadChange }) {
+export default function AdminSupportDrawer({ open, onClose, onUnreadChange, mode = 'drawer' }) {
   const [threads, setThreads] = useState([]);
   const [activeClientId, setActiveClientId] = useState('');
   const [messages, setMessages] = useState([]);
@@ -336,23 +336,33 @@ export default function AdminSupportDrawer({ open, onClose, onUnreadChange }) {
 
   if (!open) return null;
 
+  const isPage = mode === 'page';
+
   return (
     <>
-      <button
-        type="button"
-        className="adm-support-backdrop"
-        onClick={onClose}
-        aria-label="Close support drawer"
-      />
-      <aside className="adm-support-drawer" role="dialog" aria-label="Client support messages">
+      {isPage ? null : (
+        <button
+          type="button"
+          className="adm-support-backdrop"
+          onClick={onClose}
+          aria-label="Close support drawer"
+        />
+      )}
+      <aside
+        className={`adm-support-drawer ${isPage ? 'adm-support-drawer--page' : ''}`}
+        role={isPage ? 'region' : 'dialog'}
+        aria-label="Client support messages"
+      >
         <header className="adm-support-drawer__head">
           <div>
             <h2>Client Messages</h2>
             <p>Reply to client support inquiries.</p>
           </div>
-          <button type="button" className="adm-support-drawer__close" onClick={onClose} aria-label="Close">
-            ✕
-          </button>
+          {isPage ? null : (
+            <button type="button" className="adm-support-drawer__close" onClick={onClose} aria-label="Close">
+              ✕
+            </button>
+          )}
         </header>
 
         {loadError ? <div className="adm-support-drawer__error">{loadError}</div> : null}

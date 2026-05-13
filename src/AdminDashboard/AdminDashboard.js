@@ -988,7 +988,7 @@ const Dashboard = ({ onNavigate }) => {
                 <button
                   type="button"
                   className="adm-icon-btn"
-                  onClick={() => setSupportOpen(true)}
+                  onClick={() => onNavigate?.('admin-messages')}
                   aria-label="Client messages"
                   title="Client messages"
                 >

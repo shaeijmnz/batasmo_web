@@ -54,6 +54,7 @@ const AdminRequests = lazy(() => import('./AdminDashboard/AdminRequests'));
 const AdminConsultations = lazy(() => import('./AdminDashboard/AdminConsultations'));
 const AdminReports = lazy(() => import('./AdminDashboard/AdminReports'));
 const AdminSettingsPage = lazy(() => import('./AdminDashboard/AdminSettingsPage'));
+const AdminMessages = lazy(() => import('./AdminDashboard/AdminMessages'));
 
 const CLIENT_PAGES = [
   'home-logged',
@@ -89,6 +90,7 @@ const ADMIN_PAGES = [
   'admin-consultations',
   'admin-reports',
   'admin-settings',
+  'admin-messages',
 ]
 
 const canAccessPage = (role, targetPage) => {
@@ -659,6 +661,7 @@ function App() {
   if (page === 'admin-consultations') return renderLazy(<AdminConsultations onNavigate={handleNavigate} />);
   if (page === 'admin-reports') return renderLazy(<AdminReports onNavigate={handleNavigate} />);
   if (page === 'admin-settings') return renderLazy(<AdminSettingsPage onNavigate={handleNavigate} />);
+  if (page === 'admin-messages') return renderLazy(<AdminMessages onNavigate={handleNavigate} />);
 
   return <LandingPage onNavigate={handleNavigate} />;
 }
