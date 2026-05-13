@@ -912,7 +912,7 @@ const Dashboard = ({ onNavigate }) => {
   const stats = [
     { label: 'Total Clients', value: totalClients, color: '#1e3a8a', icon: <Users size={20}/>, modal: 'clients' },
     { label: 'Total Attorneys', value: totalAttorneys, color: '#eab308', icon: <Scale size={20}/>, page: '/attorneys' },
-    { label: 'Pending Notary', value: pendingNotaryRequests.length, color: '#ef4444', icon: <FileText size={20}/>, modal: 'pendingRequests' },
+    { label: 'Pending Notary', value: pendingNotaryRequests.length, color: '#ef4444', icon: <FileText size={20}/>, page: '/requests' },
   ];
 
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
