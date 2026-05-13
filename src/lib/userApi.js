@@ -594,6 +594,34 @@ export async function fetchAttorneyFreeSlotsForDate(attorneyId, dateIso) {
 
 export async function fetchClientActiveAppointmentsForAdmin(clientId) {
   if (!clientId) return []
+
+  // Prefer the Render backend (service role) so the admin can see ALL the
+  // client's active appointments regardless of RLS on the browser client.
+  try {
+    const session = (await supabase.auth.getSession())?.data?.session
+    if (session?.access_token) {
+      const baseUrl = resolvePaymentApiBaseUrl()
+      const response = await fetch(
+        `${baseUrl}/admin/clients/${encodeURIComponent(clientId)}/active-appointments`,
+        {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        },
+      )
+      const payload = await response.json().catch(() => ({}))
+      if (response.ok && Array.isArray(payload.appointments)) {
+        return payload.appointments
+      }
+      if (response.status === 401 || response.status === 403) {
+        console.warn('[admin-schedule] backend list HTTP', response.status, payload?.error || payload)
+      } else {
+        console.warn('[admin-schedule] backend list HTTP', response.status, payload?.error || payload)
+      }
+    }
+  } catch (err) {
+    console.warn('[admin-schedule] backend list request failed, falling back to direct Supabase', err?.message || err)
+  }
+
+  // Fallback: direct browser query (may be blocked by RLS but worth a try).
   const { data, error } = await supabase
     .from('appointments')
     .select(
@@ -603,7 +631,7 @@ export async function fetchClientActiveAppointmentsForAdmin(clientId) {
     .order('scheduled_at', { ascending: true })
 
   if (error) {
-    console.warn('[admin-schedule] fetchClientActiveAppointmentsForAdmin failed', error)
+    console.warn('[admin-schedule] fetchClientActiveAppointmentsForAdmin fallback failed', error)
     return []
   }
 

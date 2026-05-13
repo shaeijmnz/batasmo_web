@@ -1525,6 +1525,71 @@ app.post('/payments/appointments/abandon', async (req, res) => {
   }
 })
 
+// Admin lists a specific client's active (non-final) appointments — service
+// role bypasses RLS so admin can see anything regardless of policies.
+app.get('/admin/clients/:clientId/active-appointments', async (req, res) => {
+  try {
+    requireSupabaseServiceConfig()
+
+    const authHeader = String(req.headers.authorization || '').trim()
+    const jwt = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
+    if (!jwt) return res.status(401).json({ error: 'Authorization Bearer token is required.' })
+    await verifyCallerIsAdmin(jwt)
+
+    const clientId = String(req.params?.clientId || '').trim()
+    if (!clientId) return res.status(400).json({ error: 'clientId is required.' })
+
+    const rows = await supabaseRestGetMany({
+      table: 'appointments',
+      query: new URLSearchParams({
+        client_id: `eq.${clientId}`,
+        order: 'scheduled_at.asc',
+      }).toString(),
+    })
+
+    const FINAL = new Set(['cancelled', 'rejected', 'completed'])
+    const active = rows.filter((r) => !FINAL.has(String(r.status || '').toLowerCase()))
+
+    // Hydrate attorney names (one extra round-trip; small fan-out is fine).
+    const attorneyIds = [...new Set(active.map((r) => r.attorney_id).filter(Boolean))]
+    const attorneyNameById = new Map()
+    if (attorneyIds.length) {
+      const attyRows = await supabaseRestGetMany({
+        table: 'profiles',
+        query: new URLSearchParams({
+          id: `in.(${attorneyIds.join(',')})`,
+        }).toString(),
+      })
+      for (const a of attyRows) {
+        attorneyNameById.set(a.id, a.full_name || '')
+      }
+    }
+
+    const list = active.map((r) => ({
+      id: r.id,
+      title: r.title || 'Consultation',
+      status: r.status || '',
+      scheduledAt: r.scheduled_at || '',
+      slotId: r.slot_id || '',
+      slotDate: r.slot_date || '',
+      slotTime: r.slot_time || '',
+      attorneyId: r.attorney_id || '',
+      attorneyName: attorneyNameById.get(r.attorney_id) || '',
+    }))
+
+    return res.status(200).json({ appointments: list })
+  } catch (error) {
+    const msg = error?.message || 'Failed to load client appointments.'
+    const status =
+      msg.includes('Only Admin') || msg.includes('Invalid') || msg.includes('session')
+        ? 403
+        : msg.includes('Bearer')
+          ? 401
+          : 500
+    return res.status(status).json({ error: msg })
+  }
+})
+
 // Admin reschedules a client's consultation — service role bypasses RLS.
 app.post('/admin/appointments/reschedule', async (req, res) => {
   try {
