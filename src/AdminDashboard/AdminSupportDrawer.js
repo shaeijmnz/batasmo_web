@@ -285,17 +285,38 @@ export default function AdminSupportDrawer({ open, onClose, onUnreadChange, mode
       // Also drop a confirmation message in the chat thread for paper trail.
       const slot = freeSlots.find((s) => s.id === slotId);
       const whenLabel = formatScheduleDateLabel(result.newScheduledIso);
-      const body =
-        `Reschedule confirmed by Admin.\n` +
+      const confirmBody =
+        `✅ Reschedule confirmed by Admin.\n` +
         `New schedule: ${whenLabel}${selectedAttorneyName ? ` with ${selectedAttorneyName}` : ''}.\n` +
         `(Slot: ${pickedDate} at ${slot?.label || ''})`;
+      const policyBody =
+        `⚠️ Reminder: Rescheduling is allowed only ONE time per consultation. ` +
+        `If you miss this rescheduled appointment, your paid consultation fee will be forfeited and ` +
+        `you will need to book (and pay for) a new consultation. ` +
+        `Please make sure to attend on the new schedule above.`;
+
       try {
-        const sent = await sendAdminSupportMessage({ clientId: activeClientId, message: body });
+        const sentConfirm = await sendAdminSupportMessage({
+          clientId: activeClientId,
+          message: confirmBody,
+        });
         setMessages((previous) =>
-          previous.some((m) => m.id === sent.id) ? previous : [...previous, sent],
+          previous.some((m) => m.id === sentConfirm.id) ? previous : [...previous, sentConfirm],
         );
       } catch (err) {
         console.warn('[support] reschedule chat ack failed', err);
+      }
+
+      try {
+        const sentPolicy = await sendAdminSupportMessage({
+          clientId: activeClientId,
+          message: policyBody,
+        });
+        setMessages((previous) =>
+          previous.some((m) => m.id === sentPolicy.id) ? previous : [...previous, sentPolicy],
+        );
+      } catch (err) {
+        console.warn('[support] reschedule policy msg failed', err);
       }
 
       setScheduleNotice('Schedule updated. Client & attorney notified.');
