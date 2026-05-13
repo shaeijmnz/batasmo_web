@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { 
   LayoutDashboard, Users, Scale, FileText,
-  BarChart3, Settings, LogOut, Menu, Plus, Search, 
+  BarChart3, Settings, LogOut, Menu, Search, 
   Filter, Download, Mail, Phone, Calendar, MoreVertical 
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
@@ -237,9 +237,6 @@ const Clients = ({ onNavigate }) => {
               <h2 className="title">Clients Management</h2>
               <p className="subtitle">Manage and view all registered clients</p>
             </div>
-            <button className="add-btn" onClick={() => handleQuickAction('Add New Client clicked')}>
-              <Plus size={18} /> Add New Client
-            </button>
           </div>
 
           {/* Stats Grid */}
