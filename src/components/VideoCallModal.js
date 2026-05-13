@@ -1,6 +1,50 @@
 import { Component, useCallback, useEffect, useRef, useState } from 'react';
-import { MeetingProvider, useMeeting, useParticipant } from '@videosdk.live/react-sdk';
+import {
+  MeetingProvider,
+  useMeeting,
+  useParticipant,
+  createCameraVideoTrack,
+  createMicrophoneAudioTrack,
+} from '@videosdk.live/react-sdk';
 import './VideoCallModal.css';
+
+// Build HD video + cleaned-up audio tracks before joining so we don't fall
+// back to VideoSDK's lowest-common-denominator defaults. We try the highest
+// preset that the user's hardware can deliver and degrade gracefully.
+const VIDEO_QUALITY_PRESETS = ['h720p_w1280p', 'h540p_w960p', 'h360p_w640p'];
+
+async function createPreferredCameraTrack() {
+  for (const encoderConfig of VIDEO_QUALITY_PRESETS) {
+    try {
+      const track = await createCameraVideoTrack({
+        encoderConfig,
+        facingMode: 'user',
+        optimizationMode: 'motion',
+        multiStream: false,
+      });
+      if (track) return track;
+    } catch (err) {
+      console.warn('[video] camera preset failed', encoderConfig, err?.message || err);
+    }
+  }
+  return null;
+}
+
+async function createPreferredAudioTrack() {
+  try {
+    return await createMicrophoneAudioTrack({
+      encoderConfig: 'speech_standard',
+      noiseConfig: {
+        noiseSuppression: true,
+        echoCancellation: true,
+        autoGainControl: true,
+      },
+    });
+  } catch (err) {
+    console.warn('[video] mic preset failed', err?.message || err);
+    return null;
+  }
+}
 
 // ─── Error boundary ──────────────────────────────────────────────────────────
 // Catches VideoSDK internal crashes (e.g. "Cannot read properties of null
@@ -174,7 +218,7 @@ function Controls({ onLeave, micOn, webcamOn, toggleMic, toggleWebcam }) {
 
 // ─── Meeting view ─────────────────────────────────────────────────────────────
 
-const JOIN_TIMEOUT_MS = 45_000;
+const JOIN_TIMEOUT_MS = 25_000;
 
 const buildTwoParticipantLayout = (participantIds, localParticipantId) => {
   if (!Array.isArray(participantIds) || participantIds.length === 0) {
@@ -382,7 +426,58 @@ function MeetingView({ meetingId, onLeave }) {
 // ─── Public modal wrapper ────────────────────────────────────────────────────
 
 export default function VideoCallModal({ meetingId, token, participantName, onClose }) {
+  const [preparedTracks, setPreparedTracks] = useState(null);
+  const [tracksReady, setTracksReady] = useState(false);
+  const [tracksError, setTracksError] = useState('');
+  const trackCleanupRef = useRef(null);
+
+  // Build HD tracks before mounting MeetingProvider so the participant joins
+  // directly at the preferred quality, instead of falling back to SDK defaults.
+  useEffect(() => {
+    if (!meetingId || !token) return undefined;
+
+    let cancelled = false;
+    setTracksReady(false);
+    setTracksError('');
+
+    (async () => {
+      const [videoTrack, audioTrack] = await Promise.all([
+        createPreferredCameraTrack(),
+        createPreferredAudioTrack(),
+      ]);
+
+      if (cancelled) {
+        try { videoTrack?.stop?.(); } catch { /* noop */ }
+        try { audioTrack?.stop?.(); } catch { /* noop */ }
+        return;
+      }
+
+      trackCleanupRef.current = () => {
+        try { videoTrack?.stop?.(); } catch { /* noop */ }
+        try { audioTrack?.stop?.(); } catch { /* noop */ }
+      };
+      setPreparedTracks({ videoTrack, audioTrack });
+      setTracksReady(true);
+
+      if (!videoTrack && !audioTrack) {
+        setTracksError('Using default camera/microphone (HD preset unavailable).');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (typeof trackCleanupRef.current === 'function') {
+        trackCleanupRef.current();
+        trackCleanupRef.current = null;
+      }
+    };
+  }, [meetingId, token]);
+
   const handleLeave = () => {
+    if (typeof trackCleanupRef.current === 'function') {
+      trackCleanupRef.current();
+      trackCleanupRef.current = null;
+    }
     if (typeof onClose === 'function') onClose();
   };
 
@@ -402,20 +497,34 @@ export default function VideoCallModal({ meetingId, token, participantName, onCl
         </div>
 
         <VideoErrorBoundary>
-          <MeetingProvider
-            config={{
-              meetingId,
-              micEnabled: true,
-              webcamEnabled: true,
-              name: participantName || 'Participant',
-              multiStream: true,
-            }}
-            token={token}
-            joinWithoutUserInteraction={false}
-            reinitialiseMeetingOnConfigChange={false}
-          >
-            <MeetingView meetingId={meetingId} onLeave={handleLeave} />
-          </MeetingProvider>
+          {tracksReady ? (
+            <MeetingProvider
+              config={{
+                meetingId,
+                micEnabled: true,
+                webcamEnabled: true,
+                name: participantName || 'Participant',
+                // Two-party consultations join faster and look sharper without
+                // simulcast layers. The SDK still adapts to bandwidth.
+                multiStream: false,
+                customCameraVideoTrack: preparedTracks?.videoTrack || undefined,
+                customMicrophoneAudioTrack: preparedTracks?.audioTrack || undefined,
+              }}
+              token={token}
+              joinWithoutUserInteraction={false}
+              reinitialiseMeetingOnConfigChange={false}
+            >
+              <MeetingView meetingId={meetingId} onLeave={handleLeave} />
+            </MeetingProvider>
+          ) : (
+            <div className="vc-connecting">
+              <div className="vc-connecting__spinner" />
+              <p>Preparing HD camera & microphone…</p>
+              {tracksError ? (
+                <p className="vc-error-msg" style={{ marginTop: 6 }}>{tracksError}</p>
+              ) : null}
+            </div>
+          )}
         </VideoErrorBoundary>
       </div>
     </div>

@@ -17,6 +17,7 @@ import {
   getOrCreateVideoMeeting,
   clearVideoMeetingId,
   saveAttorneyConsultationSummary,
+  getVideoSdkToken,
 } from '../lib/userApi';
 const VideoCallModal = lazy(() => import('../components/VideoCallModal'));
 
@@ -738,6 +739,15 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
 
     return () => unsubscribe();
   }, [activeAppointmentId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Prefetch VideoSDK token in the background so the first time the attorney
+  // hits "Video Call" the join is noticeably faster (token is cached 110 min).
+  useEffect(() => {
+    if (!activeAppointmentId || isClosed) return;
+    getVideoSdkToken().catch(() => {
+      // Will retry on actual call start.
+    });
+  }, [activeAppointmentId, isClosed]);
 
   return (
     <div className="am-page">

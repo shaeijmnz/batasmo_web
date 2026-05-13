@@ -715,6 +715,10 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
   useEffect(() => {
     if (!activeAppointmentId || isClosed || videoCall) return;
     warmupMediaPermissions();
+    // Prefetch VideoSDK token so the first call's join is faster (110m cache).
+    getVideoSdkToken().catch(() => {
+      // Ignore prefetch failure; will retry on actual call.
+    });
   }, [activeAppointmentId, isClosed, videoCall]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
