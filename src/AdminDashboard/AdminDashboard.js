@@ -909,10 +909,19 @@ const Dashboard = ({ onNavigate }) => {
     { label: 'Settings', icon: <Settings size={20} />, path: '/settings' },
   ];
 
+  const pendingNotaryCount = pendingNotaryRequests.length;
   const stats = [
     { label: 'Total Clients', value: totalClients, color: '#1e3a8a', icon: <Users size={20}/>, modal: 'clients' },
     { label: 'Total Attorneys', value: totalAttorneys, color: '#eab308', icon: <Scale size={20}/>, page: '/attorneys' },
-    { label: 'Pending Notary', value: pendingNotaryRequests.length, color: '#ef4444', icon: <FileText size={20}/>, page: '/requests' },
+    {
+      label: 'Pending Notary',
+      value: pendingNotaryCount,
+      color: '#ef4444',
+      icon: <FileText size={20}/>,
+      page: '/requests',
+      alert: pendingNotaryCount > 0,
+      alertText: `${pendingNotaryCount} new ${pendingNotaryCount === 1 ? 'request' : 'requests'}`,
+    },
   ];
 
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -1039,14 +1048,18 @@ const Dashboard = ({ onNavigate }) => {
             {stats.map((stat, i) => (
               <div
                 key={i}
-                className="stat-card clickable-card"
+                className={`stat-card clickable-card ${stat.alert ? 'stat-card--alert' : ''}`}
                 onClick={() => (stat.page ? navigate(stat.page) : setActiveModal(stat.modal))}
               >
+                {stat.alert ? <span className="stat-card__pulse" aria-hidden="true" /> : null}
                 <div className="stat-label">
                   <span>{stat.label}</span>
-                  <span style={{ color: '#94a3b8' }}>{stat.icon}</span>
+                  <span style={{ color: stat.alert ? '#ef4444' : '#94a3b8' }}>{stat.icon}</span>
                 </div>
-                <h3 className="stat-number">{stat.value}</h3>
+                <h3 className="stat-number" style={stat.alert ? { color: '#ef4444' } : undefined}>
+                  {stat.value}
+                </h3>
+                {stat.alert ? <span className="stat-card__alert-text">{stat.alertText}</span> : null}
               </div>
             ))}
           </section>
