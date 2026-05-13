@@ -911,7 +911,7 @@ const Dashboard = ({ onNavigate }) => {
 
   const pendingNotaryCount = pendingNotaryRequests.length;
   const stats = [
-    { label: 'Total Clients', value: totalClients, color: '#1e3a8a', icon: <Users size={20}/>, modal: 'clients' },
+    { label: 'Total Clients', value: totalClients, color: '#1e3a8a', icon: <Users size={20}/>, page: '/clients' },
     { label: 'Total Attorneys', value: totalAttorneys, color: '#eab308', icon: <Scale size={20}/>, page: '/attorneys' },
     {
       label: 'Pending Notary',
