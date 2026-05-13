@@ -4,7 +4,7 @@
 .clogs-error { color: #b91c1c; margin-bottom: 10px; }
 .clogs-list { display: grid; gap: 12px; }
 .clogs-item { background: var(--ui-bg-card); border: 1px solid var(--ui-border); border-radius: 14px; padding: 14px; display: grid; grid-template-columns: 1fr auto auto; gap: 14px; align-items: center; box-shadow: var(--ui-shadow-md); transition: all var(--ui-transition-normal); position: relative; overflow: hidden; }
-.clogs-item::before { content: ''; position: absolute; inset: 0; background: var(--ui-accent-glow); opacity: 0; transition: opacity var(--ui-transition-normal); }
+.clogs-item::before { content: ''; position: absolute; inset: 0; background: var(--ui-accent-glow); opacity: 0; transition: opacity var(--ui-transition-normal); pointer-events: none; }
 .clogs-item:hover { transform: translateY(-2px); box-shadow: var(--ui-shadow-lg); border-color: var(--ui-glass-border); }
 .clogs-item:hover::before { opacity: 1; }
 .clogs-item__main h3 { margin: 0; color: var(--ui-text-primary); font-size: 1rem; }
@@ -14,7 +14,7 @@
 .clogs-item__rating strong { color: var(--ui-text-primary); font-size: 0.78rem; }
 .clogs-stars { color: var(--ui-text-muted); font-size: 0.92rem; font-weight: 700; letter-spacing: 1px; }
 .clogs-stars.is-rated { color: var(--ui-accent); }
-.clogs-transcript-btn { border: 1px solid var(--ui-glass-border); background: var(--ui-accent-glow); color: var(--ui-text-primary); border-radius: 10px; padding: 9px 12px; font-size: 0.82rem; font-weight: 700; cursor: pointer; transition: all var(--ui-transition-normal); }
+.clogs-transcript-btn { border: 1px solid var(--ui-glass-border); background: var(--ui-accent-glow); color: var(--ui-text-primary); border-radius: 10px; padding: 9px 12px; font-size: 0.82rem; font-weight: 700; cursor: pointer; transition: all var(--ui-transition-normal); position: relative; z-index: 1; }
 .clogs-transcript-btn:hover { background: var(--ui-accent-glow-hover); transform: translateY(-1px); box-shadow: var(--ui-shadow-sm); }
 .clogs-empty { border: 1px dashed var(--ui-border); border-radius: 14px; padding: 18px; color: var(--ui-text-muted); text-align: center; background: var(--ui-bg-darker); }
 .clogs-modal-overlay { position: fixed; inset: 0; background: rgba(21, 34, 56, 0.12); display: flex; align-items: center; justify-content: center; z-index: 999; padding: 16px; animation: fadeIn 0.2s ease-out; }
