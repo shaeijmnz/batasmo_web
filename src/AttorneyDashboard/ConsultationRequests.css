@@ -215,6 +215,41 @@
   line-height: 1.6;
 }
 
+.cr-card__attachment {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  flex-wrap: wrap;
+}
+.cr-card__attachment-label {
+  font-size: 0.82rem;
+  color: #92400e;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cr-card__attachment-btn {
+  background: #f5a623;
+  color: #111827;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+}
+.cr-card__attachment-btn:hover {
+  filter: brightness(1.05);
+}
+
 /* ── Modals ── */
 .cr-modal-overlay {
   position: fixed; inset: 0;

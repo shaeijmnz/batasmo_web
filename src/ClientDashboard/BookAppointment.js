@@ -6,6 +6,7 @@ import {
   abandonAppointmentCheckout,
   cancelPendingUnpaidBooking,
   createAppointmentBooking,
+  uploadAppointmentAttachment,
   fetchBookableAttorneys,
   getAppointmentPaymentStatus,
   getAvailability,
@@ -160,6 +161,9 @@ function BookAppointment({ onNavigate, profile }) {
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState('');
   const [reason, setReason] = useState('');
+  const [attachment, setAttachment] = useState(null);
+  const [attachmentError, setAttachmentError] = useState('');
+  const attachmentInputRef = useRef(null);
   const [availableSlots, setAvailableSlots] = useState([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [hiddenPastSlotsCount, setHiddenPastSlotsCount] = useState(0);
@@ -288,6 +292,9 @@ function BookAppointment({ onNavigate, profile }) {
     setSelectedDate('');
     setSelectedTime('');
     setReason('');
+    setAttachment(null);
+    setAttachmentError('');
+    if (attachmentInputRef.current) attachmentInputRef.current.value = '';
     setAvailableSlots([]);
     setHiddenPastSlotsCount(0);
     setPaymentMethod('GCash');
@@ -307,6 +314,9 @@ function BookAppointment({ onNavigate, profile }) {
       setSelectedDate('');
       setSelectedTime('');
       setReason('');
+      setAttachment(null);
+      setAttachmentError('');
+      if (attachmentInputRef.current) attachmentInputRef.current.value = '';
       setAvailableSlots([]);
       setHiddenPastSlotsCount(0);
       setPaymentMethod('GCash');
@@ -420,12 +430,26 @@ function BookAppointment({ onNavigate, profile }) {
         throw new Error('This selected slot is no longer in the future. Please choose another time.');
       }
 
+      let uploadedAttachment = null;
+      if (attachment instanceof File) {
+        try {
+          uploadedAttachment = await uploadAppointmentAttachment({
+            clientId: profile.id,
+            file: attachment,
+          });
+        } catch (uploadError) {
+          throw new Error(uploadError?.message || 'Failed to upload your attached file. Please try again.');
+        }
+      }
+
       const bookingResult = await createAppointmentBooking({
         clientId: profile.id,
         attorneyId: bookingAttorney.id,
         title: `Consultation - ${bookingAttorney.specialty || 'General'}`,
         notes: reason.trim() || null,
         amount: bookingAttorney.amount || 2000,
+        attachmentUrl: uploadedAttachment?.url || null,
+        attachmentName: uploadedAttachment?.name || null,
         secondBookingConfirmed,
         payload: {
           attorney_id: bookingAttorney.id,
@@ -436,6 +460,8 @@ function BookAppointment({ onNavigate, profile }) {
           slot_time: selectedTime,
           amount: bookingAttorney.amount || 2000,
           duration_minutes: 60,
+          attachment_url: uploadedAttachment?.url || null,
+          attachment_name: uploadedAttachment?.name || null,
         },
       });
 
@@ -571,6 +597,9 @@ function BookAppointment({ onNavigate, profile }) {
       setSelectedDate('');
       setSelectedTime('');
       setReason('');
+      setAttachment(null);
+      setAttachmentError('');
+      if (attachmentInputRef.current) attachmentInputRef.current.value = '';
       setAvailableSlots([]);
     });
   };
@@ -788,6 +817,66 @@ function BookAppointment({ onNavigate, profile }) {
                         onChange={(e) => setReason(e.target.value)}
                         rows="3"
                       />
+
+                      <div className="ba-attach-row">
+                        <div className="ba-attach-row__hint">
+                          📎 Attach a file for the attorney (optional, max 10 MB).
+                          PDF, image, or document.
+                        </div>
+                        <input
+                          ref={attachmentInputRef}
+                          type="file"
+                          accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp,.txt,application/pdf,image/*"
+                          style={{ display: 'none' }}
+                          onChange={(e) => {
+                            const file = e.target.files && e.target.files[0];
+                            if (!file) {
+                              setAttachment(null);
+                              setAttachmentError('');
+                              return;
+                            }
+                            const MAX_BYTES = 10 * 1024 * 1024;
+                            if (file.size > MAX_BYTES) {
+                              setAttachment(null);
+                              setAttachmentError('File is too large. Please keep it under 10 MB.');
+                              if (attachmentInputRef.current) attachmentInputRef.current.value = '';
+                              return;
+                            }
+                            setAttachment(file);
+                            setAttachmentError('');
+                          }}
+                        />
+                        <div className="ba-attach-row__controls">
+                          <button
+                            type="button"
+                            className="ba-attach-btn"
+                            onClick={() => attachmentInputRef.current && attachmentInputRef.current.click()}
+                          >
+                            {attachment ? 'Replace file' : 'Choose file'}
+                          </button>
+                          {attachment ? (
+                            <>
+                              <span className="ba-attach-name" title={attachment.name}>
+                                {attachment.name}
+                              </span>
+                              <button
+                                type="button"
+                                className="ba-attach-btn ba-attach-btn--ghost"
+                                onClick={() => {
+                                  setAttachment(null);
+                                  setAttachmentError('');
+                                  if (attachmentInputRef.current) attachmentInputRef.current.value = '';
+                                }}
+                              >
+                                Remove
+                              </button>
+                            </>
+                          ) : null}
+                        </div>
+                        {attachmentError ? (
+                          <div className="ba-attach-row__error">{attachmentError}</div>
+                        ) : null}
+                      </div>
                     </div>
 
                     <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
@@ -830,6 +919,9 @@ function BookAppointment({ onNavigate, profile }) {
                         <div><strong>Date:</strong> {selectedDate}</div>
                         <div><strong>Time:</strong> {selectedTime}</div>
                         <div><strong>Amount:</strong> PHP 2,000.00</div>
+                        {attachment ? (
+                          <div><strong>Attached:</strong> {attachment.name}</div>
+                        ) : null}
                       </div>
                     </div>
 

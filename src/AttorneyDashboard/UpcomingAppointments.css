@@ -385,6 +385,19 @@
 .ua-btn--enter-live:hover {
   background: #2d3148;
 }
+.ua-btn--view-file {
+  background: #fff7ed;
+  border: 1.5px solid #fdba74;
+  color: #9a3412;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.ua-btn--view-file:hover {
+  background: #fdba74;
+  color: #1c1f2e;
+}
 
 /* ── Reschedule Modal ── */
 .ua-modal-overlay {

@@ -715,6 +715,66 @@
   color: var(--ui-text-muted);
 }
 
+/* Attach file (under Notes) */
+.ba-attach-row {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(245, 166, 35, 0.35);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ba-attach-row__hint {
+  color: var(--ui-text-muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.ba-attach-row__controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ba-attach-row__error {
+  color: #ef4444;
+  font-size: 0.8rem;
+}
+
+.ba-attach-btn {
+  background: var(--ui-accent, #f5a623);
+  color: #111827;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ba-attach-btn:hover {
+  filter: brightness(1.05);
+}
+
+.ba-attach-btn--ghost {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: var(--ui-text-secondary, #cbd5e1);
+}
+
+.ba-attach-name {
+  font-size: 0.8rem;
+  color: var(--ui-text-secondary, #cbd5e1);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* File Upload */
 .ba-file-upload {
   position: relative;

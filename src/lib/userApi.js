@@ -3292,6 +3292,8 @@ export async function fetchAttorneyConsultationRequests(userId, options = {}) {
       payment: Number(item.amount || 0) > 0 ? 'Paid' : 'Unpaid',
       status: 'Approved',
       concern: item.notes || 'No additional notes provided.',
+      attachmentUrl: item.attachment_url || '',
+      attachmentName: item.attachment_name || '',
     }))
 
   const storedNotifications = (notificationsRes.data || []).map((item) => ({
@@ -3583,6 +3585,55 @@ export async function fetchPublicLandingData() {
   return { content, attorneys: gallery }
 }
 
+/**
+ * Uploads an optional client-provided file that should accompany a new
+ * consultation booking. Uses the public `appointment-attachments` bucket and
+ * returns `{ url, name }` so the caller can persist it onto the appointment.
+ */
+export async function uploadAppointmentAttachment({ clientId, file }) {
+  if (!(file instanceof File)) return null
+  if (!clientId) throw new Error('clientId is required to upload an attachment.')
+  const safeName = String(file.name || 'attachment').replace(/[^a-zA-Z0-9._-]/g, '_')
+  const filePath = `${clientId}/${Date.now()}_${safeName}`
+  const ext = safeName.split('.').pop() || 'bin'
+
+  const { error: uploadError } = await supabase.storage
+    .from('appointment-attachments')
+    .upload(filePath, file, {
+      contentType: file.type || `application/${ext}`,
+      upsert: false,
+    })
+
+  if (uploadError) {
+    // Fall back to the existing notarial-documents bucket so the feature
+    // still works if the team has not provisioned the new bucket yet.
+    const { error: fallbackUploadError } = await supabase.storage
+      .from('notarial-documents')
+      .upload(filePath, file, {
+        contentType: file.type || `application/${ext}`,
+        upsert: false,
+      })
+    if (fallbackUploadError) throw uploadError
+
+    const { data: fallbackUrlData } = supabase.storage
+      .from('notarial-documents')
+      .getPublicUrl(filePath)
+    return {
+      url: fallbackUrlData?.publicUrl || filePath,
+      name: file.name || safeName,
+    }
+  }
+
+  const { data: urlData } = supabase.storage
+    .from('appointment-attachments')
+    .getPublicUrl(filePath)
+
+  return {
+    url: urlData?.publicUrl || filePath,
+    name: file.name || safeName,
+  }
+}
+
 export async function createAppointmentBooking({
   clientId,
   attorneyId,
@@ -3592,6 +3643,8 @@ export async function createAppointmentBooking({
   amount,
   paymentMethod,
   paymentCode,
+  attachmentUrl,
+  attachmentName,
   payload,
 }) {
   const {
@@ -3621,6 +3674,8 @@ export async function createAppointmentBooking({
     slot_time: payload?.slot_time || null,
     amount: Number(payload?.amount ?? amount ?? 0),
     duration_minutes: Number(payload?.duration_minutes || 60),
+    attachment_url: payload?.attachment_url ?? attachmentUrl ?? null,
+    attachment_name: payload?.attachment_name ?? attachmentName ?? null,
   }
 
   let resolvedSlotId = slotId || payload?.slot_id || null
@@ -3702,27 +3757,55 @@ export async function createAppointmentBooking({
   }
 
   if (!appointmentId && !rpcSucceeded) {
-    const { data: insertedAppointment, error: fallbackInsertError } = await supabase
+    const insertPayload = {
+      client_id: resolvedClientId,
+      attorney_id: normalizedPayload.attorney_id,
+      slot_id: resolvedSlotId,
+      title: normalizedPayload.title,
+      notes: normalizedPayload.notes,
+      scheduled_at: normalizedPayload.scheduled_at,
+      duration_minutes: normalizedPayload.duration_minutes,
+      amount: normalizedPayload.amount,
+      // 'pending' until PayMongo flips it to 'confirmed' via notifyAttorneyOfPaidBooking().
+      status: 'pending',
+      created_at: nowIso,
+      updated_at: nowIso,
+    }
+    if (normalizedPayload.attachment_url) insertPayload.attachment_url = normalizedPayload.attachment_url
+    if (normalizedPayload.attachment_name) insertPayload.attachment_name = normalizedPayload.attachment_name
+
+    let insertResult = await supabase
       .from('appointments')
-      .insert({
-        client_id: resolvedClientId,
-        attorney_id: normalizedPayload.attorney_id,
-        slot_id: resolvedSlotId,
-        title: normalizedPayload.title,
-        notes: normalizedPayload.notes,
-        scheduled_at: normalizedPayload.scheduled_at,
-        duration_minutes: normalizedPayload.duration_minutes,
-        amount: normalizedPayload.amount,
-        // 'pending' until PayMongo flips it to 'confirmed' via notifyAttorneyOfPaidBooking().
-        status: 'pending',
-        created_at: nowIso,
-        updated_at: nowIso,
-      })
+      .insert(insertPayload)
       .select('id')
       .single()
 
-    if (fallbackInsertError) throw fallbackInsertError
-    appointmentId = insertedAppointment?.id || null
+    // Schema may not have attachment columns yet on older deployments; retry without them.
+    if (insertResult.error && (isMissingColumnError(insertResult.error, 'attachment_url') || isMissingColumnError(insertResult.error, 'attachment_name'))) {
+      const { attachment_url, attachment_name, ...rest } = insertPayload
+      insertResult = await supabase
+        .from('appointments')
+        .insert(rest)
+        .select('id')
+        .single()
+    }
+
+    if (insertResult.error) throw insertResult.error
+    appointmentId = insertResult.data?.id || null
+  }
+
+  // RPC paths don't carry attachment metadata yet; patch it in if needed.
+  if (appointmentId && (normalizedPayload.attachment_url || normalizedPayload.attachment_name)) {
+    const attachmentPatch = {}
+    if (normalizedPayload.attachment_url) attachmentPatch.attachment_url = normalizedPayload.attachment_url
+    if (normalizedPayload.attachment_name) attachmentPatch.attachment_name = normalizedPayload.attachment_name
+    const { error: attachUpdateError } = await supabase
+      .from('appointments')
+      .update(attachmentPatch)
+      .eq('id', appointmentId)
+    if (attachUpdateError && !isMissingColumnError(attachUpdateError, 'attachment_url') && !isMissingColumnError(attachUpdateError, 'attachment_name')) {
+      console.warn('[booking] persist attachment metadata failed', attachUpdateError)
+    }
   }
 
   if (normalizedPayload.slot_date && normalizedPayload.slot_time) {
@@ -4938,6 +5021,8 @@ export async function fetchAttorneyUpcomingAppointments(userId, options = {}) {
         status: item.status,
         color: '#6366f1',
         concern: item.notes || '',
+        attachmentUrl: item.attachment_url || '',
+        attachmentName: item.attachment_name || '',
       }
     })
 }

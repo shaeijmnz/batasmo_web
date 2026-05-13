@@ -298,6 +298,22 @@ function ConsultationRequests({ onNavigate, profile }) {
             <div className="cr-card__concern">
               <span className="cr-card__concern-label">BRIEF DESCRIPTION OF CONCERN</span>
               <div className="cr-card__concern-text">{req.concern}</div>
+              {req.attachmentUrl ? (
+                <div className="cr-card__attachment">
+                  <DocIcon />
+                  <span className="cr-card__attachment-label">
+                    Client attached: {req.attachmentName || 'View file'}
+                  </span>
+                  <a
+                    className="cr-card__attachment-btn"
+                    href={req.attachmentUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    View file
+                  </a>
+                </div>
+              ) : null}
             </div>
           </div>
         ))}

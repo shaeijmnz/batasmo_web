@@ -371,6 +371,17 @@ function UpcomingAppointments({ onNavigate, profile }) {
           <span>{appt.date ? `${appt.date} • ${appt.time}` : appt.time}</span>
         </div>
         <div className="ua-card__actions">
+          {appt.attachmentUrl ? (
+            <a
+              className="ua-btn ua-btn--view-file"
+              href={appt.attachmentUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={appt.attachmentName || 'View attached file'}
+            >
+              VIEW FILE
+            </a>
+          ) : null}
           <button className="ua-btn ua-btn--reschedule" onClick={() => setReschedAppt(appt)}>
             RESCHEDULE
           </button>
