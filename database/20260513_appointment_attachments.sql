@@ -18,6 +18,7 @@ commit;
 --    "appointment-attachments" and set it to PUBLIC (so signed URLs are not
 --    required). Or keep it private and the app will store the path.
 --
--- 2) Optional RLS for stricter control. If you keep it public, no policies
---    are required. The web client uploads with the anon key and we save the
---    public URL into appointments.attachment_url.
+-- 2) Storage bucket RLS: Supabase still requires policies on storage.objects
+--    for uploads. Without them, uploads fail with "new row violates row-level
+--    security policy". Run AFTER creating the bucket:
+--      database/20260514_appointment_attachments_storage_rls.sql

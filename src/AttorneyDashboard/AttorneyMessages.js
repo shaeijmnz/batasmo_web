@@ -705,25 +705,19 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
   };
 
   const handleCloseVideoCall = async () => {
+    // Closing the video modal only leaves the call. The consultation itself
+    // (chat + queue + feedback + logs) is ONLY ended when the attorney clicks
+    // the explicit "End Session" button. This prevents accidental endings
+    // when either side just leaves the call window.
     try {
       if (videoCall?.roomId) {
         await clearVideoMeetingId(videoCall.roomId);
       }
+    } catch (error) {
+      console.warn('[attorney-call] clear meeting id failed', error);
+    } finally {
       videoCallRef.current = null;
       setVideoCall(null);
-
-      // Treat attorney "end call" as consultation end so reports and logs
-      // immediately reflect the completed session.
-      if (activeAppointmentId && !isClosed && !endingSession) {
-        await endConsultationSession(activeAppointmentId);
-        setIsClosed(true);
-        setLoadError('');
-        setPostSessionAppointmentId(activeAppointmentId);
-        setPostSessionSummaryText('');
-        setPostSessionSummaryOpen(true);
-      }
-    } catch (error) {
-      setLoadError(error.message || 'Failed to close video call.');
     }
   };
 

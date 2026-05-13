@@ -19,6 +19,7 @@ import {
   getOrCreateVideoMeeting,
   getVideoSdkToken,
   clearVideoMeetingId,
+  fetchConsultationTranscriptForAppointment,
 } from '../lib/userApi';
 const VideoCallModal = lazy(() => import('../components/VideoCallModal'));
 
@@ -74,6 +75,9 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
   const [feedbackError, setFeedbackError] = useState('');
+  const [summaryText, setSummaryText] = useState('');
+  const [summaryView, setSummaryView] = useState(false);
+  const [summaryLoading, setSummaryLoading] = useState(false);
   const [timeWarningPopup, setTimeWarningPopup] = useState(null);
   const [videoCall, setVideoCall] = useState(null);
   const [videoCallLoading, setVideoCallLoading] = useState(false);
@@ -149,6 +153,30 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
       setFeedbackError('Please submit your feedback to finish this consultation.');
       setLoadError(error.message || 'Unable to load feedback status.');
     }
+
+    // Best-effort: prefetch attorney's summary so "View Summary" button can
+    // surface immediately on the feedback modal.
+    try {
+      const transcript = await fetchConsultationTranscriptForAppointment(appointmentId);
+      setSummaryText(String(transcript?.attorneyConsultationSummary || ''));
+    } catch {
+      // Keep modal usable even if transcript fetch fails.
+    }
+  };
+
+  const handleViewSummary = async () => {
+    if (!activeAppointmentId) return;
+    setSummaryView(true);
+    if (summaryText) return;
+    try {
+      setSummaryLoading(true);
+      const transcript = await fetchConsultationTranscriptForAppointment(activeAppointmentId);
+      setSummaryText(String(transcript?.attorneyConsultationSummary || ''));
+    } catch (error) {
+      setFeedbackError(error.message || 'Unable to load the attorney summary.');
+    } finally {
+      setSummaryLoading(false);
+    }
   };
 
   const activeThread = useMemo(
@@ -222,6 +250,8 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
       setFeedbackComment('');
       setFeedbackSubmitted(false);
       setFeedbackError('');
+      setSummaryText('');
+      setSummaryView(false);
       return undefined;
     }
 
@@ -881,7 +911,34 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
       {feedbackModalOpen ? (
         <div className="cr-feedback-overlay">
           <div className="cr-feedback-modal" role="dialog" aria-modal="true">
-            {!feedbackSubmitted ? (
+            {summaryView ? (
+              <>
+                <h2>Attorney Summary</h2>
+                <p className="cr-feedback-subtitle">
+                  Summary your attorney left for this consultation.
+                </p>
+                <div className="cr-feedback-summary">
+                  {summaryLoading ? (
+                    <p className="cr-feedback-summary__placeholder">Loading…</p>
+                  ) : summaryText ? (
+                    <p>{summaryText}</p>
+                  ) : (
+                    <p className="cr-feedback-summary__placeholder">
+                      Your attorney hasn&apos;t added a session summary yet. Check back later in Logs.
+                    </p>
+                  )}
+                </div>
+                <div className="cr-feedback-actions">
+                  <button
+                    type="button"
+                    className="cr-feedback-secondary"
+                    onClick={() => setSummaryView(false)}
+                  >
+                    Back
+                  </button>
+                </div>
+              </>
+            ) : !feedbackSubmitted ? (
               <>
                 <h2>Consultation Ended</h2>
                 <p className="cr-feedback-subtitle">Please rate your attorney consultation experience.</p>
@@ -908,6 +965,13 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
                 <div className="cr-feedback-actions">
                   <button
                     type="button"
+                    className="cr-feedback-secondary"
+                    onClick={handleViewSummary}
+                  >
+                    View attorney summary
+                  </button>
+                  <button
+                    type="button"
                     className="cr-feedback-submit"
                     onClick={handleFeedbackSubmit}
                     disabled={feedbackSubmitting || feedbackRating < 1}
@@ -921,6 +985,13 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
                 <h2>Thank You</h2>
                 <p className="cr-feedback-subtitle">Your feedback has been submitted successfully.</p>
                 <div className="cr-feedback-actions">
+                  <button
+                    type="button"
+                    className="cr-feedback-secondary"
+                    onClick={handleViewSummary}
+                  >
+                    View attorney summary
+                  </button>
                   <button
                     type="button"
                     className="cr-feedback-return"

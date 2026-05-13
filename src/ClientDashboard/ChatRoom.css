@@ -398,7 +398,7 @@
 .cr-feedback-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(21, 34, 56, 0.12);
+  background: rgba(21, 34, 56, 0.42);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -406,18 +406,25 @@
   z-index: 999;
   animation: fadeIn 0.2s ease-out;
   backdrop-filter: blur(4px);
+  overflow-y: auto;
 }
 
 .cr-feedback-modal {
-  width: min(92vw, 460px);
+  width: min(92vw, 480px);
+  max-height: min(92vh, 720px);
+  overflow-y: auto;
   border-radius: 16px;
   border: 1px solid var(--ui-glass-border);
   background: var(--ui-bg-card);
   box-shadow: var(--ui-shadow-xl);
-  padding: 20px;
+  padding: 22px 22px 20px;
   color: var(--ui-text-primary);
   animation: slideUp 0.3s ease-out;
   backdrop-filter: blur(var(--ui-glass-blur));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-sizing: border-box;
 }
 
 .cr-feedback-modal h2 {
@@ -478,8 +485,10 @@
 
 .cr-feedback-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
-  margin-top: 14px;
+  gap: 10px;
+  margin-top: 16px;
 }
 
 .cr-feedback-submit,
@@ -506,6 +515,43 @@
 .cr-feedback-submit:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.cr-feedback-secondary {
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--ui-text-primary);
+  background: transparent;
+  cursor: pointer;
+  transition: all var(--ui-transition-normal);
+}
+
+.cr-feedback-secondary:hover {
+  background: rgba(245, 166, 35, 0.08);
+  border-color: var(--ui-accent);
+}
+
+.cr-feedback-summary {
+  margin-top: 4px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(245, 166, 35, 0.08);
+  border: 1px solid rgba(245, 166, 35, 0.3);
+  color: var(--ui-text-primary);
+  font-size: 0.9rem;
+  line-height: 1.55;
+  max-height: 40vh;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+
+.cr-feedback-summary__placeholder {
+  color: var(--ui-text-secondary);
+  font-style: italic;
+  margin: 0;
 }
 
 .cr-time-warning-overlay {

@@ -3605,6 +3605,11 @@ export async function uploadAppointmentAttachment({ clientId, file }) {
     })
 
   if (uploadError) {
+    const rlsHint =
+      /row-level security|violates row-level security/i.test(String(uploadError.message || ''))
+        ? ' In Supabase, run database/20260514_appointment_attachments_storage_rls.sql (SQL Editor).'
+        : ''
+
     // Fall back to the existing notarial-documents bucket so the feature
     // still works if the team has not provisioned the new bucket yet.
     const { error: fallbackUploadError } = await supabase.storage
@@ -3613,7 +3618,11 @@ export async function uploadAppointmentAttachment({ clientId, file }) {
         contentType: file.type || `application/${ext}`,
         upsert: false,
       })
-    if (fallbackUploadError) throw uploadError
+    if (fallbackUploadError) {
+      throw new Error(
+        `${uploadError.message || 'Could not upload attachment.'}${rlsHint}`.trim(),
+      )
+    }
 
     const { data: fallbackUrlData } = supabase.storage
       .from('notarial-documents')
@@ -5056,11 +5065,29 @@ export async function fetchConsultationTranscriptForAppointment(appointmentId) {
   if (!user) throw new Error('Not authenticated')
   if (!appointmentId) throw new Error('Appointment is required.')
 
-  const { data: appointment, error: appointmentError } = await supabase
+  // Pull the attorney_consultation_summary column too so the client-side
+  // "View summary" can actually show the attorney's note. Older deployments
+  // without the column fall back gracefully.
+  let appointment = null
+  let appointmentError = null
+  const richAppointmentRes = await supabase
     .from('appointments')
-    .select('id, attorney_id, client_id')
+    .select('id, attorney_id, client_id, attorney_consultation_summary')
     .eq('id', appointmentId)
     .maybeSingle()
+
+  if (richAppointmentRes.error && isMissingColumnError(richAppointmentRes.error, 'attorney_consultation_summary')) {
+    const minAppointmentRes = await supabase
+      .from('appointments')
+      .select('id, attorney_id, client_id')
+      .eq('id', appointmentId)
+      .maybeSingle()
+    appointment = minAppointmentRes.data || null
+    appointmentError = minAppointmentRes.error || null
+  } else {
+    appointment = richAppointmentRes.data || null
+    appointmentError = richAppointmentRes.error || null
+  }
 
   if (appointmentError) throw new Error(appointmentError.message)
   if (!appointment) throw new Error('Appointment not found.')
@@ -5099,7 +5126,12 @@ export async function fetchConsultationTranscriptForAppointment(appointmentId) {
 
   if (error) throw new Error(error.message)
   if (!data?.id) {
-    return { messages: [], isClosed: true, roomId: null }
+    return {
+      messages: [],
+      isClosed: true,
+      roomId: null,
+      attorneyConsultationSummary: String(appointment.attorney_consultation_summary || ''),
+    }
   }
 
   const sorted = (data.messages || [])
@@ -5110,6 +5142,7 @@ export async function fetchConsultationTranscriptForAppointment(appointmentId) {
     messages: sorted.map((row) => mapRoomMessage(row, data.id, Boolean(data.is_closed), user.id)),
     isClosed: Boolean(data.is_closed),
     roomId: data.id,
+    attorneyConsultationSummary: String(appointment.attorney_consultation_summary || ''),
   }
 }
 
