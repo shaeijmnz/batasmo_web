@@ -11,6 +11,7 @@ import {
   fetchAdminHomeNotifications,
   markAdminNotificationsAsRead,
   subscribeToAdminNotifications,
+  signOutUser,
 } from '../lib/userApi';
 import './AdminTheme.css';
 import './dashboard.css';
@@ -953,7 +954,18 @@ const Dashboard = ({ onNavigate }) => {
               </div>
             )}
           </div>
-          <button className="logout-action" onClick={() => handleQuickAction('Logout clicked')}>
+          <button
+            className="logout-action"
+            onClick={async () => {
+              try {
+                await signOutUser();
+              } catch (error) {
+                console.warn('[admin] sign out failed', error);
+              } finally {
+                onNavigate?.('login');
+              }
+            }}
+          >
             <LogOut size={18} />
             {isSidebarOpen && <span>Logout</span>}
           </button>
