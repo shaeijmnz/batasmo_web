@@ -310,6 +310,14 @@
   color: #4b5563;
 }
 
+.adm-support-sched__hint--warn {
+  background: #fff7ed;
+  border: 1px solid #fcd9a3;
+  color: #9a3412;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
 .adm-support-sched__head button {
   border: 0;
   background: transparent;

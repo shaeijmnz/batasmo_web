@@ -512,9 +512,9 @@ export default function AdminSupportDrawer({ open, onClose, onUnreadChange }) {
                       )}
                     </div>
 
-                    {clientAppointments.length > 0 ? (
-                      <label className="adm-support-sched__appt">
-                        <span>Reschedule which appointment?</span>
+                    <label className="adm-support-sched__appt">
+                      <span>Reschedule which appointment?</span>
+                      {clientAppointments.length > 0 ? (
                         <select
                           value={pickedAppointmentId}
                           onChange={(e) => setPickedAppointmentId(e.target.value)}
@@ -528,8 +528,25 @@ export default function AdminSupportDrawer({ open, onClose, onUnreadChange }) {
                             </option>
                           ))}
                         </select>
-                      </label>
-                    ) : null}
+                      ) : (
+                        <p className="adm-support-sched__empty">
+                          This client has no active appointment to reschedule.
+                        </p>
+                      )}
+                    </label>
+
+                    {(() => {
+                      const issues = [];
+                      if (selectedSlotIds.length === 0) issues.push('tick exactly one available slot above');
+                      else if (selectedSlotIds.length > 1) issues.push('tick exactly ONE slot (not multiple)');
+                      if (!pickedAppointmentId) issues.push('pick which appointment to reschedule');
+                      if (!issues.length || scheduleError || scheduleNotice) return null;
+                      return (
+                        <div className="adm-support-sched__hint adm-support-sched__hint--warn">
+                          To enable <strong>Set as new schedule</strong>: {issues.join(' and ')}.
+                        </div>
+                      );
+                    })()}
 
                     {scheduleError ? (
                       <div className="adm-support-sched__error">{scheduleError}</div>
@@ -554,6 +571,13 @@ export default function AdminSupportDrawer({ open, onClose, onUnreadChange }) {
                           scheduleBusy ||
                           selectedSlotIds.length !== 1 ||
                           !pickedAppointmentId
+                        }
+                        title={
+                          selectedSlotIds.length !== 1
+                            ? 'Tick exactly one slot to enable this'
+                            : !pickedAppointmentId
+                              ? 'Choose which appointment to reschedule first'
+                              : 'Confirms the new schedule for client + attorney and notifies both'
                         }
                         onClick={handleSetNewSchedule}
                       >
