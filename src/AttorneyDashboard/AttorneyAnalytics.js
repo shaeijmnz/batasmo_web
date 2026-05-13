@@ -2,23 +2,16 @@ import { useEffect, useMemo, useState } from 'react';
 import './AttorneyAnalytics.css';
 import './AttorneyTheme.css';
 import { fetchAttorneyConsultationAnalyticsData } from '../lib/userApi';
-
-const formatPhp = (value) => `PHP ${Number(value || 0).toLocaleString()}`;
+import { supabase } from '../lib/supabaseClient';
 
 const defaultAnalytics = {
   rows: [],
   total: 0,
   maxCount: 0,
   gender: { rows: [], total: 0 },
-  trend: [],
   status: [],
   averageRating: 0,
   ratingCount: 0,
-  currentMonthRevenue: 0,
-  previousMonthRevenue: 0,
-  completedThisMonth: 0,
-  completedPreviousMonth: 0,
-  totalEarnings: 0,
 };
 
 const ScalesIcon = ({ size = 24, color = '#f5a623' }) => (
@@ -71,85 +64,25 @@ const ProfileIcon = () => (
   </svg>
 );
 
-function MonthlyTrendChart({ trend }) {
-  const safeTrend = useMemo(() => {
-    if (trend?.length) return trend
-    return Array.from({ length: 6 }, (_, i) => ({
-      key: `empty-${i}`,
-      month: '—',
-      revenue: 0,
-      consultations: 0,
-    }))
-  }, [trend])
-
-  const [activeIndex, setActiveIndex] = useState(() => Math.max(0, safeTrend.length - 1))
-
-  useEffect(() => {
-    setActiveIndex(Math.max(0, safeTrend.length - 1))
-  }, [safeTrend])
-
-  const maxRevenue = Math.max(...safeTrend.map((p) => Number(p.revenue || 0)), 1)
-  const maxConsultations = Math.max(...safeTrend.map((p) => Number(p.consultations || 0)), 1)
-  const active = safeTrend[Math.min(activeIndex, safeTrend.length - 1)] || safeTrend[0]
-
-  return (
-    <div className="aa-trend-chart">
-      <div className="aa-trend-bars">
-        {safeTrend.map((point, index) => (
-          <button
-            key={point.key || `${point.month}-${index}`}
-            type="button"
-            className={`aa-trend-month ${activeIndex === index ? 'aa-trend-month--active' : ''}`}
-            onMouseEnter={() => setActiveIndex(index)}
-            onFocus={() => setActiveIndex(index)}
-          >
-            <div className="aa-trend-bar-pair">
-              <span
-                className="aa-trend-bar aa-trend-bar--revenue"
-                style={{ height: `${Math.max(8, (Number(point.revenue || 0) / maxRevenue) * 170)}px` }}
-                title={`${point.month} revenue: ${formatPhp(point.revenue)}`}
-              />
-              <span
-                className="aa-trend-bar aa-trend-bar--consultations"
-                style={{ height: `${Math.max(8, (Number(point.consultations || 0) / maxConsultations) * 170)}px` }}
-                title={`${point.month} completed: ${point.consultations}`}
-              />
-            </div>
-            <span className="aa-trend-month-label">{point.month}</span>
-          </button>
-        ))}
-      </div>
-      <div className="aa-trend-legend">
-        <span><i className="aa-legend-dot aa-legend-dot--revenue" /> Revenue</span>
-        <span><i className="aa-legend-dot aa-legend-dot--consultations" /> Completed consultations</span>
-      </div>
-      <div className="aa-trend-tooltip">
-        <span className="aa-trend-tooltip__month">{active?.month}</span>
-        <span className="aa-trend-tooltip__value">{formatPhp(active?.revenue)}</span>
-        <span className="aa-trend-tooltip__value">{Number(active?.consultations || 0)} completed</span>
-      </div>
-    </div>
-  )
-}
-
 export default function AttorneyAnalytics({ onNavigate, profile }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [analytics, setAnalytics] = useState(defaultAnalytics);
   const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
+    const userId = profile?.id;
+    if (!userId) return undefined;
+
     let isMounted = true;
 
-    const load = async () => {
-      if (!profile?.id) return;
+    const loadAnalytics = async () => {
       try {
-        const data = await fetchAttorneyConsultationAnalyticsData(profile.id);
+        const data = await fetchAttorneyConsultationAnalyticsData(userId);
         if (!isMounted) return;
         setAnalytics({
           ...defaultAnalytics,
           ...data,
           gender: data?.gender || defaultAnalytics.gender,
-          trend: Array.isArray(data?.trend) ? data.trend : defaultAnalytics.trend,
           status: Array.isArray(data?.status) ? data.status : defaultAnalytics.status,
         });
         setLoadError('');
@@ -160,14 +93,35 @@ export default function AttorneyAnalytics({ onNavigate, profile }) {
       }
     };
 
-    load();
+    void loadAnalytics();
+
+    const channel = supabase
+      .channel(`attorney-analytics-feedback-${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'consultation_feedback',
+          filter: `attorney_id=eq.${userId}`,
+        },
+        () => {
+          void loadAnalytics();
+        },
+      )
+      .subscribe();
+
     return () => {
       isMounted = false;
+      try {
+        supabase.removeChannel(channel);
+      } catch {
+        /* ignore */
+      }
     };
   }, [profile?.id]);
 
-  const { rows, total, maxCount, gender, trend, status, averageRating, ratingCount, totalEarnings } = analytics;
-  const topType = rows[0]?.label || 'No data yet';
+  const { rows, total, maxCount, gender, status, averageRating, ratingCount } = analytics;
 
   const chartRows = useMemo(
     () => rows.slice(0, 8).map((row) => ({
@@ -192,6 +146,9 @@ export default function AttorneyAnalytics({ onNavigate, profile }) {
 
   const genderRows = gender?.rows || [];
   const genderTotal = Number(gender?.total || 0);
+
+  const avgRatingNum = Number(averageRating);
+  const hasValidRating = ratingCount > 0 && Number.isFinite(avgRatingNum);
 
   const sidebarItems = [
     { label: 'Dashboard', icon: <DashboardIcon />, nav: 'attorney-home' },
@@ -270,19 +227,10 @@ export default function AttorneyAnalytics({ onNavigate, profile }) {
             <p className="aa-summary-card__value">{total}</p>
           </div>
           <div className="aa-summary-card">
-            <p className="aa-summary-card__label">MOST FREQUENT TYPE</p>
-            <p className="aa-summary-card__value aa-summary-card__value--type">{topType}</p>
-          </div>
-          <div className="aa-summary-card">
-            <p className="aa-summary-card__label">TOTAL EARNINGS</p>
-            <p className="aa-summary-card__value">{formatPhp(totalEarnings)}</p>
-            <p className="aa-summary-card__hint">All-time paid transactions</p>
-          </div>
-          <div className="aa-summary-card">
             <p className="aa-summary-card__label">AVG. CLIENT RATING</p>
-            {ratingCount > 0 ? (
+            {hasValidRating ? (
               <>
-                <p className="aa-summary-card__value">{Number(averageRating).toFixed(1)}</p>
+                <p className="aa-summary-card__value">{avgRatingNum.toFixed(1)}</p>
                 <p className="aa-summary-card__hint">★ from {ratingCount} review{ratingCount === 1 ? '' : 's'}</p>
               </>
             ) : (
@@ -294,18 +242,8 @@ export default function AttorneyAnalytics({ onNavigate, profile }) {
           </div>
         </div>
 
-        <section className="aa-chart-card aa-chart-card--trend">
-          <div className="aa-chart-card__header">
-            <div>
-              <h2>Monthly trend</h2>
-              <p className="aa-chart-card__sub">Revenue and completed consultations (last 6 months)</p>
-            </div>
-          </div>
-          <MonthlyTrendChart trend={trend} />
-        </section>
-
         <div className="aa-charts-split">
-          <section className="aa-chart-card">
+          <section className="aa-chart-card aa-chart-card--stretch">
             <div className="aa-chart-card__header">
               <h2>Consultation type frequency</h2>
               <span>Top {chartRows.length || 0}</span>
@@ -330,9 +268,9 @@ export default function AttorneyAnalytics({ onNavigate, profile }) {
             )}
           </section>
 
-          <section className="aa-chart-card aa-status-chart">
+          <section className="aa-chart-card aa-status-chart aa-chart-card--stretch">
             <div className="aa-chart-card__header">
-              <h2>Appointment status</h2>
+              <h2>Status distribution</h2>
               <span>{statusRows.reduce((s, r) => s + Number(r.count || 0), 0)} total</span>
             </div>
 
@@ -370,17 +308,24 @@ export default function AttorneyAnalytics({ onNavigate, profile }) {
 
           {genderRows.length ? (
             <div className="aa-gender-chart">
-              {genderRows.map((row) => (
-                <div key={row.key} className="aa-gender-row">
-                  <div className="aa-gender-row__meta">
-                    <span className="aa-gender-row__label">{row.label}</span>
-                    <span className="aa-gender-row__count">{row.count} ({row.percent}%)</span>
+              {genderRows.map((row) => {
+                const pct = Number(row.percent);
+                const safePct = Number.isFinite(pct) ? pct : 0;
+                return (
+                  <div key={row.key} className="aa-gender-row">
+                    <div className="aa-gender-row__meta">
+                      <span className="aa-gender-row__label">{row.label}</span>
+                      <span className="aa-gender-row__count">{row.count} ({safePct}%)</span>
+                    </div>
+                    <div className="aa-gender-track">
+                      <div
+                        className="aa-gender-fill"
+                        style={{ width: `${Math.max(safePct, row.count > 0 ? 8 : 0)}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="aa-gender-track">
-                    <div className="aa-gender-fill" style={{ width: `${Math.max(row.percent, row.count > 0 ? 8 : 0)}%` }} />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <p className="aa-empty">No gender registration records yet.</p>

@@ -177,7 +177,7 @@
 
 .aa-main {
   flex: 1;
-  padding: 28px 36px 40px;
+  padding: 22px 36px 32px;
   max-width: 1180px;
   width: 100%;
   margin: 0 auto;
@@ -194,12 +194,15 @@
   font-size: 0.9rem;
 }
 
-/* Summary — 2×2 desktop, 1 col mobile */
+/* Summary — two centered cards (capped width on large screens) */
 .aa-summary-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  margin-bottom: 22px;
+  grid-template-columns: repeat(2, minmax(0, 400px));
+  justify-content: center;
+  align-items: stretch;
+  gap: 14px;
+  margin-bottom: 18px;
+  width: 100%;
 }
 
 .aa-summary-card {
@@ -208,6 +211,8 @@
   border-radius: 14px;
   padding: 18px 20px;
   box-shadow: var(--atd-shadow, 0 8px 32px rgba(2, 9, 19, 0.45));
+  height: 100%;
+  box-sizing: border-box;
 }
 
 .aa-summary-card__label {
@@ -223,11 +228,6 @@
   font-size: 1.55rem;
   font-weight: 800;
   color: var(--atd-text, #f5f9ff);
-}
-
-.aa-summary-card__value--type {
-  font-size: 1.05rem;
-  line-height: 1.35;
 }
 
 .aa-summary-card__value--muted {
@@ -250,8 +250,16 @@
   box-shadow: var(--atd-shadow, 0 8px 32px rgba(2, 9, 19, 0.45));
 }
 
-.aa-chart-card--trend {
-  margin-bottom: 20px;
+.aa-chart-card--stretch {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.aa-chart-card--stretch .aa-bar-chart,
+.aa-chart-card--stretch .aa-status-list,
+.aa-chart-card--stretch .aa-empty {
+  flex: 1;
 }
 
 .aa-chart-card__header {
@@ -300,178 +308,9 @@
 .aa-charts-split {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
-  margin-bottom: 20px;
-}
-
-/* Monthly trend (dual bars) */
-.aa-trend-chart {
-  min-height: 280px;
-  border-radius: 12px;
-  padding: 8px 4px 4px;
-  background: linear-gradient(180deg, rgba(15, 40, 67, 0.35) 0%, rgba(9, 19, 31, 0.2) 100%);
-  border: 1px solid rgba(169, 199, 235, 0.12);
-  position: relative;
-}
-
-.aa-trend-chart::before {
-  content: "";
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  top: 16px;
-  height: 200px;
-  background-image: repeating-linear-gradient(
-    to bottom,
-    rgba(169, 199, 235, 0.06) 0,
-    rgba(169, 199, 235, 0.06) 1px,
-    transparent 1px,
-    transparent 40px
-  );
-  border-radius: 8px;
-  pointer-events: none;
-}
-
-.aa-trend-bars {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 12px;
-  min-height: 220px;
-  padding: 18px 8px 8px;
-  position: relative;
-  z-index: 1;
-  align-items: end;
-}
-
-.aa-trend-month {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  padding: 6px 2px 0;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--atd-muted, #9cb7da);
-  cursor: pointer;
-  transition: background 0.2s ease;
-}
-
-.aa-trend-month:hover,
-.aa-trend-month--active {
-  background: rgba(53, 122, 217, 0.12);
-}
-
-.aa-trend-month:focus-visible {
-  outline: 2px solid var(--atd-blue, #357ad9);
-  outline-offset: 2px;
-}
-
-.aa-trend-bar-pair {
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  gap: 6px;
-  height: 180px;
-  width: 100%;
-}
-
-.aa-trend-bar {
-  display: block;
-  width: min(26px, 38%);
-  min-height: 8px;
-  border-radius: 6px 6px 3px 3px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-  transition: transform 0.2s ease, filter 0.2s ease;
-}
-
-.aa-trend-bar--revenue {
-  background: linear-gradient(180deg, #1a3a6b 0%, #2d5590 100%);
-}
-
-.aa-trend-bar--consultations {
-  background: linear-gradient(180deg, #c99520 0%, #f2c879 100%);
-}
-
-.aa-trend-month:hover .aa-trend-bar,
-.aa-trend-month--active .aa-trend-bar {
-  filter: brightness(1.08);
-  transform: translateY(-3px);
-}
-
-.aa-trend-month-label {
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--atd-muted, #9cb7da);
-}
-
-.aa-trend-month--active .aa-trend-month-label {
-  color: var(--atd-gold-soft, #f2cf7f);
-}
-
-.aa-trend-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin: 10px 8px 12px;
-}
-
-.aa-trend-legend span {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.76rem;
-  font-weight: 600;
-  color: var(--atd-text, #f5f9ff);
-  padding: 6px 12px 6px 10px;
-  border-radius: 999px;
-  background: rgba(15, 40, 67, 0.45);
-  border: 1px solid rgba(169, 199, 235, 0.18);
-}
-
-.aa-legend-dot {
-  display: inline-block;
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
-  box-shadow: 0 0 0 2px rgba(1, 8, 17, 0.9);
-}
-
-.aa-legend-dot--revenue {
-  background: linear-gradient(135deg, #1a3a6b, #2d5590);
-}
-
-.aa-legend-dot--consultations {
-  background: linear-gradient(135deg, #c99520, #f2c879);
-}
-
-.aa-trend-tooltip {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px 14px;
-  margin: 4px 8px 0;
-  padding: 9px 14px;
-  border-radius: 12px;
-  background: rgba(8, 24, 41, 0.9);
-  border: 1px solid rgba(169, 199, 235, 0.2);
-}
-
-.aa-trend-tooltip__month {
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--atd-muted, #9cb7da);
-}
-
-.aa-trend-tooltip__value {
-  font-size: 0.86rem;
-  font-weight: 700;
-  color: var(--atd-text, #f5f9ff);
+  align-items: stretch;
+  gap: 16px;
+  margin-bottom: 16px;
 }
 
 /* Type frequency bars */
@@ -575,6 +414,7 @@
 
 .aa-chart-card--gender {
   margin-top: 0;
+  margin-bottom: 0;
 }
 
 .aa-gender-chart {
@@ -617,28 +457,21 @@
 
 @media (max-width: 900px) {
   .aa-main {
-    padding: 18px 14px 32px;
+    padding: 16px 14px 28px;
   }
 
   .aa-summary-grid {
     grid-template-columns: 1fr;
+    justify-content: stretch;
   }
 
   .aa-charts-split {
     grid-template-columns: 1fr;
+    gap: 14px;
+    margin-bottom: 14px;
   }
 
   .aa-profile__name {
     display: none;
-  }
-
-  .aa-trend-bars {
-    gap: 6px;
-    padding-left: 4px;
-    padding-right: 4px;
-  }
-
-  .aa-trend-bar {
-    width: min(20px, 42%);
   }
 }

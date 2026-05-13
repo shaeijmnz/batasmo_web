@@ -1537,19 +1537,6 @@ const normalizeConsultationTypeLabel = (title) => {
 const GENDER_MOCK_BASELINE_MALE = 2
 const GENDER_MOCK_BASELINE_FEMALE = 4
 
-const getAttorneyAnalyticsSixMonthSlots = () => {
-  const result = []
-  const now = new Date()
-  for (let i = 5; i >= 0; i -= 1) {
-    const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    result.push({
-      key: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`,
-      month: date.toLocaleDateString('en-PH', { month: 'short' }),
-    })
-  }
-  return result
-}
-
 const bucketClientProfileGender = (raw) => {
   const v = String(raw ?? '').trim().toLowerCase()
   if (!v) return null
@@ -1593,9 +1580,6 @@ const normalizeAttorneyAppointmentStatusBucket = (statusRaw) => {
 }
 
 export async function fetchAttorneyConsultationAnalyticsData(userId) {
-  const slots = getAttorneyAnalyticsSixMonthSlots()
-  const monthMetricsMap = new Map(slots.map((item) => [item.key, { revenue: 0, consultations: 0 }]))
-
   const [apptsRes, paidTxRes] = await Promise.all([
     supabase
       .from('appointments')
@@ -1603,7 +1587,7 @@ export async function fetchAttorneyConsultationAnalyticsData(userId) {
       .eq('attorney_id', userId),
     supabase
       .from('transactions')
-      .select('appointment_id, amount, created_at')
+      .select('appointment_id')
       .eq('attorney_id', userId)
       .eq('payment_status', 'paid'),
   ])
@@ -1633,66 +1617,6 @@ export async function fetchAttorneyConsultationAnalyticsData(userId) {
 
   const total = rows.reduce((sum, item) => sum + Number(item.count || 0), 0)
   const maxCount = rows.length ? rows[0].count : 0
-
-  const now = new Date()
-  const startCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-  const startPreviousMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-
-  let totalEarnings = 0
-  let currentMonthRevenue = 0
-  let previousMonthRevenue = 0
-  let completedThisMonth = 0
-  let completedPreviousMonth = 0
-
-  paidTxRows.forEach((tx) => {
-    const amount = Number(tx?.amount || 0)
-    if (Number.isFinite(amount)) totalEarnings += amount
-
-    const createdAt = tx?.created_at ? new Date(tx.created_at) : null
-    if (!createdAt || Number.isNaN(createdAt.getTime())) return
-
-    const monthKey = `${createdAt.getFullYear()}-${String(createdAt.getMonth() + 1).padStart(2, '0')}`
-    if (monthMetricsMap.has(monthKey)) {
-      const m = monthMetricsMap.get(monthKey)
-      m.revenue += amount
-    }
-
-    if (createdAt >= startCurrentMonth) {
-      currentMonthRevenue += amount
-    } else if (createdAt >= startPreviousMonth && createdAt < startCurrentMonth) {
-      previousMonthRevenue += amount
-    }
-  })
-
-  appointments.forEach((row) => {
-    const status = String(row?.status || '').toLowerCase()
-    if (status !== 'completed') return
-
-    const completedAtRaw = row?.updated_at || row?.scheduled_at
-    const completedAt = completedAtRaw ? new Date(completedAtRaw) : null
-    if (!completedAt || Number.isNaN(completedAt.getTime())) return
-
-    const monthKey = `${completedAt.getFullYear()}-${String(completedAt.getMonth() + 1).padStart(2, '0')}`
-    if (monthMetricsMap.has(monthKey)) {
-      monthMetricsMap.get(monthKey).consultations += 1
-    }
-
-    if (completedAt >= startCurrentMonth) {
-      completedThisMonth += 1
-    } else if (completedAt >= startPreviousMonth && completedAt < startCurrentMonth) {
-      completedPreviousMonth += 1
-    }
-  })
-
-  const trend = slots.map((item) => {
-    const metrics = monthMetricsMap.get(item.key) || { revenue: 0, consultations: 0 }
-    return {
-      key: item.key,
-      month: item.month,
-      revenue: metrics.revenue,
-      consultations: metrics.consultations,
-    }
-  })
 
   const statusCounts = new Map()
   appointments.forEach((row) => {
@@ -1739,15 +1663,9 @@ export async function fetchAttorneyConsultationAnalyticsData(userId) {
     total,
     maxCount,
     gender,
-    trend,
     status,
     averageRating,
     ratingCount,
-    currentMonthRevenue,
-    previousMonthRevenue,
-    completedThisMonth,
-    completedPreviousMonth,
-    totalEarnings,
   }
 }
 
