@@ -230,13 +230,39 @@ function MyAppointments({ onNavigate, profile }) {
         reason: 'You already used your one-time reschedule option for this appointment. Please contact BatasMo Admin for further changes.',
       };
     }
-    if (!Number.isFinite(msUntilSchedule) || msUntilSchedule < 24 * 60 * 60 * 1000) {
-      return {
-        can: false,
-        type: 'policy',
-        title: 'Reschedule Window Closed',
-        reason: 'Client reschedule requests are allowed only at least 1 day before the consultation schedule.',
-      };
+    // "At least 1 day before" — same calendar day as the consultation is not
+    // allowed (Asia/Manila). Must be a previous day or earlier.
+    try {
+      const phDateKey = (date) =>
+        new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Asia/Manila',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        }).format(date);
+      const todayKey = phDateKey(new Date());
+      const consultationKey = phDateKey(new Date(Number(appointment.scheduledAtTs)));
+      if (consultationKey <= todayKey) {
+        return {
+          can: false,
+          type: 'policy',
+          title: 'Reschedule Window Closed',
+          reason:
+            'Reschedule must be done at least 1 day before the consultation date — same-day reschedules are not allowed.',
+        };
+      }
+    } catch (_e) {
+      // If formatting fails, fall back to the legacy 24h window so we don't
+      // accidentally block a valid reschedule attempt.
+      if (!Number.isFinite(msUntilSchedule) || msUntilSchedule < 24 * 60 * 60 * 1000) {
+        return {
+          can: false,
+          type: 'policy',
+          title: 'Reschedule Window Closed',
+          reason:
+            'Reschedule must be done at least 1 day before the consultation date — same-day reschedules are not allowed.',
+        };
+      }
     }
     return { can: true, type: '', title: '', reason: '' };
   };
@@ -543,7 +569,7 @@ function MyAppointments({ onNavigate, profile }) {
           <section className="ma-reschedule-note" aria-label="Reschedule notice">
             <p className="ma-reschedule-note__title">Need to reschedule?</p>
             <p className="ma-reschedule-note__text">
-              You can reschedule <strong>once only</strong> after your consultation fee is <strong>paid</strong> (free consultations are exempt), and only if you submit the request at least <strong>1 day before</strong> the scheduled time.
+              You can reschedule <strong>once only</strong> after your consultation fee is <strong>paid</strong> (free consultations are exempt), and only if you submit the request at least <strong>1 day before</strong> the consultation date (same-day reschedules are not allowed).
               For additional changes, please contact <strong>admin support</strong>.
             </p>
           </section>
@@ -577,7 +603,7 @@ function MyAppointments({ onNavigate, profile }) {
             </div>
             <div className="ma-reschedule-content">
               <div className="ma-reschedule-notice">
-                One-time policy: Reschedule is allowed only once and must be made at least 1 day before the consultation schedule.
+                One-time policy: Reschedule is allowed only once and must be made at least 1 day before the consultation date (same-day reschedules are not allowed).
               </div>
               <div className="ma-form-group">
                 <label>New Date</label>

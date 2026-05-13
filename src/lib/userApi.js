@@ -2903,14 +2903,28 @@ export async function rescheduleClientAppointment({ appointmentId, scheduledAt, 
     throw new Error('This appointment was already rescheduled once. Contact admin for further changes.')
   }
 
-  const schedTs = appt.scheduled_at ? new Date(appt.scheduled_at).getTime() : NaN
-  if (!Number.isFinite(schedTs)) throw new Error('Invalid appointment schedule.')
-  const msUntil = schedTs - Date.now()
-  if (msUntil <= 0) {
+  const schedDate = appt.scheduled_at ? new Date(appt.scheduled_at) : null
+  if (!schedDate || Number.isNaN(schedDate.getTime())) throw new Error('Invalid appointment schedule.')
+  if (schedDate.getTime() - Date.now() <= 0) {
     throw new Error('This consultation date has already passed.')
   }
-  if (msUntil < 24 * 60 * 60 * 1000) {
-    throw new Error('Rescheduling is only allowed at least 1 day before your consultation.')
+
+  // "At least 1 day before" rule: reschedule must be made on a calendar day
+  // STRICTLY EARLIER than the consultation day (Asia/Manila). Same-day
+  // reschedules are not allowed.
+  const phDateKey = (date) =>
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Manila',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(date)
+  const todayKey = phDateKey(new Date())
+  const consultationKey = phDateKey(schedDate)
+  if (consultationKey <= todayKey) {
+    throw new Error(
+      'Reschedule must be done at least 1 day before the consultation date — not on the same day.',
+    )
   }
 
   const amount = Number(appt.amount || 0)

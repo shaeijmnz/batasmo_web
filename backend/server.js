@@ -750,6 +750,38 @@ const supabaseAdminRescheduleConsultation = async ({ appointmentId, newSlotId })
   })
   if (!appt) throw new Error('Appointment not found.')
 
+  // Enforce "at least 1 day before" — reschedules cannot happen on the same
+  // calendar day as the consultation (Asia/Manila).
+  if (appt.scheduled_at) {
+    const schedDate = new Date(appt.scheduled_at)
+    if (!Number.isNaN(schedDate.getTime())) {
+      try {
+        const phDateKey = (d) =>
+          new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Manila',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+          }).format(d)
+        const todayKey = phDateKey(new Date())
+        const consultationKey = phDateKey(schedDate)
+        if (consultationKey <= todayKey) {
+          throw new Error(
+            'Reschedule must be done at least 1 day before the consultation date — same-day reschedules are not allowed.',
+          )
+        }
+      } catch (e) {
+        if (e?.message && e.message.includes('Reschedule must be done')) throw e
+        // Intl failure — fall back to a 24h check just to be safe.
+        if (schedDate.getTime() - Date.now() < 24 * 60 * 60 * 1000) {
+          throw new Error(
+            'Reschedule must be done at least 1 day before the consultation date — same-day reschedules are not allowed.',
+          )
+        }
+      }
+    }
+  }
+
   const newSlot = await supabaseSelectSingle({
     table: 'availability_slots',
     query: new URLSearchParams({ id: `eq.${newSlotId}` }).toString(),
