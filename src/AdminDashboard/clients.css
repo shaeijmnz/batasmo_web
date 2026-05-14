@@ -101,12 +101,7 @@
 
 /* Clients List */
 .clients-container { background: var(--ui-bg-card); border-radius: 16px; border: 1px solid var(--ui-glass-border); overflow: visible; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
-.list-header { padding: 20px; border-bottom: 1px solid var(--ui-glass-border); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
-.list-header h3 { margin: 0; }
-.add-btn--compact {
-  padding: 10px 16px;
-  font-size: 0.85rem;
-}
+.list-header { padding: 20px; border-bottom: 1px solid var(--ui-glass-border); }
 .clients-info-message {
   padding: 16px 20px;
   color: var(--ui-text-secondary);

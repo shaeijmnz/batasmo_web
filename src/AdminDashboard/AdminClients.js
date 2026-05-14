@@ -395,10 +395,6 @@ const Clients = ({ onNavigate }) => {
               />
             </div>
             <div className="filter-actions">
-              <button type="button" className="add-btn" onClick={openAddClientModal}>
-                <Plus size={18} />
-                Add Client
-              </button>
               <button className="btn-secondary" onClick={() => handleQuickAction('Client filters opened')}><Filter size={18} /> Filter</button>
               <button className="btn-secondary" onClick={() => handleQuickAction('Client export started')}><Download size={18} /> Export</button>
             </div>
@@ -408,10 +404,6 @@ const Clients = ({ onNavigate }) => {
           <div className="clients-container">
             <div className="list-header">
               <h3>All Clients ({filteredClients.length})</h3>
-              <button type="button" className="add-btn add-btn--compact" onClick={openAddClientModal}>
-                <Plus size={16} />
-                Add Client
-              </button>
             </div>
             {loadError ? <p className="clients-info-message">{loadError}</p> : null}
             {loading ? <p className="clients-info-message">Loading clients...</p> : null}
