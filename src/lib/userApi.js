@@ -652,6 +652,34 @@ export async function fetchClientActiveAppointmentsForAdmin(clientId) {
 }
 
 /**
+ * Admin walk-in: create a Client auth user (email confirmed) + profile via Render backend.
+ */
+export async function adminCreateWalkInClient({ email, password, fullName }) {
+  const session = (await supabase.auth.getSession())?.data?.session
+  if (!session?.access_token) {
+    throw new Error('You must be signed in as admin to add a client.')
+  }
+  const baseUrl = resolvePaymentApiBaseUrl()
+  const response = await fetch(`${baseUrl}/admin/clients/walk-in`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: String(email || '').trim().toLowerCase(),
+      password: String(password || ''),
+      fullName: String(fullName || '').trim() || undefined,
+    }),
+  })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    throw new Error(payload?.error || payload?.message || `Request failed (${response.status}).`)
+  }
+  return payload
+}
+
+/**
  * Admin-driven reschedule: frees the old slot, books the new slot, updates the
  * appointment to point at the new slot, and notifies the client + attorney +
  * other admins.

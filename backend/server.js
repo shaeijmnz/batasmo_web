@@ -735,9 +735,91 @@ const verifyCallerIsAdmin = async (jwt) => {
   })
   const role = String(profile?.role || '').toLowerCase()
   if (role !== 'admin') {
-    throw new Error('Only Admin users can reschedule appointments this way.')
+    throw new Error('Only Admin users can perform this action.')
   }
   return user.id
+}
+
+/**
+ * Create a Supabase Auth user (email pre-confirmed) + Client profile — walk-in registration.
+ */
+const supabaseAdminCreateWalkInClient = async ({ email, password, fullName }) => {
+  const normalizedEmail = String(email || '').trim().toLowerCase()
+  const safePassword = String(password || '')
+  const displayName = String(fullName || '').trim() || 'Walk-in Client'
+
+  if (!normalizedEmail || !normalizedEmail.includes('@')) {
+    throw new Error('A valid email address is required.')
+  }
+  if (safePassword.length < 6) {
+    throw new Error('Password must be at least 6 characters.')
+  }
+
+  const authResponse = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: normalizedEmail,
+      password: safePassword,
+      email_confirm: true,
+      user_metadata: {
+        full_name: displayName,
+        role: 'Client',
+      },
+    }),
+  })
+
+  const authPayload = await authResponse.json().catch(() => null)
+  if (!authResponse.ok) {
+    const msg =
+      authPayload?.msg ||
+      authPayload?.message ||
+      authPayload?.error_description ||
+      authPayload?.error ||
+      `Failed to create account (${authResponse.status}).`
+    throw new Error(String(msg))
+  }
+
+  const userId = authPayload?.id || authPayload?.user?.id
+  if (!userId) {
+    throw new Error('Account was created but no user id was returned.')
+  }
+
+  const nowIso = new Date().toISOString()
+  const profileBody = {
+    id: userId,
+    email: normalizedEmail,
+    full_name: displayName,
+    role: 'Client',
+    preferred_otp_channel: 'email',
+    created_at: nowIso,
+    updated_at: nowIso,
+  }
+
+  const profileRes = await fetch(`${SUPABASE_URL}/rest/v1/profiles?on_conflict=id`, {
+    method: 'POST',
+    headers: {
+      ...supabaseRestHeaders(),
+      Prefer: 'resolution=merge-duplicates',
+    },
+    body: JSON.stringify(profileBody),
+  })
+
+  const profilePayload = await profileRes.json().catch(() => null)
+  if (!profileRes.ok) {
+    console.warn('[admin walk-in] profile upsert failed', profilePayload)
+    throw new Error(
+      profilePayload?.message ||
+        profilePayload?.error ||
+        'User was created but saving the client profile failed. Check Supabase logs.',
+    )
+  }
+
+  return { userId, email: normalizedEmail, fullName: displayName }
 }
 
 /**
@@ -1586,6 +1668,45 @@ app.get('/admin/clients/:clientId/active-appointments', async (req, res) => {
         : msg.includes('Bearer')
           ? 401
           : 500
+    return res.status(status).json({ error: msg })
+  }
+})
+
+// Walk-in / front-desk: admin creates a Client account (email + password, email confirmed).
+app.post('/admin/clients/walk-in', async (req, res) => {
+  try {
+    requireSupabaseServiceConfig()
+
+    const authHeader = String(req.headers.authorization || '').trim()
+    const jwt = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
+    if (!jwt) {
+      return res.status(401).json({ error: 'Authorization Bearer token is required.' })
+    }
+
+    await verifyCallerIsAdmin(jwt)
+
+    const email = String(req.body?.email || '').trim()
+    const password = String(req.body?.password || '')
+    const fullName = String(req.body?.fullName || '').trim()
+
+    const result = await supabaseAdminCreateWalkInClient({ email, password, fullName })
+    return res.status(201).json(result)
+  } catch (error) {
+    const msg = error?.message || 'Unable to create client account.'
+    const lower = msg.toLowerCase()
+    const status =
+      msg.includes('Only Admin') || msg.includes('Invalid') || msg.includes('session')
+        ? 403
+        : msg.includes('Bearer')
+          ? 401
+          : lower.includes('valid email') ||
+              lower.includes('password must') ||
+              lower.includes('already been registered') ||
+              lower.includes('already registered') ||
+              lower.includes('user already') ||
+              lower.includes('duplicate key')
+            ? 400
+            : 500
     return res.status(status).json({ error: msg })
   }
 })

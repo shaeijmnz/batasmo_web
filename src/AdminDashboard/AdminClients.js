@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { 
   LayoutDashboard, Users, Scale, FileText,
   BarChart3, Settings, LogOut, Menu, Search, 
-  Filter, Download, Mail, Phone, Calendar, MoreVertical 
+  Filter, Download, Mail, Phone, Calendar, MoreVertical, Plus, X
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import { adminCreateWalkInClient } from '../lib/userApi';
 import './AdminTheme.css';
 import './clients.css';
 
@@ -28,6 +29,13 @@ const Clients = ({ onNavigate }) => {
   const [onlineClientIds, setOnlineClientIds] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [addEmail, setAddEmail] = useState('');
+  const [addPassword, setAddPassword] = useState('');
+  const [addFullName, setAddFullName] = useState('');
+  const [addSubmitting, setAddSubmitting] = useState(false);
+  const [addFormError, setAddFormError] = useState('');
+
   const navigate = (path) => {
     const pageMap = {
       '/': 'admin-home',
@@ -51,80 +59,72 @@ const Clients = ({ onNavigate }) => {
     { label: 'Settings', icon: <Settings size={20} />, path: '/settings' },
   ];
 
-  useEffect(() => {
-    let isMounted = true;
+  const loadClients = useCallback(async () => {
+    try {
+      const [profilesRes, appointmentsRes] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id, full_name, email, phone, address, created_at')
+          .eq('role', 'Client')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('appointments')
+          .select('id, client_id, status, created_at')
+          .order('created_at', { ascending: false }),
+      ]);
 
-    const loadClients = async () => {
-      try {
-        const [profilesRes, appointmentsRes] = await Promise.all([
-          supabase
-            .from('profiles')
-            .select('id, full_name, email, phone, address, created_at')
-            .eq('role', 'Client')
-            .order('created_at', { ascending: false }),
-          supabase
-            .from('appointments')
-            .select('id, client_id, status, created_at')
-            .order('created_at', { ascending: false }),
-        ]);
+      if (profilesRes.error) throw profilesRes.error;
+      if (appointmentsRes.error) throw appointmentsRes.error;
 
-        if (profilesRes.error) throw profilesRes.error;
-        if (appointmentsRes.error) throw appointmentsRes.error;
+      const profileRows = profilesRes.data || [];
+      const appointmentRows = appointmentsRes.data || [];
+      const validConsultations = appointmentRows.filter(
+        (row) => String(row.status || '').toLowerCase() !== 'cancelled',
+      );
 
-        const profileRows = profilesRes.data || [];
-        const appointmentRows = appointmentsRes.data || [];
-        const validConsultations = appointmentRows.filter(
-          (row) => String(row.status || '').toLowerCase() !== 'cancelled',
+      const consultationsByClient = new Map();
+      validConsultations.forEach((row) => {
+        if (!row.client_id) return;
+        consultationsByClient.set(
+          row.client_id,
+          Number(consultationsByClient.get(row.client_id) || 0) + 1,
         );
+      });
 
-        const consultationsByClient = new Map();
-        validConsultations.forEach((row) => {
-          if (!row.client_id) return;
-          consultationsByClient.set(
-            row.client_id,
-            Number(consultationsByClient.get(row.client_id) || 0) + 1,
-          );
-        });
+      const currentMonth = new Date().getMonth();
+      const currentYear = new Date().getFullYear();
+      const newThisMonth = profileRows.filter((row) => {
+        const created = row.created_at ? new Date(row.created_at) : null;
+        if (!created || Number.isNaN(created.getTime())) return false;
+        return created.getMonth() === currentMonth && created.getFullYear() === currentYear;
+      }).length;
 
-        const currentMonth = new Date().getMonth();
-        const currentYear = new Date().getFullYear();
-        const newThisMonth = profileRows.filter((row) => {
-          const created = row.created_at ? new Date(row.created_at) : null;
-          if (!created || Number.isNaN(created.getTime())) return false;
-          return created.getMonth() === currentMonth && created.getFullYear() === currentYear;
-        }).length;
+      const normalizedClients = profileRows.map((row) => ({
+        id: row.id,
+        avatar: initialsFromName(row.full_name),
+        name: row.full_name || 'Unnamed Client',
+        email: row.email || 'No email',
+        phone: row.phone || 'No phone',
+        joined: formatJoinedDate(row.created_at),
+        consultations: Number(consultationsByClient.get(row.id) || 0),
+      }));
 
-        const normalizedClients = profileRows.map((row) => ({
-          id: row.id,
-          avatar: initialsFromName(row.full_name),
-          name: row.full_name || 'Unnamed Client',
-          email: row.email || 'No email',
-          phone: row.phone || 'No phone',
-          joined: formatJoinedDate(row.created_at),
-          consultations: Number(consultationsByClient.get(row.id) || 0),
-        }));
+      setClients(normalizedClients);
+      setClientMetrics({
+        total: profileRows.length,
+        newThisMonth,
+        totalConsultations: validConsultations.length,
+      });
+      setLoadError('');
+    } catch (error) {
+      setClients([]);
+      setLoadError(error.message || 'Failed to load clients.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-        if (!isMounted) return;
-
-        setClients(normalizedClients);
-        setClientMetrics({
-          total: profileRows.length,
-          newThisMonth,
-          totalConsultations: validConsultations.length,
-        });
-        setLoadError('');
-      } catch (error) {
-        if (isMounted) {
-          setClients([]);
-          setLoadError(error.message || 'Failed to load clients.');
-        }
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    };
-
+  useEffect(() => {
     loadClients();
 
     const profilesChannel = supabase
@@ -138,11 +138,10 @@ const Clients = ({ onNavigate }) => {
       .subscribe();
 
     return () => {
-      isMounted = false;
       supabase.removeChannel(profilesChannel);
       supabase.removeChannel(appointmentsChannel);
     };
-  }, []);
+  }, [loadClients]);
 
   useEffect(() => {
     const syncOnlineClients = (channel) => {
@@ -186,6 +185,50 @@ const Clients = ({ onNavigate }) => {
       ),
     );
   }, [clients, searchTerm]);
+
+  const closeAddModal = () => {
+    if (addSubmitting) return;
+    setAddModalOpen(false);
+    setAddFormError('');
+  };
+
+  const openAddClientModal = () => {
+    setAddFormError('');
+    setAddModalOpen(true);
+  };
+
+  const handleAddWalkInClient = async (event) => {
+    event.preventDefault();
+    setAddFormError('');
+    const email = addEmail.trim().toLowerCase();
+    const password = addPassword;
+    if (!email || !password) {
+      setAddFormError('Email and password are required.');
+      return;
+    }
+    if (password.length < 6) {
+      setAddFormError('Password must be at least 6 characters.');
+      return;
+    }
+    setAddSubmitting(true);
+    try {
+      await adminCreateWalkInClient({
+        email,
+        password,
+        fullName: addFullName.trim() || undefined,
+      });
+      setAddEmail('');
+      setAddPassword('');
+      setAddFullName('');
+      setAddModalOpen(false);
+      await loadClients();
+      window.alert('Client account created. They can sign in with this email and password.');
+    } catch (err) {
+      setAddFormError(err?.message || 'Could not create account.');
+    } finally {
+      setAddSubmitting(false);
+    }
+  };
 
   return (
     <div className="app-container">
@@ -237,7 +280,98 @@ const Clients = ({ onNavigate }) => {
               <h2 className="title">Clients Management</h2>
               <p className="subtitle">Manage and view all registered clients</p>
             </div>
+            <button
+              type="button"
+              className="add-btn"
+              onClick={openAddClientModal}
+            >
+              <Plus size={18} />
+              Add Client
+            </button>
           </div>
+
+          {addModalOpen ? (
+            <div
+              className="clients-modal-overlay"
+              role="presentation"
+              onMouseDown={(e) => {
+                if (e.target === e.currentTarget) closeAddModal();
+              }}
+            >
+              <div
+                className="clients-modal"
+                role="dialog"
+                aria-labelledby="walk-in-client-title"
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <div className="clients-modal__header">
+                  <h3 id="walk-in-client-title">Add walk-in client</h3>
+                  <button
+                    type="button"
+                    className="clients-modal__close"
+                    disabled={addSubmitting}
+                    onClick={closeAddModal}
+                    aria-label="Close"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+                <p className="clients-modal__hint">
+                  Creates a client login they can use on the web or mobile app. Give them the email and password you set here.
+                </p>
+                <form className="clients-modal__form" onSubmit={handleAddWalkInClient}>
+                  <label className="clients-modal__label" htmlFor="walk-in-email">
+                    Email
+                  </label>
+                  <input
+                    id="walk-in-email"
+                    className="clients-modal__input"
+                    type="email"
+                    autoComplete="off"
+                    value={addEmail}
+                    onChange={(e) => setAddEmail(e.target.value)}
+                    disabled={addSubmitting}
+                    required
+                  />
+                  <label className="clients-modal__label" htmlFor="walk-in-password">
+                    Password
+                  </label>
+                  <input
+                    id="walk-in-password"
+                    className="clients-modal__input"
+                    type="password"
+                    autoComplete="new-password"
+                    value={addPassword}
+                    onChange={(e) => setAddPassword(e.target.value)}
+                    disabled={addSubmitting}
+                    required
+                    minLength={6}
+                  />
+                  <label className="clients-modal__label" htmlFor="walk-in-name">
+                    Display name <span className="clients-modal__optional">(optional)</span>
+                  </label>
+                  <input
+                    id="walk-in-name"
+                    className="clients-modal__input"
+                    type="text"
+                    placeholder="Walk-in Client"
+                    value={addFullName}
+                    onChange={(e) => setAddFullName(e.target.value)}
+                    disabled={addSubmitting}
+                  />
+                  {addFormError ? <p className="clients-modal__error">{addFormError}</p> : null}
+                  <div className="clients-modal__actions">
+                    <button type="button" className="btn-secondary" disabled={addSubmitting} onClick={closeAddModal}>
+                      Cancel
+                    </button>
+                    <button type="submit" className="add-btn" disabled={addSubmitting}>
+                      {addSubmitting ? 'Creating…' : 'Create account'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          ) : null}
 
           {/* Stats Grid */}
           <div className="stats-grid">
@@ -261,6 +395,10 @@ const Clients = ({ onNavigate }) => {
               />
             </div>
             <div className="filter-actions">
+              <button type="button" className="add-btn" onClick={openAddClientModal}>
+                <Plus size={18} />
+                Add Client
+              </button>
               <button className="btn-secondary" onClick={() => handleQuickAction('Client filters opened')}><Filter size={18} /> Filter</button>
               <button className="btn-secondary" onClick={() => handleQuickAction('Client export started')}><Download size={18} /> Export</button>
             </div>
@@ -270,6 +408,10 @@ const Clients = ({ onNavigate }) => {
           <div className="clients-container">
             <div className="list-header">
               <h3>All Clients ({filteredClients.length})</h3>
+              <button type="button" className="add-btn add-btn--compact" onClick={openAddClientModal}>
+                <Plus size={16} />
+                Add Client
+              </button>
             </div>
             {loadError ? <p className="clients-info-message">{loadError}</p> : null}
             {loading ? <p className="clients-info-message">Loading clients...</p> : null}
