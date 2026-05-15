@@ -1063,7 +1063,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
             <p>
               {postSessionBranchRequired
                 ? 'Select the practice branch for this consultation, then optionally add a summary for your client. You can add the summary later from Logs, but the branch is required.'
-                : 'Add a short summary of what you and the client discussed. The client can read this in Consultation Logs. You can skip and add it later from Logs.'}
+                : 'Optional: fill in the summary sections (header + notes) for your client. You can skip and add later from Logs.'}
             </p>
             {postSessionBranchRequired ? (
               <div className="am-summary-modal__field">
@@ -1090,7 +1090,6 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
               </div>
             ) : null}
             {postSessionError ? <p className="am-summary-modal__error">{postSessionError}</p> : null}
-            <h4 className="am-summary-modal__section-heading">Session summary for client</h4>
             <ConsultationSummaryForm
               idPrefix="post-session-summary"
               value={postSessionSummaryText}

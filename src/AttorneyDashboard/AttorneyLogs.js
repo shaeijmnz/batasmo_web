@@ -317,9 +317,9 @@ export default function AttorneyLogs({ onNavigate, profile, initialAppointmentId
 
             <div className="al-modal__body al-modal__body--summary">
               <div className="al-summary-panel">
-                <h3 className="al-summary-panel__title">For your client</h3>
+                <h3 className="al-summary-panel__title">Session summary for your client</h3>
                 <p className="al-summary-panel__help">
-                  Use the sections below to organize your notes. The client will see each completed section in Consultation Logs.
+                  Each part has a header and a box for your notes — para hindi magulo ang summary.
                 </p>
                 {sessionBranchRequired ? (
                   <div className="al-summary-panel__field">

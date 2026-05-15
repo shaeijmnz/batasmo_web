@@ -19,7 +19,7 @@
 .al-view-btn { border: 1px solid #2563eb; background: rgba(37,99,235,.08); color: #1d4ed8; border-radius: 10px; padding: 8px 12px; font-size: .82rem; font-weight: 700; cursor: pointer; }
 .al-empty { background: #fff; border: 1px dashed #cbd5e1; border-radius: 12px; padding: 20px; text-align: center; color: #64748b; }
 .al-modal-overlay { position: fixed; inset: 0; background: rgba(2,6,23,.72); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 999; padding: 16px; }
-.al-modal { width: min(92vw, 520px); max-height: 88vh; overflow: hidden; border-radius: 16px; background: linear-gradient(165deg, rgba(12, 28, 48, 0.98), rgba(6, 14, 26, 0.99)); border: 1px solid rgba(128, 176, 255, 0.22); box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45); display: flex; flex-direction: column; }
+.al-modal { width: min(94vw, 600px); max-height: 92vh; overflow: hidden; border-radius: 16px; background: linear-gradient(165deg, rgba(12, 28, 48, 0.98), rgba(6, 14, 26, 0.99)); border: 1px solid rgba(128, 176, 255, 0.22); box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45); display: flex; flex-direction: column; }
 .al-modal--summary-only .al-modal__body--summary { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: auto; }
 .al-modal__body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .al-summary-panel { flex: 1; padding: 18px 20px 20px; background: transparent; }

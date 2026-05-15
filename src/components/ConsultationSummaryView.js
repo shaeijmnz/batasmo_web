@@ -28,8 +28,8 @@ export default function ConsultationSummaryView({ summary, className = '' }) {
     <div className={`csf-view ${className}`.trim()}>
       {filledSections.map((section) => (
         <article key={section.key} className="csf-view__block">
-          <h4 className="csf-view__title">{section.title}</h4>
-          <p className="csf-view__subtitle">{section.subtitle}</p>
+          <h4 className="csf-view__header">{section.title}</h4>
+          <p className="csf-view__subheader">{section.subtitle}</p>
           <p className="csf-view__body">{sections[section.key]}</p>
         </article>
       ))}

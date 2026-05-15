@@ -27,18 +27,16 @@ export default function ConsultationSummaryForm({
   return (
     <div className="csf-form">
       <p className="csf-form__intro">
-        Fill in the sections below. Only completed sections are shown to your client.
+        Fill in each section. Header = label, box below = your notes for the client.
       </p>
       {CONSULTATION_SUMMARY_SECTIONS.map((section, index) => (
         <section key={section.key} className="csf-section">
-          <div className="csf-section__heading">
-            <h4 className="csf-section__title" id={`${idPrefix}-${section.key}-label`}>
-              {section.title}
-            </h4>
-            <p className="csf-section__subtitle">{section.subtitle}</p>
-          </div>
+          <h4 className="csf-section__header" id={`${idPrefix}-${section.key}-label`}>
+            {section.title}
+          </h4>
+          <p className="csf-section__subheader">{section.subtitle}</p>
           <textarea
-            className="csf-section__input"
+            className="csf-section__body"
             id={`${idPrefix}-${section.key}`}
             aria-labelledby={`${idPrefix}-${section.key}-label`}
             rows={index === 0 ? 4 : 3}
