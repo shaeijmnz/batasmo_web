@@ -705,6 +705,19 @@
   transform: translateY(-1px);
 }
 
+.ba-form-select {
+  width: 100%;
+  cursor: pointer;
+  appearance: auto;
+}
+
+.ba-form-hint {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--ui-text-secondary);
+}
+
 .ba-form-textarea {
   resize: vertical;
   min-height: 100px;

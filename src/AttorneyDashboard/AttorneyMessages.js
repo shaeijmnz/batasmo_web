@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState, useRef, useEffect } from 'react';
+import { Suspense, lazy, useState, useRef, useEffect, useMemo } from 'react';
 import './AttorneyMessages.css';
 import './AttorneyTheme.css';
 import {
@@ -17,8 +17,11 @@ import {
   getOrCreateVideoMeeting,
   clearVideoMeetingId,
   saveAttorneyConsultationSummary,
+  saveAttorneyConsultationBranch,
+  fetchAttorneyProfile,
   getVideoSdkToken,
 } from '../lib/userApi';
+import { getConsultationBranchesForAttorney } from '../lib/consultationBranches';
 const VideoCallModal = lazy(() => import('../components/VideoCallModal'));
 
 const CONSULTATION_TIMER_TOTAL_SECONDS = 60 * 60;
@@ -86,8 +89,27 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
   const [endSessionConfirmOpen, setEndSessionConfirmOpen] = useState(false);
   const [postSessionSummaryOpen, setPostSessionSummaryOpen] = useState(false);
   const [postSessionSummaryText, setPostSessionSummaryText] = useState('');
+  const [postSessionBranch, setPostSessionBranch] = useState('');
   const [postSessionAppointmentId, setPostSessionAppointmentId] = useState('');
   const [postSessionSummarySaving, setPostSessionSummarySaving] = useState(false);
+  const [postSessionError, setPostSessionError] = useState('');
+  const [attorneySpecialties, setAttorneySpecialties] = useState([]);
+
+  const attorneyForBranches = useMemo(
+    () => ({
+      name: profile?.full_name || profile?.name || '',
+      specialty: profile?.specialty || '',
+      specialties: attorneySpecialties,
+    }),
+    [profile, attorneySpecialties],
+  );
+
+  const consultationBranches = useMemo(
+    () => getConsultationBranchesForAttorney(attorneyForBranches),
+    [attorneyForBranches],
+  );
+
+  const postSessionBranchRequired = consultationBranches.length > 0;
   const [deletingMessageId, setDeletingMessageId] = useState('');
   const [signedUrlsByMessageId, setSignedUrlsByMessageId] = useState({});
   const [remainingSeconds, setRemainingSeconds] = useState(CONSULTATION_TIMER_TOTAL_SECONDS);
@@ -121,6 +143,30 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
       console.log('[lifecycle] AttorneyMessages unmounted', { userId: profile?.id || null })
     }
   }, [profile?.id])
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadSpecialties = async () => {
+      if (!profile?.id) {
+        if (mounted) setAttorneySpecialties([]);
+        return;
+      }
+      try {
+        const data = await fetchAttorneyProfile(profile.id);
+        if (!mounted) return;
+        setAttorneySpecialties(Array.isArray(data?.specialties) ? data.specialties : []);
+      } catch {
+        if (mounted) setAttorneySpecialties([]);
+      }
+    };
+
+    loadSpecialties();
+
+    return () => {
+      mounted = false;
+    };
+  }, [profile?.id]);
 
   useEffect(() => {
     setAppointments([])
@@ -560,13 +606,30 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
     setPostSessionSummaryOpen(false);
     setPostSessionAppointmentId('');
     setPostSessionSummaryText('');
+    setPostSessionBranch('');
+    setPostSessionError('');
     onNavigate('attorney-logs', { appointmentId: id });
+  };
+
+  const savePostSessionBranchIfRequired = async () => {
+    if (!postSessionBranchRequired) return;
+    const branch = postSessionBranch.trim();
+    if (!branch) throw new Error('Please select a consultation branch.');
+    if (!consultationBranches.includes(branch)) {
+      throw new Error('Please select a valid consultation branch.');
+    }
+    await saveAttorneyConsultationBranch({
+      appointmentId: postSessionAppointmentId,
+      branch,
+    });
   };
 
   const handleSavePostSessionSummary = async () => {
     if (!postSessionAppointmentId) return;
     try {
       setPostSessionSummarySaving(true);
+      setPostSessionError('');
+      await savePostSessionBranchIfRequired();
       const trimmed = postSessionSummaryText.trim();
       if (trimmed) {
         await saveAttorneyConsultationSummary({
@@ -576,14 +639,24 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
       }
       completePostSessionAndGoToLogs();
     } catch (error) {
-      setLoadError(error.message || 'Failed to save summary.');
+      setPostSessionError(error.message || 'Failed to save session details.');
     } finally {
       setPostSessionSummarySaving(false);
     }
   };
 
-  const handleSkipPostSessionSummary = () => {
-    completePostSessionAndGoToLogs();
+  const handleSkipPostSessionSummary = async () => {
+    if (!postSessionAppointmentId) return;
+    try {
+      setPostSessionSummarySaving(true);
+      setPostSessionError('');
+      await savePostSessionBranchIfRequired();
+      completePostSessionAndGoToLogs();
+    } catch (error) {
+      setPostSessionError(error.message || 'Please select a consultation branch.');
+    } finally {
+      setPostSessionSummarySaving(false);
+    }
   };
 
   const handleEndSession = async () => {
@@ -597,6 +670,8 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
       setLoadError('');
       setPostSessionAppointmentId(activeAppointmentId);
       setPostSessionSummaryText('');
+      setPostSessionBranch('');
+      setPostSessionError('');
       setPostSessionSummaryOpen(true);
     } catch (error) {
       setLoadError(error.message || 'Failed to end consultation session.');
@@ -982,11 +1057,37 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
       {postSessionSummaryOpen ? (
         <div className="am-confirm-overlay">
           <div className="am-summary-modal" onClick={(event) => event.stopPropagation()}>
-            <h3>Session summary for client</h3>
+            <h3>Wrap up consultation</h3>
             <p>
-              Add a short summary of what you and the client discussed. The client can read this in Consultation Logs
-              together with the chat transcript. You can skip and add it later from Logs.
+              {postSessionBranchRequired
+                ? 'Select the practice branch for this consultation, then optionally add a summary for your client. You can add the summary later from Logs, but the branch is required.'
+                : 'Add a short summary of what you and the client discussed. The client can read this in Consultation Logs. You can skip and add it later from Logs.'}
             </p>
+            {postSessionBranchRequired ? (
+              <div className="am-summary-modal__field">
+                <label className="am-summary-modal__label" htmlFor="post-session-branch">
+                  Consultation branch
+                </label>
+                <select
+                  id="post-session-branch"
+                  className="am-summary-modal__select"
+                  value={postSessionBranch}
+                  onChange={(e) => setPostSessionBranch(e.target.value)}
+                  disabled={postSessionSummarySaving}
+                >
+                  <option value="">Select a branch…</option>
+                  {consultationBranches.map((branch) => (
+                    <option key={branch} value={branch}>
+                      {branch}
+                    </option>
+                  ))}
+                </select>
+                <p className="am-summary-modal__hint">
+                  Only you can classify the consultation under your practice area.
+                </p>
+              </div>
+            ) : null}
+            {postSessionError ? <p className="am-summary-modal__error">{postSessionError}</p> : null}
             <textarea
               className="am-summary-modal__textarea"
               rows={6}
@@ -1001,15 +1102,21 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
                 type="button"
                 className="am-confirm-btn am-confirm-btn--ghost"
                 onClick={handleSkipPostSessionSummary}
-                disabled={postSessionSummarySaving}
+                disabled={
+                  postSessionSummarySaving ||
+                  (postSessionBranchRequired && !postSessionBranch.trim())
+                }
               >
-                Skip
+                {postSessionBranchRequired ? 'Continue without summary' : 'Skip'}
               </button>
               <button
                 type="button"
                 className="am-confirm-btn am-confirm-btn--primary"
                 onClick={handleSavePostSessionSummary}
-                disabled={postSessionSummarySaving}
+                disabled={
+                  postSessionSummarySaving ||
+                  (postSessionBranchRequired && !postSessionBranch.trim())
+                }
               >
                 {postSessionSummarySaving ? 'Saving...' : 'Save & continue'}
               </button>

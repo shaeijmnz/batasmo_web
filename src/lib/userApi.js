@@ -5824,6 +5824,41 @@ export async function saveAttorneyConsultationSummary({ appointmentId, summary }
   if (error) throw error
 }
 
+/** Attorney tags a completed consultation with the practice branch (updates appointment title). */
+export async function saveAttorneyConsultationBranch({ appointmentId, branch }) {
+  if (!appointmentId) throw new Error('appointmentId is required.')
+  const trimmed = String(branch || '').trim()
+  if (!trimmed) throw new Error('Please select a consultation branch.')
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user?.id) throw new Error('Not authenticated')
+
+  const { data: appt, error: fetchError } = await supabase
+    .from('appointments')
+    .select('id, attorney_id')
+    .eq('id', appointmentId)
+    .maybeSingle()
+
+  if (fetchError) throw fetchError
+  if (!appt) throw new Error('Appointment not found.')
+  if (String(appt.attorney_id) !== String(user.id)) {
+    throw new Error('You can only update your own consultations.')
+  }
+
+  const { error } = await supabase
+    .from('appointments')
+    .update({
+      title: `Consultation - ${trimmed}`,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', appointmentId)
+    .eq('attorney_id', user.id)
+
+  if (error) throw error
+}
+
 export async function fetchAdminHomeNotifications(adminUserId) {
   if (!adminUserId) return []
 

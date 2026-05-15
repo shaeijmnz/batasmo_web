@@ -25,6 +25,34 @@
 .al-summary-panel { flex: 1; padding: 18px 20px 20px; background: transparent; }
 .al-summary-panel__title { margin: 0 0 8px; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(156, 183, 218, 0.95); }
 .al-summary-panel__help { margin: 0 0 14px; font-size: 0.84rem; color: rgba(203, 220, 245, 0.82); line-height: 1.5; }
+.al-summary-panel__field { margin-bottom: 14px; }
+.al-summary-panel__label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(156, 183, 218, 0.95);
+}
+.al-summary-panel__select {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 12px;
+  border: 1px solid rgba(128, 176, 255, 0.28);
+  background: rgba(4, 12, 24, 0.65);
+  padding: 10px 12px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  color: #f0f6ff;
+  cursor: pointer;
+}
+.al-summary-panel__select:focus {
+  outline: none;
+  border-color: rgba(90, 156, 255, 0.55);
+  box-shadow: 0 0 0 3px rgba(53, 122, 217, 0.22);
+}
+.al-summary-panel__select:disabled { opacity: 0.55; cursor: not-allowed; }
 .al-summary-panel__loading { margin: 0; padding: 24px 0; text-align: center; font-size: 0.88rem; color: rgba(156, 183, 218, 0.9); }
 .al-summary-panel__textarea {
   width: 100%;

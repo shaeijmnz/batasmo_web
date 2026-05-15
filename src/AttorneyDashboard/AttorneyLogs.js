@@ -5,7 +5,13 @@ import {
   fetchAttorneyConsultationLogs,
   fetchConsultationTranscriptForAppointment,
   saveAttorneyConsultationSummary,
+  saveAttorneyConsultationBranch,
+  fetchAttorneyProfile,
 } from '../lib/userApi';
+import {
+  getConsultationBranchesForAttorney,
+  parseConsultationBranchFromTitle,
+} from '../lib/consultationBranches';
 
 const ScalesIcon = ({ size = 24, color = '#f5a623' }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -53,11 +59,53 @@ export default function AttorneyLogs({ onNavigate, profile, initialAppointmentId
   const [attorneySummaryDraft, setAttorneySummaryDraft] = useState('');
   const [summarySaving, setSummarySaving] = useState(false);
   const [summaryNotice, setSummaryNotice] = useState('');
+  const [sessionBranchDraft, setSessionBranchDraft] = useState('');
+  const [attorneySpecialties, setAttorneySpecialties] = useState([]);
   const autoOpenedRef = useRef(false);
+
+  const attorneyForBranches = useMemo(
+    () => ({
+      name: profile?.full_name || profile?.name || '',
+      specialty: profile?.specialty || '',
+      specialties: attorneySpecialties,
+    }),
+    [profile, attorneySpecialties],
+  );
+
+  const consultationBranches = useMemo(
+    () => getConsultationBranchesForAttorney(attorneyForBranches),
+    [attorneyForBranches],
+  );
+
+  const sessionBranchRequired = consultationBranches.length > 0;
 
   useEffect(() => {
     autoOpenedRef.current = false;
   }, [initialAppointmentId]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadSpecialties = async () => {
+      if (!profile?.id) {
+        if (mounted) setAttorneySpecialties([]);
+        return;
+      }
+      try {
+        const data = await fetchAttorneyProfile(profile.id);
+        if (!mounted) return;
+        setAttorneySpecialties(Array.isArray(data?.specialties) ? data.specialties : []);
+      } catch {
+        if (mounted) setAttorneySpecialties([]);
+      }
+    };
+
+    loadSpecialties();
+
+    return () => {
+      mounted = false;
+    };
+  }, [profile?.id]);
 
   useEffect(() => {
     let mounted = true;
@@ -95,6 +143,7 @@ export default function AttorneyLogs({ onNavigate, profile, initialAppointmentId
     setActiveLog(logItem);
     setTranscriptLoading(true);
     setAttorneySummaryDraft('');
+    setSessionBranchDraft(parseConsultationBranchFromTitle(logItem?.title || ''));
     setSummaryNotice('');
 
     try {
@@ -111,6 +160,7 @@ export default function AttorneyLogs({ onNavigate, profile, initialAppointmentId
   const closeTranscript = () => {
     setActiveLog(null);
     setAttorneySummaryDraft('');
+    setSessionBranchDraft('');
     setSummaryNotice('');
   };
 
@@ -126,6 +176,7 @@ export default function AttorneyLogs({ onNavigate, profile, initialAppointmentId
       setActiveLog(match);
       setTranscriptLoading(true);
       setAttorneySummaryDraft('');
+      setSessionBranchDraft(parseConsultationBranchFromTitle(match?.title || ''));
       setSummaryNotice('');
       try {
         const response = await fetchConsultationTranscriptForAppointment(match.id);
@@ -149,6 +200,28 @@ export default function AttorneyLogs({ onNavigate, profile, initialAppointmentId
     try {
       setSummarySaving(true);
       setSummaryNotice('');
+      if (sessionBranchRequired) {
+        const branch = sessionBranchDraft.trim();
+        if (!branch) {
+          setSummaryNotice('Please select a consultation branch.');
+          return;
+        }
+        if (!consultationBranches.includes(branch)) {
+          setSummaryNotice('Please select a valid consultation branch.');
+          return;
+        }
+        await saveAttorneyConsultationBranch({ appointmentId: activeLog.id, branch });
+        setLogs((previous) =>
+          previous.map((item) =>
+            String(item.id) === String(activeLog.id)
+              ? { ...item, title: `Consultation - ${branch}` }
+              : item,
+          ),
+        );
+        setActiveLog((previous) =>
+          previous ? { ...previous, title: `Consultation - ${branch}` } : previous,
+        );
+      }
       await saveAttorneyConsultationSummary({ appointmentId: activeLog.id, summary: attorneySummaryDraft });
       closeTranscript();
     } catch (error) {
@@ -247,6 +320,27 @@ export default function AttorneyLogs({ onNavigate, profile, initialAppointmentId
                 <p className="al-summary-panel__help">
                   Summarize the key points you discussed. The client will see this in Consultation Logs.
                 </p>
+                {sessionBranchRequired ? (
+                  <div className="al-summary-panel__field">
+                    <label className="al-summary-panel__label" htmlFor="session-branch">
+                      Consultation branch
+                    </label>
+                    <select
+                      id="session-branch"
+                      className="al-summary-panel__select"
+                      value={sessionBranchDraft}
+                      onChange={(e) => setSessionBranchDraft(e.target.value)}
+                      disabled={transcriptLoading || summarySaving}
+                    >
+                      <option value="">Select a branch…</option>
+                      {consultationBranches.map((branch) => (
+                        <option key={branch} value={branch}>
+                          {branch}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
                 {transcriptLoading ? (
                   <p className="al-summary-panel__loading">Loading…</p>
                 ) : (
@@ -265,7 +359,11 @@ export default function AttorneyLogs({ onNavigate, profile, initialAppointmentId
                     type="button"
                     className="al-summary-save-btn"
                     onClick={handleSaveAttorneySummary}
-                    disabled={transcriptLoading || summarySaving}
+                    disabled={
+                      transcriptLoading ||
+                      summarySaving ||
+                      (sessionBranchRequired && !sessionBranchDraft.trim())
+                    }
                   >
                     {summarySaving ? 'Saving...' : 'Save summary'}
                   </button>
