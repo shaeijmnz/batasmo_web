@@ -22,6 +22,8 @@ import {
   getVideoSdkToken,
 } from '../lib/userApi';
 import { getConsultationBranchesForAttorney } from '../lib/consultationBranches';
+import { consultationSummaryHasContent, parseConsultationSummary } from '../lib/consultationSummaryFormat';
+import ConsultationSummaryForm from '../components/ConsultationSummaryForm';
 const VideoCallModal = lazy(() => import('../components/VideoCallModal'));
 
 const CONSULTATION_TIMER_TOTAL_SECONDS = 60 * 60;
@@ -630,8 +632,8 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
       setPostSessionSummarySaving(true);
       setPostSessionError('');
       await savePostSessionBranchIfRequired();
-      const trimmed = postSessionSummaryText.trim();
-      if (trimmed) {
+      const { sections } = parseConsultationSummary(postSessionSummaryText);
+      if (consultationSummaryHasContent(sections)) {
         await saveAttorneyConsultationSummary({
           appointmentId: postSessionAppointmentId,
           summary: postSessionSummaryText,
@@ -1088,13 +1090,11 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
               </div>
             ) : null}
             {postSessionError ? <p className="am-summary-modal__error">{postSessionError}</p> : null}
-            <textarea
-              className="am-summary-modal__textarea"
-              rows={6}
-              maxLength={12000}
-              placeholder="Key topics, next steps, documents to prepare..."
+            <h4 className="am-summary-modal__section-heading">Session summary for client</h4>
+            <ConsultationSummaryForm
+              idPrefix="post-session-summary"
               value={postSessionSummaryText}
-              onChange={(e) => setPostSessionSummaryText(e.target.value)}
+              onChange={setPostSessionSummaryText}
               disabled={postSessionSummarySaving}
             />
             <div className="am-confirm-actions">

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import './ClientLogs.css';
 import './ClientTheme.css';
 import { fetchClientConsultationLogs, fetchConsultationTranscriptForAppointment } from '../lib/userApi';
+import ConsultationSummaryView from '../components/ConsultationSummaryView';
 
 const renderStars = (rating) => {
   const safe = Math.max(0, Math.min(5, Number(rating || 0)));
@@ -153,9 +154,9 @@ export default function ClientLogs({ profile, initialAppointmentId = '' }) {
               {summaryLoading ? (
                 <p className="clogs-summary-loading">Loading…</p>
               ) : attorneySessionSummary ? (
-                <div className="clogs-attorney-summary clogs-attorney-summary--standalone">
+                <div className="clogs-attorney-summary clogs-attorney-summary--standalone clogs-attorney-summary--structured">
                   <strong>From your attorney</strong>
-                  <p>{attorneySessionSummary}</p>
+                  <ConsultationSummaryView summary={attorneySessionSummary} />
                 </div>
               ) : (
                 <p className="clogs-summary-placeholder">

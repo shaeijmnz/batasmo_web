@@ -12,6 +12,7 @@ import {
   getConsultationBranchesForAttorney,
   parseConsultationBranchFromTitle,
 } from '../lib/consultationBranches';
+import ConsultationSummaryForm from '../components/ConsultationSummaryForm';
 
 const ScalesIcon = ({ size = 24, color = '#f5a623' }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -318,7 +319,7 @@ export default function AttorneyLogs({ onNavigate, profile, initialAppointmentId
               <div className="al-summary-panel">
                 <h3 className="al-summary-panel__title">For your client</h3>
                 <p className="al-summary-panel__help">
-                  Summarize the key points you discussed. The client will see this in Consultation Logs.
+                  Use the sections below to organize your notes. The client will see each completed section in Consultation Logs.
                 </p>
                 {sessionBranchRequired ? (
                   <div className="al-summary-panel__field">
@@ -344,13 +345,10 @@ export default function AttorneyLogs({ onNavigate, profile, initialAppointmentId
                 {transcriptLoading ? (
                   <p className="al-summary-panel__loading">Loading…</p>
                 ) : (
-                  <textarea
-                    className="al-summary-panel__textarea"
-                    rows={8}
-                    maxLength={12000}
-                    placeholder="e.g. Topics covered, agreed next steps, documents to prepare..."
+                  <ConsultationSummaryForm
+                    idPrefix="attorney-log-summary"
                     value={attorneySummaryDraft}
-                    onChange={(e) => setAttorneySummaryDraft(e.target.value)}
+                    onChange={setAttorneySummaryDraft}
                     disabled={summarySaving}
                   />
                 )}

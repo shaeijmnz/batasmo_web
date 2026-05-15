@@ -458,7 +458,9 @@
 }
 
 .am-summary-modal {
-  width: min(92vw, 520px);
+  width: min(94vw, 580px);
+  max-height: min(92vh, 720px);
+  overflow-y: auto;
   border-radius: 16px;
   border: 1px solid rgba(96, 165, 250, 0.28);
   background: linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(2, 6, 23, 0.98));
@@ -525,6 +527,14 @@
   margin: 10px 0 0;
   color: #fca5a5;
   font-size: 0.84rem;
+}
+
+.am-summary-modal__section-heading {
+  margin: 16px 0 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #e2e8f0;
+  letter-spacing: -0.01em;
 }
 
 .am-summary-modal__textarea {

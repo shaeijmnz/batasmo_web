@@ -21,6 +21,7 @@ import {
   clearVideoMeetingId,
   fetchConsultationTranscriptForAppointment,
 } from '../lib/userApi';
+import ConsultationSummaryView from '../components/ConsultationSummaryView';
 const VideoCallModal = lazy(() => import('../components/VideoCallModal'));
 
 const ATTORNEY_AVATAR_BG = 'var(--ui-accent)';
@@ -925,7 +926,7 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
                   {summaryLoading ? (
                     <p className="cr-feedback-summary__placeholder">Loading…</p>
                   ) : summaryText ? (
-                    <p>{summaryText}</p>
+                    <ConsultationSummaryView summary={summaryText} />
                   ) : (
                     <p className="cr-feedback-summary__placeholder">
                       Your attorney hasn&apos;t added a session summary yet. Check back later in Logs.
