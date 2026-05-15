@@ -1,4 +1,8 @@
 import { supabase } from './supabaseClient'
+import {
+  getConsultationBranchesForAttorney,
+  parseConsultationBranchFromTitle,
+} from './consultationBranches'
 
 const isMissingRelationError = (error) =>
   error?.code === '42P01' || String(error?.message || '').toLowerCase().includes('does not exist')
@@ -1550,55 +1554,6 @@ export async function fetchAttorneyHomeData(userId, options = {}) {
   }
 }
 
-const normalizeConsultationTypeLabel = (title) => {
-  const raw = String(title || '').trim()
-  if (!raw) return 'General Consultation'
-
-  return raw
-    .replace(/consultation/gi, '')
-    .replace(/legal/gi, '')
-    .replace(/\s{2,}/g, ' ')
-    .replace(/[-:]+$/g, '')
-    .trim() || 'General Consultation'
-}
-
-const GENDER_MOCK_BASELINE_MALE = 2
-const GENDER_MOCK_BASELINE_FEMALE = 4
-
-const bucketClientProfileGender = (raw) => {
-  const v = String(raw ?? '').trim().toLowerCase()
-  if (!v) return null
-  if (v === 'male') return 'male'
-  if (v === 'female') return 'female'
-  if (v === 'other' || v === 'others') return 'other'
-  return null
-}
-
-const buildGenderAnalyticsWithBaseline = (profileRows) => {
-  let male = GENDER_MOCK_BASELINE_MALE
-  let female = GENDER_MOCK_BASELINE_FEMALE
-  let other = 0
-  ;(profileRows || []).forEach((row) => {
-    const raw = row?.gender ?? row?.sex
-    const k = bucketClientProfileGender(raw)
-    if (k === 'male') male += 1
-    else if (k === 'female') female += 1
-    else if (k === 'other') other += 1
-  })
-  const baseRows = [
-    { key: 'male', label: 'Male', count: male, percent: 0 },
-    { key: 'female', label: 'Female', count: female, percent: 0 },
-  ]
-  if (other > 0) {
-    baseRows.push({ key: 'other', label: 'Other', count: other, percent: 0 })
-  }
-  const genderTotal = baseRows.reduce((sum, r) => sum + Number(r.count || 0), 0)
-  baseRows.forEach((r) => {
-    r.percent = genderTotal > 0 ? Math.round((r.count / genderTotal) * 100) : 0
-  })
-  return { rows: baseRows, total: genderTotal }
-}
-
 const normalizeAttorneyAppointmentStatusBucket = (statusRaw) => {
   const s = String(statusRaw || '').trim().toLowerCase()
   if (s === 'completed') return 'Completed'
@@ -1608,7 +1563,7 @@ const normalizeAttorneyAppointmentStatusBucket = (statusRaw) => {
 }
 
 export async function fetchAttorneyConsultationAnalyticsData(userId) {
-  const [apptsRes, paidTxRes] = await Promise.all([
+  const [apptsRes, paidTxRes, profileRes, attorneyRes] = await Promise.all([
     supabase
       .from('appointments')
       .select('id, title, status, scheduled_at, updated_at, amount')
@@ -1618,6 +1573,8 @@ export async function fetchAttorneyConsultationAnalyticsData(userId) {
       .select('appointment_id')
       .eq('attorney_id', userId)
       .eq('payment_status', 'paid'),
+    supabase.from('profiles').select('full_name').eq('id', userId).maybeSingle(),
+    supabase.from('attorney_profiles').select('specialties').eq('user_id', userId).maybeSingle(),
   ])
 
   if (apptsRes.error) throw apptsRes.error
@@ -1627,24 +1584,35 @@ export async function fetchAttorneyConsultationAnalyticsData(userId) {
   const paidTxRows = paidTxRes.data || []
   const paidIds = new Set(paidTxRows.map((r) => r.appointment_id).filter(Boolean))
 
+  const branchOptions = getConsultationBranchesForAttorney({
+    name: profileRes.data?.full_name || '',
+    specialties: normalizeStringArray(attorneyRes.data?.specialties),
+  })
+
   const excludedStatuses = new Set(['rejected', 'cancelled'])
-  const countsByType = new Map()
+  const branchCounts = new Map(branchOptions.map((label) => [label, 0]))
+  let classifiedTotal = 0
+  let total = 0
 
   appointments.forEach((row) => {
     const status = String(row?.status || '').toLowerCase()
     if (excludedStatuses.has(status)) return
+
+    total += 1
     if (!isPaidOrFreeConsultation({ amount: row?.amount, consultationPaid: paidIds.has(row.id) })) return
 
-    const typeLabel = normalizeConsultationTypeLabel(row?.title)
-    countsByType.set(typeLabel, Number(countsByType.get(typeLabel) || 0) + 1)
+    const branch = parseConsultationBranchFromTitle(row?.title)
+    if (!branch || !branchCounts.has(branch)) return
+
+    branchCounts.set(branch, Number(branchCounts.get(branch) || 0) + 1)
+    classifiedTotal += 1
   })
 
-  const rows = Array.from(countsByType.entries())
-    .map(([label, count]) => ({ label, count }))
-    .sort((a, b) => b.count - a.count)
-
-  const total = rows.reduce((sum, item) => sum + Number(item.count || 0), 0)
-  const maxCount = rows.length ? rows[0].count : 0
+  const branchRows = branchOptions.map((label) => ({
+    label,
+    count: Number(branchCounts.get(label) || 0),
+  }))
+  const branchMaxCount = branchRows.reduce((max, row) => Math.max(max, row.count), 0)
 
   const statusCounts = new Map()
   appointments.forEach((row) => {
@@ -1655,45 +1623,14 @@ export async function fetchAttorneyConsultationAnalyticsData(userId) {
     .map(([label, count]) => ({ label, count }))
     .sort((a, b) => b.count - a.count)
 
-  let gender = buildGenderAnalyticsWithBaseline([])
-  try {
-    let profilesRes = await supabase.from('profiles').select('id, sex, gender').eq('role', 'Client')
-    if (profilesRes.error && isMissingColumnError(profilesRes.error, 'gender')) {
-      profilesRes = await supabase.from('profiles').select('id, sex').eq('role', 'Client')
-    }
-    if (profilesRes.error) throw profilesRes.error
-    gender = buildGenderAnalyticsWithBaseline(profilesRes.data || [])
-  } catch (e) {
-    console.warn('[analytics] gender profiles query failed; using mock baseline only', e)
-    gender = buildGenderAnalyticsWithBaseline([])
-  }
-
-  let averageRating = 0
-  let ratingCount = 0
-  try {
-    const fbRes = await supabase.from('consultation_feedback').select('rating').eq('attorney_id', userId)
-    if (fbRes.error) throw fbRes.error
-    const ratings = (fbRes.data || [])
-      .map((r) => Number(r?.rating))
-      .filter((n) => Number.isFinite(n) && n >= 1 && n <= 5)
-    ratingCount = ratings.length
-    if (ratingCount) {
-      averageRating = ratings.reduce((sum, n) => sum + n, 0) / ratingCount
-    }
-  } catch (e) {
-    console.warn('[analytics] consultation_feedback rating query failed', e)
-    averageRating = 0
-    ratingCount = 0
-  }
-
   return {
-    rows,
     total,
-    maxCount,
-    gender,
+    branches: {
+      rows: branchRows,
+      total: classifiedTotal,
+      maxCount: branchMaxCount,
+    },
     status,
-    averageRating,
-    ratingCount,
   }
 }
 

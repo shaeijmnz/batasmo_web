@@ -5,13 +5,9 @@ import { fetchAttorneyConsultationAnalyticsData } from '../lib/userApi';
 import { supabase } from '../lib/supabaseClient';
 
 const defaultAnalytics = {
-  rows: [],
   total: 0,
-  maxCount: 0,
-  gender: { rows: [], total: 0 },
+  branches: { rows: [], total: 0, maxCount: 0 },
   status: [],
-  averageRating: 0,
-  ratingCount: 0,
 };
 
 const ScalesIcon = ({ size = 24, color = '#f5a623' }) => (
@@ -82,7 +78,7 @@ export default function AttorneyAnalytics({ onNavigate, profile }) {
         setAnalytics({
           ...defaultAnalytics,
           ...data,
-          gender: data?.gender || defaultAnalytics.gender,
+          branches: data?.branches || defaultAnalytics.branches,
           status: Array.isArray(data?.status) ? data.status : defaultAnalytics.status,
         });
         setLoadError('');
@@ -96,13 +92,13 @@ export default function AttorneyAnalytics({ onNavigate, profile }) {
     void loadAnalytics();
 
     const channel = supabase
-      .channel(`attorney-analytics-feedback-${userId}`)
+      .channel(`attorney-analytics-appts-${userId}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
-          table: 'consultation_feedback',
+          table: 'appointments',
           filter: `attorney_id=eq.${userId}`,
         },
         () => {
@@ -121,15 +117,17 @@ export default function AttorneyAnalytics({ onNavigate, profile }) {
     };
   }, [profile?.id]);
 
-  const { rows, total, maxCount, gender, status, averageRating, ratingCount } = analytics;
+  const { total, branches, status } = analytics;
+  const classifiedTotal = Number(branches?.total || 0);
 
-  const chartRows = useMemo(
-    () => rows.slice(0, 8).map((row) => ({
+  const branchChartRows = useMemo(() => {
+    const rows = branches?.rows || [];
+    const maxCount = Number(branches?.maxCount || 0);
+    return rows.map((row) => ({
       ...row,
       ratio: maxCount > 0 ? Math.max(8, Math.round((row.count / maxCount) * 100)) : 0,
-    })),
-    [rows, maxCount],
-  );
+    }));
+  }, [branches]);
 
   const statusMax = useMemo(
     () => (status.length ? Math.max(...status.map((s) => Number(s.count || 0)), 1) : 1),
@@ -143,12 +141,6 @@ export default function AttorneyAnalytics({ onNavigate, profile }) {
     })),
     [status, statusMax],
   );
-
-  const genderRows = gender?.rows || [];
-  const genderTotal = Number(gender?.total || 0);
-
-  const avgRatingNum = Number(averageRating);
-  const hasValidRating = ratingCount > 0 && Number.isFinite(avgRatingNum);
 
   const sidebarItems = [
     { label: 'Dashboard', icon: <DashboardIcon />, nav: 'attorney-home' },
@@ -221,37 +213,33 @@ export default function AttorneyAnalytics({ onNavigate, profile }) {
       <main className="aa-main">
         {loadError ? <p className="aa-error">{loadError}</p> : null}
 
-        <div className="aa-summary-grid">
+        <div className="aa-summary-grid aa-summary-grid--compact">
           <div className="aa-summary-card">
             <p className="aa-summary-card__label">TOTAL CONSULTATIONS</p>
             <p className="aa-summary-card__value">{total}</p>
           </div>
           <div className="aa-summary-card">
-            <p className="aa-summary-card__label">AVG. CLIENT RATING</p>
-            {hasValidRating ? (
-              <>
-                <p className="aa-summary-card__value">{avgRatingNum.toFixed(1)}</p>
-                <p className="aa-summary-card__hint">★ from {ratingCount} review{ratingCount === 1 ? '' : 's'}</p>
-              </>
-            ) : (
-              <>
-                <p className="aa-summary-card__value aa-summary-card__value--muted">—</p>
-                <p className="aa-summary-card__hint">No reviews yet</p>
-              </>
-            )}
+            <p className="aa-summary-card__label">CLASSIFIED BY BRANCH</p>
+            <p className="aa-summary-card__value">{classifiedTotal}</p>
+            <p className="aa-summary-card__hint">After session wrap-up</p>
           </div>
         </div>
 
         <div className="aa-charts-split">
-          <section className="aa-chart-card aa-chart-card--stretch">
-            <div className="aa-chart-card__header">
-              <h2>Consultation type frequency</h2>
-              <span>Top {chartRows.length || 0}</span>
+          <section className="aa-chart-card aa-chart-card--stretch aa-chart-card--branches">
+            <div className="aa-chart-card__header aa-chart-card__header--stack">
+              <div>
+                <h2>Consultation branches</h2>
+                <p className="aa-chart-footnote">
+                  Counts update when you select a branch after ending a consultation.
+                </p>
+              </div>
+              <span>{classifiedTotal} classified</span>
             </div>
 
-            {chartRows.length ? (
-              <div className="aa-bar-chart">
-                {chartRows.map((row) => (
+            {branchChartRows.length ? (
+              <div className="aa-bar-chart aa-bar-chart--branches">
+                {branchChartRows.map((row) => (
                   <div key={row.label} className="aa-bar-row">
                     <div className="aa-bar-row__meta">
                       <span className="aa-bar-row__label">{row.label}</span>
@@ -264,7 +252,7 @@ export default function AttorneyAnalytics({ onNavigate, profile }) {
                 ))}
               </div>
             ) : (
-              <p className="aa-empty">No consultation records yet.</p>
+              <p className="aa-empty">No branch list for this attorney profile yet.</p>
             )}
           </section>
 
@@ -296,41 +284,6 @@ export default function AttorneyAnalytics({ onNavigate, profile }) {
             )}
           </section>
         </div>
-
-        <section className="aa-chart-card aa-chart-card--gender">
-          <div className="aa-chart-card__header aa-chart-card__header--stack">
-            <div>
-              <h2>Client registration by gender</h2>
-              <p className="aa-chart-footnote">Includes legacy baseline for pre-gender-field accounts.</p>
-            </div>
-            <span>Total {genderTotal}</span>
-          </div>
-
-          {genderRows.length ? (
-            <div className="aa-gender-chart">
-              {genderRows.map((row) => {
-                const pct = Number(row.percent);
-                const safePct = Number.isFinite(pct) ? pct : 0;
-                return (
-                  <div key={row.key} className="aa-gender-row">
-                    <div className="aa-gender-row__meta">
-                      <span className="aa-gender-row__label">{row.label}</span>
-                      <span className="aa-gender-row__count">{row.count} ({safePct}%)</span>
-                    </div>
-                    <div className="aa-gender-track">
-                      <div
-                        className="aa-gender-fill"
-                        style={{ width: `${Math.max(safePct, row.count > 0 ? 8 : 0)}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="aa-empty">No gender registration records yet.</p>
-          )}
-        </section>
       </main>
     </div>
   );
