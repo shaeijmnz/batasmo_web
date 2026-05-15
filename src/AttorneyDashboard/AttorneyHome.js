@@ -10,6 +10,7 @@ import {
   calendarDaysFromTodayLocal,
   runAttorneyConsultationScheduleNotifications,
 } from '../lib/userApi';
+import { attachLiveDataRefresh } from '../lib/liveDataRefresh';
 import AttorneyNotificationDropdown from './AttorneyNotificationDropdown';
 
 /* ── Icons ── */
@@ -108,14 +109,15 @@ function AttorneyHome({ onNavigate, profile }) {
   useEffect(() => {
     let isMounted = true;
 
-    const loadData = async () => {
+    const loadData = async (options = {}) => {
       if (!profile?.id) return;
       try {
-        const data = await fetchAttorneyHomeData(profile.id);
+        const data = await fetchAttorneyHomeData(profile.id, options);
         if (isMounted) {
           setConsultations(data.consultations);
           setNotifications(data.notifications);
           setStatsData(data.stats);
+          setLoadError('');
         }
       } catch (error) {
         if (isMounted) {
@@ -124,19 +126,25 @@ function AttorneyHome({ onNavigate, profile }) {
       }
     };
 
-    loadData();
-
-    const unsubscribe = subscribeToAttorneyAppointments(profile?.id, () => {
-      loadData();
-    });
-    const unsubscribeNotifications = subscribeToAttorneyNotifications(profile?.id, () => {
-      loadData();
+    const detachLiveRefresh = attachLiveDataRefresh({
+      enabled: Boolean(profile?.id),
+      reload: (options) => {
+        void loadData(options);
+      },
+      subscribe: (onRealtime) => {
+        const unsubAppts = subscribeToAttorneyAppointments(profile.id, onRealtime);
+        const unsubNotifs = subscribeToAttorneyNotifications(profile.id, onRealtime);
+        return () => {
+          unsubAppts();
+          unsubNotifs();
+        };
+      },
+      pollMs: 12000,
     });
 
     return () => {
       isMounted = false;
-      unsubscribe();
-      unsubscribeNotifications();
+      detachLiveRefresh();
     };
   }, [profile?.id]);
 

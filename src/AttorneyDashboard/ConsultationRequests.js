@@ -6,6 +6,7 @@ import {
   subscribeToAttorneyAppointments,
   updateAttorneyConsultationRequestStatus,
 } from '../lib/userApi';
+import { attachLiveDataRefresh } from '../lib/liveDataRefresh';
 import AttorneyNotificationDropdown from './AttorneyNotificationDropdown';
 
 /* ── Icons ── */
@@ -122,15 +123,18 @@ function ConsultationRequests({ onNavigate, profile }) {
       }
     };
 
-    loadRequests({ force: true });
-
-    const unsubscribe = subscribeToAttorneyAppointments(profile?.id, () => {
-      loadRequests({ force: true });
+    const detachLiveRefresh = attachLiveDataRefresh({
+      enabled: Boolean(profile?.id),
+      reload: (options) => {
+        void loadRequests(options);
+      },
+      subscribe: (onRealtime) => subscribeToAttorneyAppointments(profile.id, onRealtime),
+      pollMs: 12000,
     });
 
     return () => {
       isMounted = false;
-      unsubscribe();
+      detachLiveRefresh();
     };
   }, [profile?.id]);
 

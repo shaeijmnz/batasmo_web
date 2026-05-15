@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
 import './HomePage.css';
 import './ClientTheme.css';
-import { fetchClientHomeData, calendarDaysFromTodayLocal } from '../lib/userApi';
+import {
+  fetchClientHomeData,
+  calendarDaysFromTodayLocal,
+  subscribeToClientAppointments,
+} from '../lib/userApi';
+import { attachLiveDataRefresh } from '../lib/liveDataRefresh';
 import { initialChatbotMessages, sendChatbotMessage } from '../lib/chatbotService';
 
 const ScalesIcon = ({ size = 24, color = '#f5a623' }) => (
@@ -132,10 +137,18 @@ function HomePage({ onNavigate, profile, onSignOut }) {
       }
     };
 
-    loadData();
+    const detachLiveRefresh = attachLiveDataRefresh({
+      enabled: Boolean(profile?.id),
+      reload: () => {
+        void loadData();
+      },
+      subscribe: (onRealtime) => subscribeToClientAppointments(profile.id, onRealtime),
+      pollMs: 12000,
+    });
 
     return () => {
       isMounted = false;
+      detachLiveRefresh();
     };
   }, [profile?.id]);
 

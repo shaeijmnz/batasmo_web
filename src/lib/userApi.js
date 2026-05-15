@@ -22,7 +22,8 @@ const LANDING_CONTENT_DEFAULTS = {
   attorneys_subtitle: 'Browse verified legal experts and choose the attorney that best matches your concern.',
 }
 
-const ATTORNEY_APPOINTMENTS_CACHE_TTL_MS = 15000
+const ATTORNEY_APPOINTMENTS_CACHE_TTL_MS = 5000
+const REALTIME_REFRESH_DEBOUNCE_MS = 300
 const attorneyAppointmentsCache = new Map()
 
 const isMissingColumnError = (error, columnName) =>
@@ -4855,41 +4856,73 @@ export function subscribeToAppointmentStatus(appointmentId, onStatusChange) {
   }
 }
 
+function createDebouncedRealtimeHandler(onChange, delayMs = REALTIME_REFRESH_DEBOUNCE_MS) {
+  let debounceId = null
+  const pendingTimeouts = new Set()
+
+  const fire = () => {
+    if (typeof onChange !== 'function') return
+    try {
+      onChange()
+    } catch (callbackError) {
+      console.warn('[realtime] subscription callback error', callbackError)
+    }
+  }
+
+  const schedule = (waitMs = delayMs) => {
+    if (typeof window === 'undefined') {
+      fire()
+      return
+    }
+    if (debounceId) {
+      window.clearTimeout(debounceId)
+    }
+    debounceId = window.setTimeout(() => {
+      debounceId = null
+      fire()
+    }, waitMs)
+  }
+
+  const scheduleLater = (waitMs) => {
+    if (typeof window === 'undefined') return
+    const timeoutId = window.setTimeout(() => {
+      pendingTimeouts.delete(timeoutId)
+      fire()
+    }, waitMs)
+    pendingTimeouts.add(timeoutId)
+  }
+
+  const dispose = () => {
+    if (debounceId && typeof window !== 'undefined') {
+      window.clearTimeout(debounceId)
+      debounceId = null
+    }
+    pendingTimeouts.forEach((id) => {
+      if (typeof window !== 'undefined') {
+        window.clearTimeout(id)
+      }
+    })
+    pendingTimeouts.clear()
+  }
+
+  return { schedule, scheduleLater, dispose }
+}
+
 export function subscribeToAttorneyAppointments(attorneyId, onChange) {
   if (!attorneyId) {
     return () => {}
   }
 
-  const pendingTimeouts = new Set()
-
-  const fireOnChange = () => {
+  const { schedule, scheduleLater, dispose } = createDebouncedRealtimeHandler(() => {
     invalidateAttorneyAppointmentsCache(attorneyId)
-    if (typeof onChange === 'function') {
-      try {
-        onChange()
-      } catch (callbackError) {
-        console.warn('[realtime] attorney subscription callback error', callbackError)
-      }
-    }
-  }
-
-  const scheduleRefresh = (delayMs) => {
-    if (typeof window === 'undefined') return
-    const timeoutId = window.setTimeout(() => {
-      pendingTimeouts.delete(timeoutId)
-      fireOnChange()
-    }, delayMs)
-    pendingTimeouts.add(timeoutId)
-  }
+    onChange?.()
+  })
 
   const handleAppointmentChange = (payload) => {
-    fireOnChange()
+    schedule()
     const newStatus = String(payload?.new?.status || '').toLowerCase()
-    // When a row flips to cancelled, schedule a follow-up refresh slightly
-    // past the visibility window so the entry drops off the attorney queue
-    // automatically without needing the user to refresh manually.
     if (newStatus === 'cancelled') {
-      scheduleRefresh(RECENTLY_CANCELLED_WINDOW_MS + 500)
+      scheduleLater(RECENTLY_CANCELLED_WINDOW_MS + 500)
     }
   }
 
@@ -4913,17 +4946,89 @@ export function subscribeToAttorneyAppointments(attorneyId, onChange) {
         table: 'transactions',
         filter: `attorney_id=eq.${attorneyId}`,
       },
-      () => fireOnChange(),
+      () => schedule(),
     )
-    .subscribe()
-
-  return () => {
-    pendingTimeouts.forEach((id) => {
-      if (typeof window !== 'undefined') {
-        window.clearTimeout(id)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'notifications',
+        filter: `user_id=eq.${attorneyId}`,
+      },
+      () => schedule(),
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'availability_slots',
+        filter: `attorney_id=eq.${attorneyId}`,
+      },
+      () => schedule(),
+    )
+    .subscribe((status) => {
+      if (status === 'CHANNEL_ERROR') {
+        console.warn('[realtime] attorney-appointments channel error — using poll/focus refresh')
       }
     })
-    pendingTimeouts.clear()
+
+  return () => {
+    dispose()
+    supabase.removeChannel(channel)
+  }
+}
+
+export function subscribeToClientAppointments(clientId, onChange) {
+  if (!clientId) {
+    return () => {}
+  }
+
+  const { schedule, dispose } = createDebouncedRealtimeHandler(() => {
+    onChange?.()
+  })
+
+  const channel = supabase
+    .channel(`client-appointments:${clientId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'appointments',
+        filter: `client_id=eq.${clientId}`,
+      },
+      () => schedule(),
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'transactions',
+        filter: `client_id=eq.${clientId}`,
+      },
+      () => schedule(),
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'notifications',
+        filter: `user_id=eq.${clientId}`,
+      },
+      () => schedule(),
+    )
+    .subscribe((status) => {
+      if (status === 'CHANNEL_ERROR') {
+        console.warn('[realtime] client-appointments channel error — using poll/focus refresh')
+      }
+    })
+
+  return () => {
+    dispose()
     supabase.removeChannel(channel)
   }
 }

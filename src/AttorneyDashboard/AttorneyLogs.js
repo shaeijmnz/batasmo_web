@@ -7,7 +7,9 @@ import {
   saveAttorneyConsultationSummary,
   saveAttorneyConsultationBranch,
   fetchAttorneyProfile,
+  subscribeToAttorneyAppointments,
 } from '../lib/userApi';
+import { attachLiveDataRefresh } from '../lib/liveDataRefresh';
 import {
   getConsultationBranchesForAttorney,
   parseConsultationBranchFromTitle,
@@ -125,10 +127,18 @@ export default function AttorneyLogs({ onNavigate, profile, initialAppointmentId
       }
     };
 
-    loadLogs();
+    const detachLiveRefresh = attachLiveDataRefresh({
+      enabled: Boolean(profile?.id),
+      reload: () => {
+        void loadLogs();
+      },
+      subscribe: (onRealtime) => subscribeToAttorneyAppointments(profile.id, onRealtime),
+      pollMs: 15000,
+    });
 
     return () => {
       mounted = false;
+      detachLiveRefresh();
     };
   }, [profile?.id]);
 

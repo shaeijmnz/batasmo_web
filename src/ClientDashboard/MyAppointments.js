@@ -9,7 +9,9 @@ import {
   normalizeSlotTimeLabel,
   payForAppointment,
   rescheduleClientAppointment,
+  subscribeToClientAppointments,
 } from '../lib/userApi';
+import { attachLiveDataRefresh } from '../lib/liveDataRefresh';
 
 const MenuIcon = () => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -127,8 +129,16 @@ function MyAppointments({ onNavigate, profile }) {
   }, [profile?.id]);
 
   useEffect(() => {
-    loadAppointments();
-  }, [loadAppointments]);
+    if (!profile?.id) return undefined;
+
+    return attachLiveDataRefresh({
+      reload: (options) => {
+        void loadAppointments(options);
+      },
+      subscribe: (onRealtime) => subscribeToClientAppointments(profile.id, onRealtime),
+      pollMs: 12000,
+    });
+  }, [loadAppointments, profile?.id]);
 
   useEffect(() => {
     let cancelled = false;

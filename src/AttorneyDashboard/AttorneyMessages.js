@@ -24,6 +24,7 @@ import {
 import { getConsultationBranchesForAttorney } from '../lib/consultationBranches';
 import { consultationSummaryHasContent, parseConsultationSummary } from '../lib/consultationSummaryFormat';
 import ConsultationSummaryForm from '../components/ConsultationSummaryForm';
+import { attachLiveDataRefresh } from '../lib/liveDataRefresh';
 const VideoCallModal = lazy(() => import('../components/VideoCallModal'));
 
 const CONSULTATION_TIMER_TOTAL_SECONDS = 60 * 60;
@@ -140,13 +141,6 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
   }, [messages]);
 
   useEffect(() => {
-    console.log('[lifecycle] AttorneyMessages mounted', { userId: profile?.id || null })
-    return () => {
-      console.log('[lifecycle] AttorneyMessages unmounted', { userId: profile?.id || null })
-    }
-  }, [profile?.id])
-
-  useEffect(() => {
     let mounted = true;
 
     const loadSpecialties = async () => {
@@ -219,20 +213,18 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
       }
     };
 
-    loadAppointments({ force: true });
-
-    const unsubscribe = subscribeToAttorneyAppointments(profile?.id, () => {
-      loadAppointments({ force: true });
+    const detachLiveRefresh = attachLiveDataRefresh({
+      enabled: Boolean(profile?.id),
+      reload: () => {
+        void loadAppointments({ force: true });
+      },
+      subscribe: (onRealtime) => subscribeToAttorneyAppointments(profile.id, onRealtime),
+      pollMs: 12000,
     });
-
-    const refreshId = window.setInterval(() => {
-      loadAppointments({ force: true });
-    }, 30000);
 
     return () => {
       isMounted = false;
-      unsubscribe();
-      window.clearInterval(refreshId);
+      detachLiveRefresh();
     };
   }, [profile?.id, initialAppointmentId]);
 

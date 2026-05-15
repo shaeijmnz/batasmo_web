@@ -9,6 +9,7 @@ import {
   rescheduleAttorneyAppointment,
   subscribeToAttorneyAppointments,
 } from '../lib/userApi';
+import { attachLiveDataRefresh } from '../lib/liveDataRefresh';
 
 /* ── Icons ── */
 const MenuIcon = () => (
@@ -237,35 +238,15 @@ function UpcomingAppointments({ onNavigate, profile }) {
   }, [profile?.id]);
 
   useEffect(() => {
-    loadAppointments({ force: true });
+    if (!profile?.id) return undefined;
 
-    const unsubscribe = subscribeToAttorneyAppointments(profile?.id, () => {
-      loadAppointments({ force: true, silent: true });
+    return attachLiveDataRefresh({
+      reload: (options) => {
+        void loadAppointments({ force: true, ...options });
+      },
+      subscribe: (onRealtime) => subscribeToAttorneyAppointments(profile.id, onRealtime),
+      pollMs: 10000,
     });
-
-    const pollId = window.setInterval(() => {
-      loadAppointments({ force: true, silent: true });
-    }, 10000);
-
-    const handleWindowFocus = () => {
-      loadAppointments({ force: true, silent: true });
-    };
-
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        loadAppointments({ force: true, silent: true });
-      }
-    };
-
-    window.addEventListener('focus', handleWindowFocus);
-    document.addEventListener('visibilitychange', handleVisibility);
-
-    return () => {
-      window.clearInterval(pollId);
-      window.removeEventListener('focus', handleWindowFocus);
-      document.removeEventListener('visibilitychange', handleVisibility);
-      unsubscribe();
-    };
   }, [loadAppointments, profile?.id]);
 
   const now = new Date();
