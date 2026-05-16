@@ -3115,7 +3115,7 @@ export async function assertNoActiveAppointmentForClient(clientId) {
 
 const normalizeNotarialStatus = (status) => {
   const value = (status || '').toLowerCase()
-  if (value === 'approved') return 'APPROVED'
+  if (value === 'approved' || value === 'accepted') return 'APPROVED'
   if (value === 'completed') return 'COMPLETED'
   if (value === 'rejected' || value === 'cancelled') return 'REJECTED'
   return 'PENDING'
@@ -3182,7 +3182,7 @@ export async function payForNotarialRequest({ requestId, clientId, attorneyId, a
 
   const { error: reqError } = await supabase
     .from('notarial_requests')
-    .update({ status: 'approved', updated_at: now })
+    .update({ status: 'accepted', updated_at: now })
     .eq('id', requestId)
 
   if (reqError) throw reqError

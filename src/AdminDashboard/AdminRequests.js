@@ -47,6 +47,15 @@ const tabToStatus = {
   Closed: 'closed',
 };
 
+/** Maps admin UI status to Postgres request_status enum values. */
+const toDbNotarialStatus = (uiStatus) => {
+  const value = String(uiStatus || '').toLowerCase();
+  if (value === 'in_process') return 'accepted';
+  if (value === 'closed') return 'cancelled';
+  if (value === 'completed') return 'completed';
+  return value;
+};
+
 function AdminRequests({ onNavigate }) {
   const [requests, setRequests] = useState([]);
   const [searchText, setSearchText] = useState('');
@@ -141,8 +150,7 @@ function AdminRequests({ onNavigate }) {
     if (isUpdating) return false;
     setIsUpdating(true);
     try {
-      const dbStatus = newStatus === 'in_process' ? 'approved' : newStatus;
-      await updateNotarialStatus(req.id, dbStatus);
+      await updateNotarialStatus(req.id, toDbNotarialStatus(newStatus));
 
       const bodyMap = {
         in_process: `Your notarial request for "${req.serviceType}" is now being processed.`,

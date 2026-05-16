@@ -186,7 +186,7 @@ const Dashboard = ({ onNavigate }) => {
     const { data, error } = await supabase
       .from('notarial_requests')
       .select('id, client_id, service_type, document_url, status, preferred_date, created_at, updated_at, notes, client:client_id(full_name)')
-      .in('status', ['pending', 'approved', 'accepted', 'in_process'])
+      .in('status', ['pending', 'accepted'])
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -589,7 +589,7 @@ const Dashboard = ({ onNavigate }) => {
     try {
       const { error } = await supabase
         .from('notarial_requests')
-        .update({ status: 'approved', updated_at: new Date().toISOString() })
+        .update({ status: 'accepted', updated_at: new Date().toISOString() })
         .eq('id', request.id);
 
       if (error) {

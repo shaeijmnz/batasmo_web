@@ -115,7 +115,7 @@ function NotarialRequestsAtty({ onNavigate, profile }) {
 
   const confirmAccept = async () => {
     try {
-      await updateAttorneyNotarialRequestStatus({ requestId: modal.requestId, status: 'approved' });
+      await updateAttorneyNotarialRequestStatus({ requestId: modal.requestId, status: 'accepted' });
       setRequests(prev => prev.map(r => r.id === modal.requestId ? { ...r, status: 'Approved' } : r));
       setModal({ type: 'accept-success', requestId: modal.requestId });
       setLoadError('');
