@@ -3144,7 +3144,10 @@ export async function fetchClientNotarialRequests(userId) {
   return (requestsRes.data || []).map((item) => {
     const status = normalizeNotarialStatus(item.status)
     const datetime = formatDateTime(item.created_at)
-    const paymentStatus = (paymentByRequest.get(item.id) || 'unpaid').toLowerCase()
+    const paymentRaw = paymentByRequest.get(item.id) || 'unpaid'
+    const paymentNorm = String(paymentRaw).toLowerCase()
+    const isPaid =
+      paymentNorm === 'paid' || paymentNorm === 'succeeded' || paymentNorm === 'success'
     return {
       id: item.id,
       service: item.service_type || 'Notarial Service',
@@ -3153,7 +3156,7 @@ export async function fetchClientNotarialRequests(userId) {
       file: item.document_url || 'N/A',
       notes: item.notes || '',
       status,
-      payment: paymentStatus === 'paid' ? 'PAID' : 'UNPAID',
+      payment: isPaid ? 'PAID' : 'UNPAID',
       fee: `PHP ${Number(item.amount || 0).toFixed(2)}`,
       amount: Number(item.amount || 0),
       message: status === 'COMPLETED' ? 'Notarization Completed' : status === 'APPROVED' ? 'Ready for Payment' : 'Waiting for Review',

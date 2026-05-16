@@ -11,6 +11,7 @@ import {
 const MENU_ITEMS = [
   { key: 'dashboard', label: 'Dashboard', page: 'home-logged' },
   { key: 'booking', label: 'Book Consultation', page: 'book-appointment' },
+  { key: 'notary', label: 'Notary Status', page: 'client-notary-tracking' },
   { key: 'messages', label: 'Messages', page: 'support-messages' },
   { key: 'announcements', label: 'Announcement', page: 'announcements' },
   { key: 'history', label: 'Transaction History', page: 'transaction-history' },
@@ -29,6 +30,7 @@ const PAGE_COPY = {
   'my-notarial-requests': 'Track your consultations and notary services.',
   'notarial-request': 'Track your consultations and notary services.',
   'support-messages': 'Message BatasMo Admin for help or follow-ups.',
+  'client-notary-tracking': 'Track notary requests you started on the BatasMo mobile app.',
 };
 
 const ACTIVE_MENU_BY_PAGE = {
@@ -43,6 +45,7 @@ const ACTIVE_MENU_BY_PAGE = {
   announcements: 'announcements',
   profile: 'dashboard',
   'support-messages': 'messages',
+  'client-notary-tracking': 'notary',
 };
 
 function SidebarIcon({ type }) {
@@ -68,11 +71,12 @@ function SidebarIcon({ type }) {
     );
   }
 
-  if (type === 'tracking') {
+  if (type === 'notary') {
     return (
       <svg viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="11" cy="11" r="7" />
-        <line x1="21" y1="21" x2="16.5" y2="16.5" />
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <path d="M9 15l2 2 4-4" />
       </svg>
     );
   }
