@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { updateNotarialStatus, createNotification } from '../lib/adminApi';
+import {
+  updateNotarialStatus,
+  createNotification,
+  fetchPaidNotarialRequests,
+  NOTARIAL_ADMIN_SELECT,
+} from '../lib/adminApi';
 import './AdminRequests.css';
 
 const BackIcon = () => (
@@ -89,12 +94,7 @@ function AdminRequests({ onNavigate }) {
 
   const loadRequests = async () => {
     try {
-      const { data, error } = await supabase
-        .from('notarial_requests')
-        .select('id, client_id, service_type, status, preferred_date, created_at, updated_at, notes, document_url, client:client_id(full_name)')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
+      const data = await fetchPaidNotarialRequests({ select: NOTARIAL_ADMIN_SELECT });
 
       setRequests(
         (data || []).map((row) => ({
@@ -131,6 +131,9 @@ function AdminRequests({ onNavigate }) {
     const channel = supabase
       .channel('admin-notarial-requests-list')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notarial_requests' }, () => {
+        if (isMounted) loadRequests();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => {
         if (isMounted) loadRequests();
       })
       .subscribe();

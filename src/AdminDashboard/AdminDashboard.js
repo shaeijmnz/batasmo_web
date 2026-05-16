@@ -13,6 +13,7 @@ import {
   subscribeToAdminNotifications,
   signOutUser,
 } from '../lib/userApi';
+import { fetchPaidNotarialRequests } from '../lib/adminApi';
 import './AdminTheme.css';
 import './dashboard.css';
 
@@ -183,15 +184,11 @@ const Dashboard = ({ onNavigate }) => {
   };
 
   const fetchPendingNotaryRequests = async () => {
-    const { data, error } = await supabase
-      .from('notarial_requests')
-      .select('id, client_id, service_type, document_url, status, preferred_date, created_at, updated_at, notes, client:client_id(full_name)')
-      .in('status', ['pending', 'accepted'])
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      throw error;
-    }
+    const data = await fetchPaidNotarialRequests({
+      select:
+        'id, client_id, service_type, document_url, status, preferred_date, created_at, updated_at, notes, client:client_id(full_name)',
+      extraQuery: (query) => query.in('status', ['pending', 'accepted']),
+    });
 
     const mapped = (data || []).map((item) => {
       const { date } = formatDateTimeForUi(item.created_at);
@@ -686,21 +683,20 @@ const Dashboard = ({ onNavigate }) => {
 
       isFetching = true;
       try {
-        const [appointmentsRes, notaryRes] = await Promise.all([
+        const [appointmentsRes, paidCompletedNotary] = await Promise.all([
           supabase
             .from('appointments')
             .select('id, title, notes, scheduled_at, updated_at, client:client_id(full_name), attorney:attorney_id(full_name)')
             .eq('status', 'completed')
             .order('updated_at', { ascending: false }),
-          supabase
-            .from('notarial_requests')
-            .select('id, client_id, service_type, document_url, status, created_at, updated_at, notes, client:client_id(full_name)')
-            .eq('status', 'completed')
-            .order('updated_at', { ascending: false }),
+          fetchPaidNotarialRequests({
+            select:
+              'id, client_id, service_type, document_url, status, created_at, updated_at, notes, client:client_id(full_name)',
+            extraQuery: (query) => query.eq('status', 'completed'),
+          }),
         ]);
 
         if (appointmentsRes.error) throw appointmentsRes.error;
-        if (notaryRes.error) throw notaryRes.error;
 
         const nextCompletedConsultations = (appointmentsRes.data || []).map((item) => {
           const { date, time } = formatDateTimeForUi(item.scheduled_at || item.updated_at);
@@ -715,7 +711,7 @@ const Dashboard = ({ onNavigate }) => {
           };
         });
 
-        const nextCompletedNotaryRequests = (notaryRes.data || []).map((item) => {
+        const nextCompletedNotaryRequests = (paidCompletedNotary || []).map((item) => {
           const { date } = formatDateTimeForUi(item.updated_at || item.created_at);
           return {
             id: item.id,

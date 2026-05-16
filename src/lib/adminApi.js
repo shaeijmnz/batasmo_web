@@ -210,18 +210,62 @@ export async function updateAppointmentStatus(id, status) {
   if (error) throw error
 }
 
-export async function fetchNotarialRequests(limit = 200) {
-  const { data, error } = await withTimeout(
-    supabase
-      .from('notarial_requests')
-      .select('id, client_id, service_type, status, preferred_date, created_at, updated_at, notes, document_url, client:client_id(full_name), attorney:attorney_id(full_name)')
-      .order('created_at', { ascending: false })
-      .limit(limit),
-    'Fetch notarial requests',
-  )
+export const NOTARIAL_ADMIN_SELECT =
+  'id, client_id, service_type, status, preferred_date, created_at, updated_at, notes, document_url, client:client_id(full_name)'
+
+/** True when a linked transaction counts as fully paid (mobile gate before admin visibility). */
+export function isNotarialTransactionPaid(paymentStatus) {
+  const value = String(paymentStatus || '').toLowerCase()
+  return value === 'paid' || value === 'succeeded' || value === 'success'
+}
+
+export async function fetchPaidNotarialRequestIds() {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('notarial_request_id, payment_status')
+    .not('notarial_request_id', 'is', null)
 
   if (error) throw error
+
+  return new Set(
+    (data || [])
+      .filter((row) => isNotarialTransactionPaid(row.payment_status))
+      .map((row) => row.notarial_request_id)
+      .filter(Boolean),
+  )
+}
+
+/** Admin/mobile rule: notarial rows appear only after payment is complete. */
+export async function fetchPaidNotarialRequests(options = {}) {
+  const {
+    select = NOTARIAL_ADMIN_SELECT,
+    limit = 500,
+    extraQuery,
+  } = options
+
+  const paidIds = await fetchPaidNotarialRequestIds()
+  if (!paidIds.size) return []
+
+  let query = supabase
+    .from('notarial_requests')
+    .select(select)
+    .in('id', Array.from(paidIds))
+    .order('created_at', { ascending: false })
+
+  if (typeof extraQuery === 'function') {
+    query = extraQuery(query)
+  }
+  if (limit) {
+    query = query.limit(limit)
+  }
+
+  const { data, error } = await withTimeout(query, 'Fetch paid notarial requests')
+  if (error) throw error
   return data ?? []
+}
+
+export async function fetchNotarialRequests(limit = 200) {
+  return fetchPaidNotarialRequests({ limit })
 }
 
 export async function updateNotarialStatus(id, status) {
