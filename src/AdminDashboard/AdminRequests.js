@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import {
   updateNotarialStatus,
-  createNotification,
+  notifyClientNotarialStatusUpdate,
   fetchPaidNotarialRequests,
   NOTARIAL_ADMIN_SELECT,
 } from '../lib/adminApi';
@@ -169,17 +169,19 @@ function AdminRequests({ onNavigate }) {
     try {
       await updateNotarialStatus(req.id, toDbNotarialStatus(newStatus));
 
-      const bodyMap = {
-        in_process: `Your notarial request for "${req.serviceType}" is now being processed.`,
-        completed: `Your notarized document for "${req.serviceType}" is ready for pick up.`,
-      };
-
-      if (req.clientId && bodyMap[newStatus]) {
-        await createNotification({
-          userId: req.clientId,
-          title: 'Notarial Request Update',
-          body: bodyMap[newStatus],
-          type: 'notarial_update',
+      if (newStatus === 'in_process') {
+        await notifyClientNotarialStatusUpdate({
+          clientId: req.clientId,
+          requestId: req.id,
+          status: 'in_process',
+          serviceLabel: req.serviceType,
+        });
+      } else if (newStatus === 'completed') {
+        await notifyClientNotarialStatusUpdate({
+          clientId: req.clientId,
+          requestId: req.id,
+          status: 'ready_for_pickup',
+          serviceLabel: req.serviceType,
         });
       }
 
@@ -198,7 +200,7 @@ function AdminRequests({ onNavigate }) {
       }
 
       await loadRequests();
-      showToast(`Request marked as ${statusLabel({ status: newStatus, pickedUp: false })}.`);
+      showToast(`Request marked as ${statusLabel({ status: newStatus, pickedUp: false })}. Client notified.`);
       return true;
     } catch (err) {
       showToast(err.message || 'Failed to update status.', 'error');
@@ -235,18 +237,16 @@ function AdminRequests({ onNavigate }) {
 
       if (error) throw error;
 
-      if (req.clientId) {
-        await createNotification({
-          userId: req.clientId,
-          title: 'Notarial Request Update',
-          body: `Your notarized document for "${req.serviceType}" has been picked up. Thank you!`,
-          type: 'notarial_update',
-        });
-      }
+      await notifyClientNotarialStatusUpdate({
+        clientId: req.clientId,
+        requestId: req.id,
+        status: 'picked_up',
+        serviceLabel: req.serviceType,
+      });
 
       setActiveTab('Completed');
       await loadRequests();
-      showToast('Marked as picked up. Moved to Completed.');
+      showToast('Marked as picked up. Client notified.');
       return true;
     } catch (err) {
       showToast(err.message || 'Failed to mark as picked up.', 'error');

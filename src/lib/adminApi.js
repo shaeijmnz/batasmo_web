@@ -319,16 +319,68 @@ export async function fetchNotifications(limit = 6) {
   return data ?? []
 }
 
-export async function createNotification({ userId, title, body, type = 'admin_announcement' }) {
-  const { error } = await supabase.from('notifications').insert({
+export async function createNotification({ userId, title, body, type = 'admin_announcement', data = null }) {
+  const row = {
     user_id: userId,
     title,
     body,
     type,
     is_read: false,
-  })
+    created_at: new Date().toISOString(),
+  }
 
-  if (error) throw error
+  if (data && typeof data === 'object') {
+    row.data = data
+  }
+
+  const { error } = await supabase.from('notifications').insert(row)
+
+  if (error) {
+    if (data && String(error.message || '').toLowerCase().includes('data')) {
+      const { data: _d, ...withoutData } = row
+      const { error: retryError } = await supabase.from('notifications').insert(withoutData)
+      if (retryError) throw retryError
+      return
+    }
+    throw error
+  }
+}
+
+/** Notify client when admin updates notary workflow (In Process, Ready for Pickup, etc.). */
+export async function notifyClientNotarialStatusUpdate({
+  clientId,
+  requestId,
+  status,
+  serviceLabel,
+}) {
+  if (!clientId) return
+
+  const label = String(serviceLabel || 'your notarial request').trim() || 'your notarial request'
+  const templates = {
+    in_process: {
+      title: 'Notary In Process',
+      body: `Your notarial request for "${label}" is now being processed by our team.`,
+    },
+    ready_for_pickup: {
+      title: 'Ready for Pickup',
+      body: `Your notarized document for "${label}" is ready for pick up at the office.`,
+    },
+    picked_up: {
+      title: 'Notary Completed',
+      body: `Your notarized document for "${label}" has been picked up. Thank you for using BatasMo.`,
+    },
+  }
+
+  const template = templates[status]
+  if (!template) return
+
+  await createNotification({
+    userId: clientId,
+    title: template.title,
+    body: template.body,
+    type: 'notarial_update',
+    data: requestId ? { notarial_request_id: requestId, status } : null,
+  })
 }
 
 export async function fetchRecentProfileActivity(limit = 20) {

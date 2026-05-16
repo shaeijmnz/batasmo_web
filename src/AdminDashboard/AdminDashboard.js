@@ -13,7 +13,7 @@ import {
   subscribeToAdminNotifications,
   signOutUser,
 } from '../lib/userApi';
-import { fetchPaidNotarialRequests } from '../lib/adminApi';
+import { fetchPaidNotarialRequests, notifyClientNotarialStatusUpdate } from '../lib/adminApi';
 import './AdminTheme.css';
 import './dashboard.css';
 
@@ -543,24 +543,6 @@ const Dashboard = ({ onNavigate }) => {
     };
   }, []);
 
-  const notifyClient = async (clientId, body) => {
-    if (!clientId) {
-      return;
-    }
-
-    const { error } = await supabase.from('notifications').insert({
-      user_id: clientId,
-      title: 'Notarial Request Update',
-      body,
-      type: 'notarial_update',
-      is_read: false,
-    });
-
-    if (error) {
-      throw error;
-    }
-  };
-
   const openNotaryDocument = (request) => {
     if (!request.documentUrl) {
       showToast('No document uploaded for this request.', 'error');
@@ -593,10 +575,12 @@ const Dashboard = ({ onNavigate }) => {
         throw error;
       }
 
-      await notifyClient(
-        request.clientId,
-        `Your notary request for ${request.document} is now in process.`,
-      );
+      await notifyClientNotarialStatusUpdate({
+        clientId: request.clientId,
+        requestId: request.id,
+        status: 'in_process',
+        serviceLabel: request.document,
+      });
 
       await fetchPendingNotaryRequests();
       showToast('Notary request moved to In Process. Client notified.');
@@ -624,10 +608,12 @@ const Dashboard = ({ onNavigate }) => {
         throw error;
       }
 
-      await notifyClient(
-        request.clientId,
-        `Your notarized document for ${request.document} is ready for pick up.`,
-      );
+      await notifyClientNotarialStatusUpdate({
+        clientId: request.clientId,
+        requestId: request.id,
+        status: 'ready_for_pickup',
+        serviceLabel: request.document,
+      });
 
       await fetchPendingNotaryRequests();
       showToast('Notary request marked as ready for pick up. Client notified.');
@@ -655,10 +641,12 @@ const Dashboard = ({ onNavigate }) => {
         throw error;
       }
 
-      await notifyClient(
-        request.clientId,
-        `Your notarized document for ${request.document} was marked as claimed.`,
-      );
+      await notifyClientNotarialStatusUpdate({
+        clientId: request.clientId,
+        requestId: request.id,
+        status: 'picked_up',
+        serviceLabel: request.document,
+      });
 
       setCompletedNotaryRequests((prev) =>
         prev.map((item) => (item.id === request.id ? { ...item, pickedUp: true, notes: appendClaimedMarker(item.notes) } : item)),

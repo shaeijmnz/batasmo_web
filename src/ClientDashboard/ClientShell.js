@@ -176,7 +176,7 @@ function ClientNotificationGlyph({ type }) {
       </svg>
     );
   }
-  if (t === 'consultation') {
+  if (t === 'consultation' || t === 'notarial_update') {
     return (
       <svg viewBox="0 0 24 24" aria-hidden="true" width={20} height={20} {...common}>
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -215,7 +215,7 @@ function clientNotifGlyphClass(type) {
   const t = String(type || '').toLowerCase();
   if (t === 'payment') return 'client-shell-notif-item__glyph--payment';
   if (t === 'booking') return 'client-shell-notif-item__glyph--booking';
-  if (t === 'consultation') return 'client-shell-notif-item__glyph--consultation';
+  if (t === 'consultation' || t === 'notarial_update') return 'client-shell-notif-item__glyph--consultation';
   if (t === 'reschedule') return 'client-shell-notif-item__glyph--reschedule';
   if (t === 'reminder') return 'client-shell-notif-item__glyph--reminder';
   return 'client-shell-notif-item__glyph--default';
@@ -507,6 +507,8 @@ export default function ClientShell({
                             setNotifOpen(false);
                             if (item.appointmentId) {
                               handleNavigate('client-logs', { appointmentId: item.appointmentId });
+                            } else if (String(item.type || '').toLowerCase() === 'notarial_update') {
+                              handleNavigate('client-notary-tracking');
                             } else {
                               handleNavigate('my-appointments');
                             }
@@ -522,7 +524,11 @@ export default function ClientShell({
                               <div className="client-shell-notif-item__meta">
                                 <span className="client-shell-notif-item__time">{item.time}</span>
                                 <span className="client-shell-notif-item__cta">
-                                  {item.appointmentId ? 'Open consultation logs' : 'View appointments'}
+                                  {item.appointmentId
+                                    ? 'Open consultation logs'
+                                    : String(item.type || '').toLowerCase() === 'notarial_update'
+                                      ? 'View notary status'
+                                      : 'View appointments'}
                                   <span aria-hidden="true" className="client-shell-notif-item__cta-arrow">
                                     →
                                   </span>
