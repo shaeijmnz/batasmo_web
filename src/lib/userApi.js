@@ -5587,7 +5587,8 @@ export async function fetchAttorneyNotarialRequests(userId) {
       id: item.id,
       docType: item.service_type || 'Notarial Request',
       status:
-        (item.status || '').toLowerCase() === 'approved'
+        (item.status || '').toLowerCase() === 'approved' ||
+        (item.status || '').toLowerCase() === 'accepted'
           ? 'Approved'
           : (item.status || '').toLowerCase() === 'rejected' || (item.status || '').toLowerCase() === 'cancelled'
             ? 'Rejected'
