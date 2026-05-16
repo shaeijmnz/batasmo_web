@@ -66,7 +66,7 @@ function AdminRequests({ onNavigate }) {
     try {
       const { data, error } = await supabase
         .from('notarial_requests')
-        .select('id, client_id, service_type, status, preferred_date, created_at, updated_at, notes, document_url, client:client_id(full_name), attorney:attorney_id(full_name)')
+        .select('id, client_id, service_type, status, preferred_date, created_at, updated_at, notes, document_url, client:client_id(full_name)')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -76,7 +76,6 @@ function AdminRequests({ onNavigate }) {
           id: row.id,
           clientId: row.client_id,
           clientName: row.client?.full_name || 'Client',
-          attorneyName: row.attorney?.full_name || 'Unassigned',
           serviceType: row.service_type || 'Notarial Service',
           status: normalizeStatus(row.status),
           preferredDate: formatDate(row.preferred_date),
@@ -125,7 +124,7 @@ function AdminRequests({ onNavigate }) {
 
     if (!term) return byTab;
     return byTab.filter((r) =>
-      [r.clientName, r.attorneyName, r.serviceType].some((v) =>
+      [r.clientName, r.serviceType].some((v) =>
         String(v || '').toLowerCase().includes(term),
       ),
     );
@@ -139,7 +138,7 @@ function AdminRequests({ onNavigate }) {
   }), [requests]);
 
   const updateStatus = async (req, newStatus) => {
-    if (isUpdating) return;
+    if (isUpdating) return false;
     setIsUpdating(true);
     try {
       const dbStatus = newStatus === 'in_process' ? 'approved' : newStatus;
@@ -174,8 +173,10 @@ function AdminRequests({ onNavigate }) {
 
       await loadRequests();
       showToast(`Request marked as ${statusLabel(newStatus)}.`);
+      return true;
     } catch (err) {
       showToast(err.message || 'Failed to update status.', 'error');
+      return false;
     } finally {
       setIsUpdating(false);
     }
@@ -187,6 +188,13 @@ function AdminRequests({ onNavigate }) {
       return;
     }
     window.open(req.documentUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleModalStatusUpdate = async (req, newStatus) => {
+    const ok = await updateStatus(req, newStatus);
+    if (ok) {
+      setViewRequest(null);
+    }
   };
 
   return (
@@ -222,7 +230,7 @@ function AdminRequests({ onNavigate }) {
           <div className="adm-detail-search">
             <input
               type="text"
-              placeholder="Search by client, attorney, or service..."
+              placeholder="Search by client or service..."
               className="adm-detail-input"
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
@@ -351,10 +359,6 @@ function AdminRequests({ onNavigate }) {
                 <label>Submitted</label>
                 <p>{viewRequest.submittedDate}</p>
               </div>
-              <div className="adm-detail-modal__row">
-                <label>Attorney</label>
-                <p>{viewRequest.attorneyName}</p>
-              </div>
               {viewRequest.notes ? (
                 <div className="adm-detail-modal__row">
                   <label>Notes</label>
@@ -388,36 +392,34 @@ function AdminRequests({ onNavigate }) {
               )}
             </div>
             <div className="adm-detail-modal__actions">
-              {viewRequest.status === 'pending' && (
-                <button
-                  className="adm-detail-modal__btn adm-detail-modal__btn--approve"
-                  disabled={isUpdating}
-                  onClick={async () => {
-                    await updateStatus(viewRequest, 'in_process');
-                    setViewRequest(null);
-                  }}
-                >
-                  Mark In Process
-                </button>
-              )}
-              {viewRequest.status === 'in_process' && (
-                <button
-                  className="adm-detail-modal__btn adm-detail-modal__btn--approve"
-                  disabled={isUpdating}
-                  onClick={async () => {
-                    await updateStatus(viewRequest, 'completed');
-                    setViewRequest(null);
-                  }}
-                >
-                  Ready for Pickup
-                </button>
-              )}
               <button
-                className="adm-detail-modal__btn adm-detail-modal__btn--close"
+                type="button"
+                className="adm-detail-modal__btn adm-detail-modal__btn--dismiss"
+                disabled={isUpdating}
                 onClick={() => setViewRequest(null)}
               >
                 Close
               </button>
+              {viewRequest.status === 'pending' && (
+                <button
+                  type="button"
+                  className="adm-detail-modal__btn adm-detail-modal__btn--approve"
+                  disabled={isUpdating}
+                  onClick={() => handleModalStatusUpdate(viewRequest, 'in_process')}
+                >
+                  {isUpdating ? 'Updating…' : 'Mark In Process'}
+                </button>
+              )}
+              {viewRequest.status === 'in_process' && (
+                <button
+                  type="button"
+                  className="adm-detail-modal__btn adm-detail-modal__btn--pickup"
+                  disabled={isUpdating}
+                  onClick={() => handleModalStatusUpdate(viewRequest, 'completed')}
+                >
+                  {isUpdating ? 'Updating…' : 'Ready for Pickup'}
+                </button>
+              )}
             </div>
           </div>
         </div>
