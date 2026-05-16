@@ -15,21 +15,21 @@ const normalizeStatus = (raw) => {
   const v = String(raw || '').toLowerCase();
   if (v === 'approved' || v === 'accepted' || v === 'in_process' || v === 'in-progress') return 'in_process';
   if (v === 'completed') return 'completed';
-  if (v === 'cancelled' || v === 'rejected' || v === 'closed') return 'closed';
+  if (v === 'cancelled' || v === 'rejected') return 'cancelled';
   return 'pending';
 };
 
 const statusLabel = (status) => {
   if (status === 'in_process') return 'In Process';
   if (status === 'completed') return 'Ready for Pickup';
-  if (status === 'closed') return 'Closed';
+  if (status === 'cancelled') return 'Cancelled';
   return 'New';
 };
 
 const statusBadgeClass = (status) => {
   if (status === 'in_process') return 'adm-detail-badge--in-progress';
   if (status === 'completed') return 'adm-detail-badge--active';
-  if (status === 'closed') return 'adm-detail-badge--inactive';
+  if (status === 'cancelled') return 'adm-detail-badge--inactive';
   return 'adm-detail-badge--pending';
 };
 
@@ -39,19 +39,18 @@ const formatDate = (value) => {
   return d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-const TABS = ['All', 'In Process', 'Ready for Pickup', 'Closed'];
+const TABS = ['All', 'In Process', 'Ready for Pickup', 'Completed'];
 
 const tabToStatus = {
   'In Process': 'in_process',
   'Ready for Pickup': 'completed',
-  Closed: 'closed',
+  Completed: 'completed',
 };
 
 /** Maps admin UI status to Postgres request_status enum values. */
 const toDbNotarialStatus = (uiStatus) => {
   const value = String(uiStatus || '').toLowerCase();
   if (value === 'in_process') return 'accepted';
-  if (value === 'closed') return 'cancelled';
   if (value === 'completed') return 'completed';
   return value;
 };
@@ -141,8 +140,8 @@ function AdminRequests({ onNavigate }) {
 
   const counts = useMemo(() => ({
     in_process: requests.filter((r) => r.status === 'in_process').length,
+    ready_for_pickup: requests.filter((r) => r.status === 'completed').length,
     completed: requests.filter((r) => r.status === 'completed').length,
-    closed: requests.filter((r) => r.status === 'closed').length,
     total: requests.length,
   }), [requests]);
 
@@ -155,7 +154,6 @@ function AdminRequests({ onNavigate }) {
       const bodyMap = {
         in_process: `Your notarial request for "${req.serviceType}" is now being processed.`,
         completed: `Your notarized document for "${req.serviceType}" is ready for pick up.`,
-        closed: `Your notarial request for "${req.serviceType}" has been closed.`,
       };
 
       if (req.clientId && bodyMap[newStatus]) {
@@ -175,8 +173,6 @@ function AdminRequests({ onNavigate }) {
         setActiveTab('In Process');
       } else if (newStatus === 'completed') {
         setActiveTab('Ready for Pickup');
-      } else if (newStatus === 'closed') {
-        setActiveTab('Closed');
       }
 
       await loadRequests();
@@ -222,8 +218,8 @@ function AdminRequests({ onNavigate }) {
         <div className="adm-nr-stats">
           {[
             { label: 'In Process', value: counts.in_process, color: '#3b82f6' },
-            { label: 'Ready for Pickup', value: counts.completed, color: '#22c55e' },
-            { label: 'Closed', value: counts.closed, color: '#64748b' },
+            { label: 'Ready for Pickup', value: counts.ready_for_pickup, color: '#22c55e' },
+            { label: 'Completed', value: counts.completed, color: '#64748b' },
             { label: 'Total', value: counts.total, color: '#1e3a8a' },
           ].map((s) => (
             <div key={s.label} className="adm-nr-stat-card">
@@ -307,15 +303,6 @@ function AdminRequests({ onNavigate }) {
                           onClick={() => updateStatus(req, 'completed')}
                         >
                           Ready for Pickup
-                        </button>
-                      )}
-                      {(req.status === 'pending' || req.status === 'in_process') && (
-                        <button
-                          className="adm-detail-row-btn adm-nr-btn--close"
-                          disabled={isUpdating}
-                          onClick={() => updateStatus(req, 'closed')}
-                        >
-                          Close
                         </button>
                       )}
                     </div>
@@ -406,7 +393,7 @@ function AdminRequests({ onNavigate }) {
                 disabled={isUpdating}
                 onClick={() => setViewRequest(null)}
               >
-                Close
+                Dismiss
               </button>
               {viewRequest.status === 'pending' && (
                 <button
