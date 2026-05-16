@@ -335,6 +335,20 @@
 	color: #6b7280;
 }
 
+.adm-detail-badge--completed {
+	background: #e0e7ff;
+	color: #4338ca;
+}
+
+.adm-detail-modal__btn--picked-up {
+	background: #6366f1;
+	color: #fff;
+}
+
+.adm-detail-modal__btn--picked-up:hover:not(:disabled) {
+	background: #4f46e5;
+}
+
 @media (max-width: 640px) {
 	.adm-detail-header,
 	.adm-detail-main {
