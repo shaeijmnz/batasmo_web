@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { supabase } from '../lib/supabaseClient';
-import { fetchClientNotarialRequests } from '../lib/userApi';
+import { fetchClientNotarialRequests, subscribeToClientNotarialRequests } from '../lib/userApi';
+import { attachLiveDataRefresh } from '../lib/liveDataRefresh';
 import './ClientNotaryTracking.css';
 
 const CLAIMED_MARKER = '[CLIENT_CLAIMED]';
@@ -97,11 +97,15 @@ function ClientNotaryTracking({ profile }) {
   const [activeFilter, setActiveFilter] = useState('All');
   const [expandedId, setExpandedId] = useState(null);
 
-  const loadRequests = useCallback(async () => {
+  const loadRequests = useCallback(async (options = {}) => {
     if (!profile?.id) {
       setRequests([]);
       setLoading(false);
       return;
+    }
+
+    if (!options.silent) {
+      setLoading(true);
     }
 
     try {
@@ -111,50 +115,25 @@ function ClientNotaryTracking({ profile }) {
     } catch (error) {
       setLoadError(error.message || 'Unable to load notary requests.');
     } finally {
-      setLoading(false);
+      if (!options.silent) {
+        setLoading(false);
+      }
     }
   }, [profile?.id]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    const safeLoad = async () => {
-      if (cancelled) return;
-      setLoading(true);
-      await loadRequests();
-    };
-
-    safeLoad();
-
     if (!profile?.id) {
-      return () => {
-        cancelled = true;
-      };
+      return undefined;
     }
 
-    const channel = supabase
-      .channel(`client-notary-tracking:${profile.id}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'notarial_requests', filter: `client_id=eq.${profile.id}` },
-        () => {
-          if (!cancelled) loadRequests();
-        },
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'transactions', filter: `client_id=eq.${profile.id}` },
-        () => {
-          if (!cancelled) loadRequests();
-        },
-      )
-      .subscribe();
-
-    return () => {
-      cancelled = true;
-      supabase.removeChannel(channel);
-    };
-  }, [profile?.id, loadRequests]);
+    return attachLiveDataRefresh({
+      reload: (options) => {
+        void loadRequests(options);
+      },
+      subscribe: (onRealtime) => subscribeToClientNotarialRequests(profile.id, onRealtime),
+      pollMs: 8000,
+    });
+  }, [loadRequests, profile?.id]);
 
   const stats = useMemo(() => {
     let active = 0;
