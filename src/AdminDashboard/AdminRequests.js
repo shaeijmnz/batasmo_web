@@ -23,7 +23,7 @@ const statusLabel = (status) => {
   if (status === 'in_process') return 'In Process';
   if (status === 'completed') return 'Ready for Pickup';
   if (status === 'closed') return 'Closed';
-  return 'Pending';
+  return 'New';
 };
 
 const statusBadgeClass = (status) => {
@@ -39,10 +39,9 @@ const formatDate = (value) => {
   return d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-const TABS = ['All', 'Pending', 'In Process', 'Ready for Pickup', 'Closed'];
+const TABS = ['All', 'In Process', 'Ready for Pickup', 'Closed'];
 
 const tabToStatus = {
-  Pending: 'pending',
   'In Process': 'in_process',
   'Ready for Pickup': 'completed',
   Closed: 'closed',
@@ -133,7 +132,6 @@ function AdminRequests({ onNavigate }) {
   }, [requests, activeTab, searchText]);
 
   const counts = useMemo(() => ({
-    pending: requests.filter((r) => r.status === 'pending').length,
     in_process: requests.filter((r) => r.status === 'in_process').length,
     completed: requests.filter((r) => r.status === 'completed').length,
     closed: requests.filter((r) => r.status === 'closed').length,
@@ -144,7 +142,8 @@ function AdminRequests({ onNavigate }) {
     if (isUpdating) return;
     setIsUpdating(true);
     try {
-      await updateNotarialStatus(req.id, newStatus === 'in_process' ? 'approved' : newStatus);
+      const dbStatus = newStatus === 'in_process' ? 'approved' : newStatus;
+      await updateNotarialStatus(req.id, dbStatus);
 
       const bodyMap = {
         in_process: `Your notarial request for "${req.serviceType}" is now being processed.`,
@@ -161,6 +160,19 @@ function AdminRequests({ onNavigate }) {
         });
       }
 
+      setRequests((prev) =>
+        prev.map((row) => (row.id === req.id ? { ...row, status: newStatus } : row)),
+      );
+
+      if (newStatus === 'in_process') {
+        setActiveTab('In Process');
+      } else if (newStatus === 'completed') {
+        setActiveTab('Ready for Pickup');
+      } else if (newStatus === 'closed') {
+        setActiveTab('Closed');
+      }
+
+      await loadRequests();
       showToast(`Request marked as ${statusLabel(newStatus)}.`);
     } catch (err) {
       showToast(err.message || 'Failed to update status.', 'error');
@@ -193,7 +205,6 @@ function AdminRequests({ onNavigate }) {
         {/* Stats row */}
         <div className="adm-nr-stats">
           {[
-            { label: 'Pending', value: counts.pending, color: '#eab308' },
             { label: 'In Process', value: counts.in_process, color: '#3b82f6' },
             { label: 'Ready for Pickup', value: counts.completed, color: '#22c55e' },
             { label: 'Closed', value: counts.closed, color: '#64748b' },
