@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import './ClientShell.css';
 import './ClientTheme.css';
 import {
@@ -240,7 +240,9 @@ export default function ClientShell({
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [notifPanelStyle, setNotifPanelStyle] = useState(null);
   const [notifications, setNotifications] = useState([]);
+  const notifAnchorRef = useRef(null);
   const [notifError, setNotifError] = useState('');
   const [supportUnread, setSupportUnread] = useState(0);
   const contentRef = useRef(null);
@@ -346,6 +348,44 @@ export default function ClientShell({
     setNotifications((previous) => previous.map((item) => (item.id === id ? { ...item, read: true } : item)));
   };
 
+  const syncNotifPanelPosition = useCallback(() => {
+    const anchor = notifAnchorRef.current;
+    if (!anchor) return;
+
+    const rect = anchor.getBoundingClientRect();
+    const gap = 10;
+    const viewportPad = 16;
+    const panelWidth = Math.min(380, window.innerWidth - viewportPad * 2);
+    let right = Math.max(viewportPad, window.innerWidth - rect.right);
+    const leftEdge = window.innerWidth - right - panelWidth;
+
+    if (leftEdge < viewportPad) {
+      right = Math.max(viewportPad, window.innerWidth - panelWidth - viewportPad);
+    }
+
+    setNotifPanelStyle({
+      top: Math.round(rect.bottom + gap),
+      right: Math.round(right),
+      width: panelWidth,
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!notifOpen) {
+      setNotifPanelStyle(null);
+      return undefined;
+    }
+
+    syncNotifPanelPosition();
+    window.addEventListener('resize', syncNotifPanelPosition);
+    window.addEventListener('scroll', syncNotifPanelPosition, true);
+
+    return () => {
+      window.removeEventListener('resize', syncNotifPanelPosition);
+      window.removeEventListener('scroll', syncNotifPanelPosition, true);
+    };
+  }, [notifOpen, syncNotifPanelPosition]);
+
   return (
     <div className={`client-shell-app ${sidebarOpen ? 'sidebar-expanded' : 'sidebar-collapsed'}`}>
       <div className="client-shell-mesh" />
@@ -411,7 +451,7 @@ export default function ClientShell({
           </div>
 
           <div className="client-shell-topbar-actions">
-            <div className="client-shell-notif-wrap">
+            <div className="client-shell-notif-wrap" ref={notifAnchorRef}>
               <button
                 type="button"
                 className="client-shell-notif-btn"
@@ -430,7 +470,12 @@ export default function ClientShell({
                     onClick={() => setNotifOpen(false)}
                     aria-label="Close notifications"
                   />
-                  <div className="client-shell-notif-panel" role="dialog" aria-label="Client notifications">
+                  <div
+                    className="client-shell-notif-panel"
+                    role="dialog"
+                    aria-label="Client notifications"
+                    style={notifPanelStyle || undefined}
+                  >
                     <div className="client-shell-notif-panel__header">
                       <span>Notifications</span>
                       {unreadCount > 0 ? (
