@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { 
-  LayoutDashboard, Users, Scale, FileText,
+  LayoutDashboard, Users, Scale,
   BarChart3, Settings, LogOut, Menu,
   Video, Phone, MessageCircle, Star
 } from 'lucide-react';

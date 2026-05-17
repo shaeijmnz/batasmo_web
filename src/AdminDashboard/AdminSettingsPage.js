@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { 
-  LayoutDashboard, Users, Scale, FileText,
+  LayoutDashboard, Users, Scale,
   BarChart3, Settings as SettingsIcon, LogOut, Menu,
   User, Lock, BellRing, Save, Globe
 } from 'lucide-react';

@@ -3,7 +3,6 @@ import {
   LayoutDashboard,
   Users,
   Scale,
-  FileText,
   BarChart3,
   Settings,
   MessageSquare,
