@@ -3258,6 +3258,50 @@ export async function cancelNotarialRequest(requestId) {
   if (error) throw error
 }
 
+/** Realtime updates when admin changes notary status (same account on web or mobile). */
+export function subscribeToClientNotarialRequests(clientId, onChange) {
+  if (!clientId) {
+    return () => {}
+  }
+
+  const { schedule, dispose } = createDebouncedRealtimeHandler(() => {
+    onChange?.()
+  })
+
+  const channel = supabase
+    .channel(`client-notary:${clientId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'notarial_requests',
+        filter: `client_id=eq.${clientId}`,
+      },
+      () => schedule(),
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'transactions',
+        filter: `client_id=eq.${clientId}`,
+      },
+      () => schedule(),
+    )
+    .subscribe((status) => {
+      if (status === 'CHANNEL_ERROR') {
+        console.warn('[realtime] client-notary channel error — using poll/focus refresh')
+      }
+    })
+
+  return () => {
+    dispose()
+    supabase.removeChannel(channel)
+  }
+}
+
 export async function fetchClientTransactions(userId) {
   const loadTransactionRows = async (queryBuilder) => {
     const response = await queryBuilder(

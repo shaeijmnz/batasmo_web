@@ -43,10 +43,20 @@
 	background: #dc2626;
 }
 
+.adm-nr-btn--picked-up {
+	background: #6366f1;
+	color: #fff;
+}
+
+.adm-nr-btn--picked-up:hover:not(:disabled) {
+	background: #4f46e5;
+}
+
 .adm-detail-row-btn:disabled,
 .adm-nr-btn--process:disabled,
 .adm-nr-btn--pickup:disabled,
-.adm-nr-btn--close:disabled {
+.adm-nr-btn--close:disabled,
+.adm-nr-btn--picked-up:disabled {
 	opacity: 0.5;
 	cursor: not-allowed;
 }

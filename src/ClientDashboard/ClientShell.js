@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import './ClientShell.css';
 import './ClientTheme.css';
 import {
@@ -11,6 +11,7 @@ import {
 const MENU_ITEMS = [
   { key: 'dashboard', label: 'Dashboard', page: 'home-logged' },
   { key: 'booking', label: 'Book Consultation', page: 'book-appointment' },
+  { key: 'notary', label: 'Notary Status', page: 'client-notary-tracking' },
   { key: 'messages', label: 'Messages', page: 'support-messages' },
   { key: 'announcements', label: 'Announcement', page: 'announcements' },
   { key: 'history', label: 'Transaction History', page: 'transaction-history' },
@@ -29,6 +30,7 @@ const PAGE_COPY = {
   'my-notarial-requests': 'Track your consultations and notary services.',
   'notarial-request': 'Track your consultations and notary services.',
   'support-messages': 'Message BatasMo Admin for help or follow-ups.',
+  'client-notary-tracking': 'Track notary requests you started on the BatasMo mobile app.',
 };
 
 const ACTIVE_MENU_BY_PAGE = {
@@ -43,6 +45,7 @@ const ACTIVE_MENU_BY_PAGE = {
   announcements: 'announcements',
   profile: 'dashboard',
   'support-messages': 'messages',
+  'client-notary-tracking': 'notary',
 };
 
 function SidebarIcon({ type }) {
@@ -68,11 +71,12 @@ function SidebarIcon({ type }) {
     );
   }
 
-  if (type === 'tracking') {
+  if (type === 'notary') {
     return (
       <svg viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="11" cy="11" r="7" />
-        <line x1="21" y1="21" x2="16.5" y2="16.5" />
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <path d="M9 15l2 2 4-4" />
       </svg>
     );
   }
@@ -147,9 +151,18 @@ function ClientNotificationGlyph({ type }) {
 
   if (t === 'payment') {
     return (
-      <svg viewBox="0 0 24 24" aria-hidden="true" width={20} height={20} {...common}>
-        <line x1="12" y1="1" x2="12" y2="23" />
-        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+      <svg viewBox="0 0 24 24" aria-hidden="true" width={20} height={20}>
+        <text
+          x="12"
+          y="17"
+          textAnchor="middle"
+          fill="currentColor"
+          fontSize="16"
+          fontWeight="700"
+          fontFamily="system-ui, -apple-system, 'Segoe UI', sans-serif"
+        >
+          ₱
+        </text>
       </svg>
     );
   }
@@ -163,7 +176,7 @@ function ClientNotificationGlyph({ type }) {
       </svg>
     );
   }
-  if (t === 'consultation') {
+  if (t === 'consultation' || t === 'notarial_update') {
     return (
       <svg viewBox="0 0 24 24" aria-hidden="true" width={20} height={20} {...common}>
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -202,7 +215,7 @@ function clientNotifGlyphClass(type) {
   const t = String(type || '').toLowerCase();
   if (t === 'payment') return 'client-shell-notif-item__glyph--payment';
   if (t === 'booking') return 'client-shell-notif-item__glyph--booking';
-  if (t === 'consultation') return 'client-shell-notif-item__glyph--consultation';
+  if (t === 'consultation' || t === 'notarial_update') return 'client-shell-notif-item__glyph--consultation';
   if (t === 'reschedule') return 'client-shell-notif-item__glyph--reschedule';
   if (t === 'reminder') return 'client-shell-notif-item__glyph--reminder';
   return 'client-shell-notif-item__glyph--default';
@@ -236,7 +249,9 @@ export default function ClientShell({
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [notifPanelStyle, setNotifPanelStyle] = useState(null);
   const [notifications, setNotifications] = useState([]);
+  const notifAnchorRef = useRef(null);
   const [notifError, setNotifError] = useState('');
   const [supportUnread, setSupportUnread] = useState(0);
   const contentRef = useRef(null);
@@ -342,6 +357,44 @@ export default function ClientShell({
     setNotifications((previous) => previous.map((item) => (item.id === id ? { ...item, read: true } : item)));
   };
 
+  const syncNotifPanelPosition = useCallback(() => {
+    const anchor = notifAnchorRef.current;
+    if (!anchor) return;
+
+    const rect = anchor.getBoundingClientRect();
+    const gap = 10;
+    const viewportPad = 16;
+    const panelWidth = Math.min(380, window.innerWidth - viewportPad * 2);
+    let right = Math.max(viewportPad, window.innerWidth - rect.right);
+    const leftEdge = window.innerWidth - right - panelWidth;
+
+    if (leftEdge < viewportPad) {
+      right = Math.max(viewportPad, window.innerWidth - panelWidth - viewportPad);
+    }
+
+    setNotifPanelStyle({
+      top: Math.round(rect.bottom + gap),
+      right: Math.round(right),
+      width: panelWidth,
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!notifOpen) {
+      setNotifPanelStyle(null);
+      return undefined;
+    }
+
+    syncNotifPanelPosition();
+    window.addEventListener('resize', syncNotifPanelPosition);
+    window.addEventListener('scroll', syncNotifPanelPosition, true);
+
+    return () => {
+      window.removeEventListener('resize', syncNotifPanelPosition);
+      window.removeEventListener('scroll', syncNotifPanelPosition, true);
+    };
+  }, [notifOpen, syncNotifPanelPosition]);
+
   return (
     <div className={`client-shell-app ${sidebarOpen ? 'sidebar-expanded' : 'sidebar-collapsed'}`}>
       <div className="client-shell-mesh" />
@@ -407,7 +460,7 @@ export default function ClientShell({
           </div>
 
           <div className="client-shell-topbar-actions">
-            <div className="client-shell-notif-wrap">
+            <div className="client-shell-notif-wrap" ref={notifAnchorRef}>
               <button
                 type="button"
                 className="client-shell-notif-btn"
@@ -426,7 +479,12 @@ export default function ClientShell({
                     onClick={() => setNotifOpen(false)}
                     aria-label="Close notifications"
                   />
-                  <div className="client-shell-notif-panel" role="dialog" aria-label="Client notifications">
+                  <div
+                    className="client-shell-notif-panel"
+                    role="dialog"
+                    aria-label="Client notifications"
+                    style={notifPanelStyle || undefined}
+                  >
                     <div className="client-shell-notif-panel__header">
                       <span>Notifications</span>
                       {unreadCount > 0 ? (
@@ -449,6 +507,8 @@ export default function ClientShell({
                             setNotifOpen(false);
                             if (item.appointmentId) {
                               handleNavigate('client-logs', { appointmentId: item.appointmentId });
+                            } else if (String(item.type || '').toLowerCase() === 'notarial_update') {
+                              handleNavigate('client-notary-tracking');
                             } else {
                               handleNavigate('my-appointments');
                             }
@@ -464,7 +524,11 @@ export default function ClientShell({
                               <div className="client-shell-notif-item__meta">
                                 <span className="client-shell-notif-item__time">{item.time}</span>
                                 <span className="client-shell-notif-item__cta">
-                                  {item.appointmentId ? 'Open consultation logs' : 'View appointments'}
+                                  {item.appointmentId
+                                    ? 'Open consultation logs'
+                                    : String(item.type || '').toLowerCase() === 'notarial_update'
+                                      ? 'View notary status'
+                                      : 'View appointments'}
                                   <span aria-hidden="true" className="client-shell-notif-item__cta-arrow">
                                     →
                                   </span>

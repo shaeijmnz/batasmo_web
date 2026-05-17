@@ -189,6 +189,13 @@
 	color: #111827;
 }
 
+.adm-detail-modal__header h2 {
+	margin: 0;
+	font-size: 1.125rem;
+	font-weight: 700;
+	color: #111827;
+}
+
 .adm-detail-modal__close {
 	background: none;
 	border: none;
@@ -218,12 +225,128 @@
 	gap: 12px;
 	font-size: 0.9rem;
 	color: #374151;
+	align-items: flex-start;
 }
 
-.adm-detail-modal__row > *:first-child {
-	min-width: 140px;
+.adm-detail-modal__row label {
+	flex: 0 0 140px;
 	color: #6b7280;
 	font-weight: 600;
+	font-size: 0.8rem;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+}
+
+.adm-detail-modal__row p {
+	margin: 0;
+	flex: 1;
+	min-width: 0;
+	word-break: break-word;
+	line-height: 1.5;
+}
+
+.adm-detail-modal__actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	justify-content: flex-end;
+	align-items: center;
+	padding: 16px 20px;
+	border-top: 1px solid #e5e7eb;
+	background: #f9fafb;
+	flex-shrink: 0;
+}
+
+.adm-detail-modal__btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 40px;
+	padding: 10px 20px;
+	border: none;
+	border-radius: 8px;
+	font-size: 0.875rem;
+	font-weight: 600;
+	font-family: inherit;
+	cursor: pointer;
+	transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+
+.adm-detail-modal__btn:disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+}
+
+.adm-detail-modal__btn--approve {
+	background: #3b82f6;
+	color: #fff;
+}
+
+.adm-detail-modal__btn--approve:hover:not(:disabled) {
+	background: #2563eb;
+}
+
+.adm-detail-modal__btn--pickup {
+	background: #10b981;
+	color: #fff;
+}
+
+.adm-detail-modal__btn--pickup:hover:not(:disabled) {
+	background: #059669;
+}
+
+.adm-detail-modal__btn--dismiss {
+	background: #fff;
+	color: #374151;
+	border: 1px solid #d1d5db;
+}
+
+.adm-detail-modal__btn--dismiss:hover:not(:disabled) {
+	background: #f3f4f6;
+	border-color: #9ca3af;
+}
+
+.adm-detail-badge {
+	display: inline-block;
+	padding: 4px 12px;
+	border-radius: 999px;
+	font-size: 0.75rem;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+}
+
+.adm-detail-badge--pending {
+	background: #fef3c7;
+	color: #b45309;
+}
+
+.adm-detail-badge--in-progress {
+	background: #dbeafe;
+	color: #1d4ed8;
+}
+
+.adm-detail-badge--active {
+	background: #d1fae5;
+	color: #047857;
+}
+
+.adm-detail-badge--inactive {
+	background: #f3f4f6;
+	color: #6b7280;
+}
+
+.adm-detail-badge--completed {
+	background: #e0e7ff;
+	color: #4338ca;
+}
+
+.adm-detail-modal__btn--picked-up {
+	background: #6366f1;
+	color: #fff;
+}
+
+.adm-detail-modal__btn--picked-up:hover:not(:disabled) {
+	background: #4f46e5;
 }
 
 @media (max-width: 640px) {
@@ -238,7 +361,16 @@
 		gap: 4px;
 	}
 
-	.adm-detail-modal__row > *:first-child {
-		min-width: 0;
+	.adm-detail-modal__row label {
+		flex: none;
+	}
+
+	.adm-detail-modal__actions {
+		flex-direction: column-reverse;
+		align-items: stretch;
+	}
+
+	.adm-detail-modal__btn {
+		width: 100%;
 	}
 }

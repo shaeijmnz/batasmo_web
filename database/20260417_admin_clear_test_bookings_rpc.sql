@@ -37,13 +37,15 @@ begin
   select count(*)::int into v_reset_slots
   from reset_slot_rows;
 
-  -- Remove dependent rows first where needed.
-  with deleted_tx as (
-    delete from public.transactions t
+  -- Keep transaction history; detach from appointments being removed.
+  with detached_tx as (
+    update public.transactions t
+    set appointment_id = null,
+        updated_at = now()
     where t.appointment_id in (select id from public.appointments)
     returning t.id
   )
-  select count(*)::int into v_deleted_transactions from deleted_tx;
+  select count(*)::int into v_deleted_transactions from detached_tx;
 
   with deleted_feedback as (
     delete from public.consultation_feedback f

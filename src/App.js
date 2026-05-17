@@ -35,6 +35,7 @@ const MyNotarialRequests = lazy(() => import('./ClientDashboard/MyNotarialReques
 const Announcements = lazy(() => import('./ClientDashboard/Announcements'));
 const TransactionHistory = lazy(() => import('./ClientDashboard/TransactionHistory'));
 const ClientLogs = lazy(() => import('./ClientDashboard/ClientLogs'));
+const ClientNotaryTracking = lazy(() => import('./ClientDashboard/ClientNotaryTracking'));
 const SupportMessages = lazy(() => import('./ClientDashboard/SupportMessages'));
 
 const AttorneyHome = lazy(() => import('./AttorneyDashboard/AttorneyHome'));
@@ -67,6 +68,7 @@ const CLIENT_PAGES = [
   'announcements',
   'transaction-history',
   'client-logs',
+  'client-notary-tracking',
   'support-messages',
 ]
 
@@ -641,6 +643,7 @@ function App() {
   if (page === 'announcements') return renderClientShell(<Announcements onNavigate={handleNavigate} profile={currentProfile} />);
   if (page === 'transaction-history') return renderClientShell(<TransactionHistory onNavigate={handleNavigate} profile={currentProfile} />);
   if (page === 'client-logs') return renderClientShell(<ClientLogs onNavigate={handleNavigate} profile={currentProfile} initialAppointmentId={pageParams?.appointmentId || ''} />);
+  if (page === 'client-notary-tracking') return renderClientShell(<ClientNotaryTracking profile={currentProfile} />);
   if (page === 'support-messages') return renderClientShell(<SupportMessages onNavigate={handleNavigate} profile={currentProfile} initialDraft={pageParams?.draft || ''} />);
   if (page === 'attorney-home') return renderLazy(<AttorneyHome onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} />);
   if (page === 'consultation-requests') return renderLazy(<ConsultationRequests onNavigate={handleNavigate} profile={currentProfile} />);

@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { updateNotarialStatus, createNotification } from '../lib/adminApi';
+import {
+  updateNotarialStatus,
+  notifyClientNotarialStatusUpdate,
+  fetchPaidNotarialRequests,
+  NOTARIAL_ADMIN_SELECT,
+} from '../lib/adminApi';
 import './AdminRequests.css';
 
 const BackIcon = () => (
@@ -11,26 +16,49 @@ const BackIcon = () => (
 
 const isImageUrl = (url) => /\.(png|jpg|jpeg|gif|webp|svg)(\?|$)/i.test(String(url || ''));
 
+const CLAIMED_MARKER = '[CLIENT_CLAIMED]';
+
+const hasClaimedMarker = (notes) => String(notes || '').includes(CLAIMED_MARKER);
+
+const appendClaimedMarker = (notes) => {
+  const existing = String(notes || '').trim();
+  if (existing.includes(CLAIMED_MARKER)) {
+    return existing;
+  }
+  const stamp = new Date().toISOString();
+  return `${existing}\n${CLAIMED_MARKER}:${stamp}`.trim();
+};
+
 const normalizeStatus = (raw) => {
   const v = String(raw || '').toLowerCase();
   if (v === 'approved' || v === 'accepted' || v === 'in_process' || v === 'in-progress') return 'in_process';
   if (v === 'completed') return 'completed';
-  if (v === 'cancelled' || v === 'rejected' || v === 'closed') return 'closed';
+  if (v === 'cancelled' || v === 'rejected') return 'cancelled';
   return 'pending';
 };
 
-const statusLabel = (status) => {
-  if (status === 'in_process') return 'In Process';
-  if (status === 'completed') return 'Ready for Pickup';
-  if (status === 'closed') return 'Closed';
-  return 'Pending';
+const statusLabel = (req) => {
+  if (req.status === 'in_process') return 'In Process';
+  if (req.status === 'completed' && req.pickedUp) return 'Completed';
+  if (req.status === 'completed') return 'Ready for Pickup';
+  if (req.status === 'cancelled') return 'Cancelled';
+  return 'New';
 };
 
-const statusBadgeClass = (status) => {
-  if (status === 'in_process') return 'adm-detail-badge--in-progress';
-  if (status === 'completed') return 'adm-detail-badge--active';
-  if (status === 'closed') return 'adm-detail-badge--inactive';
+const statusBadgeClass = (req) => {
+  if (req.status === 'in_process') return 'adm-detail-badge--in-progress';
+  if (req.status === 'completed' && req.pickedUp) return 'adm-detail-badge--completed';
+  if (req.status === 'completed') return 'adm-detail-badge--active';
+  if (req.status === 'cancelled') return 'adm-detail-badge--inactive';
   return 'adm-detail-badge--pending';
+};
+
+const matchesTab = (req, tab) => {
+  if (tab === 'All') return true;
+  if (tab === 'In Process') return req.status === 'in_process';
+  if (tab === 'Ready for Pickup') return req.status === 'completed' && !req.pickedUp;
+  if (tab === 'Completed') return req.status === 'completed' && req.pickedUp;
+  return true;
 };
 
 const formatDate = (value) => {
@@ -39,13 +67,14 @@ const formatDate = (value) => {
   return d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-const TABS = ['All', 'Pending', 'In Process', 'Ready for Pickup', 'Closed'];
+const TABS = ['All', 'In Process', 'Ready for Pickup', 'Completed'];
 
-const tabToStatus = {
-  Pending: 'pending',
-  'In Process': 'in_process',
-  'Ready for Pickup': 'completed',
-  Closed: 'closed',
+/** Maps admin UI status to Postgres request_status enum values. */
+const toDbNotarialStatus = (uiStatus) => {
+  const value = String(uiStatus || '').toLowerCase();
+  if (value === 'in_process') return 'accepted';
+  if (value === 'completed') return 'completed';
+  return value;
 };
 
 function AdminRequests({ onNavigate }) {
@@ -65,25 +94,20 @@ function AdminRequests({ onNavigate }) {
 
   const loadRequests = async () => {
     try {
-      const { data, error } = await supabase
-        .from('notarial_requests')
-        .select('id, client_id, service_type, status, preferred_date, created_at, updated_at, notes, document_url, client:client_id(full_name), attorney:attorney_id(full_name)')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
+      const data = await fetchPaidNotarialRequests({ select: NOTARIAL_ADMIN_SELECT });
 
       setRequests(
         (data || []).map((row) => ({
           id: row.id,
           clientId: row.client_id,
           clientName: row.client?.full_name || 'Client',
-          attorneyName: row.attorney?.full_name || 'Unassigned',
           serviceType: row.service_type || 'Notarial Service',
           status: normalizeStatus(row.status),
           preferredDate: formatDate(row.preferred_date),
           submittedDate: formatDate(row.created_at),
           notes: row.notes || '',
           documentUrl: row.document_url || '',
+          pickedUp: hasClaimedMarker(row.notes),
         })),
       );
       setErrorText('');
@@ -109,6 +133,9 @@ function AdminRequests({ onNavigate }) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notarial_requests' }, () => {
         if (isMounted) loadRequests();
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => {
+        if (isMounted) loadRequests();
+      })
       .subscribe();
 
     return () => {
@@ -119,51 +146,65 @@ function AdminRequests({ onNavigate }) {
 
   const visibleRequests = useMemo(() => {
     const term = searchText.trim().toLowerCase();
-    const byTab =
-      activeTab === 'All'
-        ? requests
-        : requests.filter((r) => r.status === tabToStatus[activeTab]);
+    const byTab = requests.filter((r) => matchesTab(r, activeTab));
 
     if (!term) return byTab;
     return byTab.filter((r) =>
-      [r.clientName, r.attorneyName, r.serviceType].some((v) =>
+      [r.clientName, r.serviceType].some((v) =>
         String(v || '').toLowerCase().includes(term),
       ),
     );
   }, [requests, activeTab, searchText]);
 
   const counts = useMemo(() => ({
-    pending: requests.filter((r) => r.status === 'pending').length,
     in_process: requests.filter((r) => r.status === 'in_process').length,
-    completed: requests.filter((r) => r.status === 'completed').length,
-    closed: requests.filter((r) => r.status === 'closed').length,
+    ready_for_pickup: requests.filter((r) => r.status === 'completed' && !r.pickedUp).length,
+    completed: requests.filter((r) => r.status === 'completed' && r.pickedUp).length,
     total: requests.length,
   }), [requests]);
 
   const updateStatus = async (req, newStatus) => {
-    if (isUpdating) return;
+    if (isUpdating) return false;
     setIsUpdating(true);
     try {
-      await updateNotarialStatus(req.id, newStatus === 'in_process' ? 'approved' : newStatus);
+      await updateNotarialStatus(req.id, toDbNotarialStatus(newStatus));
 
-      const bodyMap = {
-        in_process: `Your notarial request for "${req.serviceType}" is now being processed.`,
-        completed: `Your notarized document for "${req.serviceType}" is ready for pick up.`,
-        closed: `Your notarial request for "${req.serviceType}" has been closed.`,
-      };
-
-      if (req.clientId && bodyMap[newStatus]) {
-        await createNotification({
-          userId: req.clientId,
-          title: 'Notarial Request Update',
-          body: bodyMap[newStatus],
-          type: 'notarial_update',
+      if (newStatus === 'in_process') {
+        await notifyClientNotarialStatusUpdate({
+          clientId: req.clientId,
+          requestId: req.id,
+          status: 'in_process',
+          serviceLabel: req.serviceType,
+        });
+      } else if (newStatus === 'completed') {
+        await notifyClientNotarialStatusUpdate({
+          clientId: req.clientId,
+          requestId: req.id,
+          status: 'ready_for_pickup',
+          serviceLabel: req.serviceType,
         });
       }
 
-      showToast(`Request marked as ${statusLabel(newStatus)}.`);
+      setRequests((prev) =>
+        prev.map((row) =>
+          row.id === req.id
+            ? { ...row, status: newStatus, pickedUp: newStatus === 'completed' ? false : row.pickedUp }
+            : row,
+        ),
+      );
+
+      if (newStatus === 'in_process') {
+        setActiveTab('In Process');
+      } else if (newStatus === 'completed') {
+        setActiveTab('Ready for Pickup');
+      }
+
+      await loadRequests();
+      showToast(`Request marked as ${statusLabel({ status: newStatus, pickedUp: false })}. Client notified.`);
+      return true;
     } catch (err) {
       showToast(err.message || 'Failed to update status.', 'error');
+      return false;
     } finally {
       setIsUpdating(false);
     }
@@ -175,6 +216,51 @@ function AdminRequests({ onNavigate }) {
       return;
     }
     window.open(req.documentUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleModalStatusUpdate = async (req, newStatus) => {
+    const ok = await updateStatus(req, newStatus);
+    if (ok) {
+      setViewRequest(null);
+    }
+  };
+
+  const markAsPickedUp = async (req) => {
+    if (isUpdating) return false;
+    setIsUpdating(true);
+    try {
+      const updatedNotes = appendClaimedMarker(req.notes);
+      const { error } = await supabase
+        .from('notarial_requests')
+        .update({ notes: updatedNotes, updated_at: new Date().toISOString() })
+        .eq('id', req.id);
+
+      if (error) throw error;
+
+      await notifyClientNotarialStatusUpdate({
+        clientId: req.clientId,
+        requestId: req.id,
+        status: 'picked_up',
+        serviceLabel: req.serviceType,
+      });
+
+      setActiveTab('Completed');
+      await loadRequests();
+      showToast('Marked as picked up. Client notified.');
+      return true;
+    } catch (err) {
+      showToast(err.message || 'Failed to mark as picked up.', 'error');
+      return false;
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleModalPickedUp = async (req) => {
+    const ok = await markAsPickedUp(req);
+    if (ok) {
+      setViewRequest(null);
+    }
   };
 
   return (
@@ -193,10 +279,9 @@ function AdminRequests({ onNavigate }) {
         {/* Stats row */}
         <div className="adm-nr-stats">
           {[
-            { label: 'Pending', value: counts.pending, color: '#eab308' },
             { label: 'In Process', value: counts.in_process, color: '#3b82f6' },
-            { label: 'Ready for Pickup', value: counts.completed, color: '#22c55e' },
-            { label: 'Closed', value: counts.closed, color: '#64748b' },
+            { label: 'Ready for Pickup', value: counts.ready_for_pickup, color: '#22c55e' },
+            { label: 'Completed', value: counts.completed, color: '#64748b' },
             { label: 'Total', value: counts.total, color: '#1e3a8a' },
           ].map((s) => (
             <div key={s.label} className="adm-nr-stat-card">
@@ -211,7 +296,7 @@ function AdminRequests({ onNavigate }) {
           <div className="adm-detail-search">
             <input
               type="text"
-              placeholder="Search by client, attorney, or service..."
+              placeholder="Search by client or service..."
               className="adm-detail-input"
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
@@ -252,8 +337,8 @@ function AdminRequests({ onNavigate }) {
                   <td>{req.preferredDate}</td>
                   <td>{req.submittedDate}</td>
                   <td>
-                    <span className={`adm-detail-badge ${statusBadgeClass(req.status)}`}>
-                      {statusLabel(req.status)}
+                    <span className={`adm-detail-badge ${statusBadgeClass(req)}`}>
+                      {statusLabel(req)}
                     </span>
                   </td>
                   <td>
@@ -282,13 +367,13 @@ function AdminRequests({ onNavigate }) {
                           Ready for Pickup
                         </button>
                       )}
-                      {(req.status === 'pending' || req.status === 'in_process') && (
+                      {req.status === 'completed' && !req.pickedUp && (
                         <button
-                          className="adm-detail-row-btn adm-nr-btn--close"
+                          className="adm-detail-row-btn adm-nr-btn--picked-up"
                           disabled={isUpdating}
-                          onClick={() => updateStatus(req, 'closed')}
+                          onClick={() => markAsPickedUp(req)}
                         >
-                          Close
+                          Client Picked Up
                         </button>
                       )}
                     </div>
@@ -327,8 +412,8 @@ function AdminRequests({ onNavigate }) {
               <div className="adm-detail-modal__row">
                 <label>Status</label>
                 <p>
-                  <span className={`adm-detail-badge ${statusBadgeClass(viewRequest.status)}`}>
-                    {statusLabel(viewRequest.status)}
+                  <span className={`adm-detail-badge ${statusBadgeClass(viewRequest)}`}>
+                    {statusLabel(viewRequest)}
                   </span>
                 </p>
               </div>
@@ -339,10 +424,6 @@ function AdminRequests({ onNavigate }) {
               <div className="adm-detail-modal__row">
                 <label>Submitted</label>
                 <p>{viewRequest.submittedDate}</p>
-              </div>
-              <div className="adm-detail-modal__row">
-                <label>Attorney</label>
-                <p>{viewRequest.attorneyName}</p>
               </div>
               {viewRequest.notes ? (
                 <div className="adm-detail-modal__row">
@@ -377,36 +458,44 @@ function AdminRequests({ onNavigate }) {
               )}
             </div>
             <div className="adm-detail-modal__actions">
+              <button
+                type="button"
+                className="adm-detail-modal__btn adm-detail-modal__btn--dismiss"
+                disabled={isUpdating}
+                onClick={() => setViewRequest(null)}
+              >
+                Dismiss
+              </button>
               {viewRequest.status === 'pending' && (
                 <button
+                  type="button"
                   className="adm-detail-modal__btn adm-detail-modal__btn--approve"
                   disabled={isUpdating}
-                  onClick={async () => {
-                    await updateStatus(viewRequest, 'in_process');
-                    setViewRequest(null);
-                  }}
+                  onClick={() => handleModalStatusUpdate(viewRequest, 'in_process')}
                 >
-                  Mark In Process
+                  {isUpdating ? 'Updating…' : 'Mark In Process'}
                 </button>
               )}
               {viewRequest.status === 'in_process' && (
                 <button
-                  className="adm-detail-modal__btn adm-detail-modal__btn--approve"
+                  type="button"
+                  className="adm-detail-modal__btn adm-detail-modal__btn--pickup"
                   disabled={isUpdating}
-                  onClick={async () => {
-                    await updateStatus(viewRequest, 'completed');
-                    setViewRequest(null);
-                  }}
+                  onClick={() => handleModalStatusUpdate(viewRequest, 'completed')}
                 >
-                  Ready for Pickup
+                  {isUpdating ? 'Updating…' : 'Ready for Pickup'}
                 </button>
               )}
-              <button
-                className="adm-detail-modal__btn adm-detail-modal__btn--close"
-                onClick={() => setViewRequest(null)}
-              >
-                Close
-              </button>
+              {viewRequest.status === 'completed' && !viewRequest.pickedUp && (
+                <button
+                  type="button"
+                  className="adm-detail-modal__btn adm-detail-modal__btn--picked-up"
+                  disabled={isUpdating}
+                  onClick={() => handleModalPickedUp(viewRequest)}
+                >
+                  {isUpdating ? 'Updating…' : 'Client Picked Up'}
+                </button>
+              )}
             </div>
           </div>
         </div>
