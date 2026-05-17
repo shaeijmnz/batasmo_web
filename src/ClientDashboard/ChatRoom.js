@@ -18,7 +18,6 @@ import {
   subscribeToConsultationRoomStatus,
   getOrCreateVideoMeeting,
   getVideoSdkToken,
-  clearVideoMeetingId,
   fetchConsultationTranscriptForAppointment,
 } from '../lib/userApi';
 import ConsultationSummaryView from '../components/ConsultationSummaryView';
@@ -304,27 +303,29 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
   useEffect(() => {
     if (!activeAppointmentId) return undefined;
 
-    const unsubscribe = subscribeToConsultationRoomStatus(activeAppointmentId, async ({ isClosed, videoMeetingId }) => {
-      setIsClosed(Boolean(isClosed));
-      if (isClosed) {
-        await syncClosedSessionFeedbackState(activeAppointmentId);
-      }
-
-      // Auto-open video call when attorney starts one (video_meeting_id just appeared)
-      if (videoMeetingId && !videoCallRef.current) {
-        try {
-          const response = await fetchAppointmentMessages(activeAppointmentId);
-          await openIncomingByMeetingId({
-            meetingId: videoMeetingId,
-            roomId: response.roomId,
-          });
-        } catch (error) {
-          setVideoCallError(
-            error?.message || 'Incoming call is ready. Tap "Join Incoming Call" to connect.',
-          );
+    const unsubscribe = subscribeToConsultationRoomStatus(
+      activeAppointmentId,
+      async ({ isClosed, videoMeetingId, consultationRoomId }) => {
+        setIsClosed(Boolean(isClosed));
+        if (isClosed) {
+          await syncClosedSessionFeedbackState(activeAppointmentId);
         }
-      }
-    });
+
+        // Auto-open when attorney starts video (same meetingId for both parties)
+        if (videoMeetingId && consultationRoomId && !videoCallRef.current) {
+          try {
+            await openIncomingByMeetingId({
+              meetingId: videoMeetingId,
+              roomId: consultationRoomId,
+            });
+          } catch (error) {
+            setVideoCallError(
+              error?.message || 'Incoming call is ready. Tap "Join Incoming Call" to connect.',
+            );
+          }
+        }
+      },
+    );
 
     return () => {
       unsubscribe();
@@ -690,10 +691,7 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
     }
   };
 
-  const handleCloseVideoCall = async () => {
-    if (videoCall?.roomId) {
-      await clearVideoMeetingId(videoCall.roomId);
-    }
+  const handleCloseVideoCall = () => {
     videoCallRef.current = null;
     setVideoCall(null);
   };

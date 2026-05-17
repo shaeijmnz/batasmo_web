@@ -210,62 +210,18 @@ export async function updateAppointmentStatus(id, status) {
   if (error) throw error
 }
 
-export const NOTARIAL_ADMIN_SELECT =
-  'id, client_id, service_type, status, preferred_date, created_at, updated_at, notes, document_url, client:client_id(full_name)'
-
-/** True when a linked transaction counts as fully paid (mobile gate before admin visibility). */
-export function isNotarialTransactionPaid(paymentStatus) {
-  const value = String(paymentStatus || '').toLowerCase()
-  return value === 'paid' || value === 'succeeded' || value === 'success'
-}
-
-export async function fetchPaidNotarialRequestIds() {
-  const { data, error } = await supabase
-    .from('transactions')
-    .select('notarial_request_id, payment_status')
-    .not('notarial_request_id', 'is', null)
-
-  if (error) throw error
-
-  return new Set(
-    (data || [])
-      .filter((row) => isNotarialTransactionPaid(row.payment_status))
-      .map((row) => row.notarial_request_id)
-      .filter(Boolean),
+export async function fetchNotarialRequests(limit = 200) {
+  const { data, error } = await withTimeout(
+    supabase
+      .from('notarial_requests')
+      .select('id, client_id, service_type, status, preferred_date, created_at, updated_at, notes, document_url, client:client_id(full_name), attorney:attorney_id(full_name)')
+      .order('created_at', { ascending: false })
+      .limit(limit),
+    'Fetch notarial requests',
   )
-}
 
-/** Admin/mobile rule: notarial rows appear only after payment is complete. */
-export async function fetchPaidNotarialRequests(options = {}) {
-  const {
-    select = NOTARIAL_ADMIN_SELECT,
-    limit = 500,
-    extraQuery,
-  } = options
-
-  const paidIds = await fetchPaidNotarialRequestIds()
-  if (!paidIds.size) return []
-
-  let query = supabase
-    .from('notarial_requests')
-    .select(select)
-    .in('id', Array.from(paidIds))
-    .order('created_at', { ascending: false })
-
-  if (typeof extraQuery === 'function') {
-    query = extraQuery(query)
-  }
-  if (limit) {
-    query = query.limit(limit)
-  }
-
-  const { data, error } = await withTimeout(query, 'Fetch paid notarial requests')
   if (error) throw error
   return data ?? []
-}
-
-export async function fetchNotarialRequests(limit = 200) {
-  return fetchPaidNotarialRequests({ limit })
 }
 
 export async function updateNotarialStatus(id, status) {
@@ -319,68 +275,16 @@ export async function fetchNotifications(limit = 6) {
   return data ?? []
 }
 
-export async function createNotification({ userId, title, body, type = 'admin_announcement', data = null }) {
-  const row = {
+export async function createNotification({ userId, title, body, type = 'admin_announcement' }) {
+  const { error } = await supabase.from('notifications').insert({
     user_id: userId,
     title,
     body,
     type,
     is_read: false,
-    created_at: new Date().toISOString(),
-  }
-
-  if (data && typeof data === 'object') {
-    row.data = data
-  }
-
-  const { error } = await supabase.from('notifications').insert(row)
-
-  if (error) {
-    if (data && String(error.message || '').toLowerCase().includes('data')) {
-      const { data: _d, ...withoutData } = row
-      const { error: retryError } = await supabase.from('notifications').insert(withoutData)
-      if (retryError) throw retryError
-      return
-    }
-    throw error
-  }
-}
-
-/** Notify client when admin updates notary workflow (In Process, Ready for Pickup, etc.). */
-export async function notifyClientNotarialStatusUpdate({
-  clientId,
-  requestId,
-  status,
-  serviceLabel,
-}) {
-  if (!clientId) return
-
-  const label = String(serviceLabel || 'your notarial request').trim() || 'your notarial request'
-  const templates = {
-    in_process: {
-      title: 'Notary In Process',
-      body: `Your notarial request for "${label}" is now being processed by our team.`,
-    },
-    ready_for_pickup: {
-      title: 'Ready for Pickup',
-      body: `Your notarized document for "${label}" is ready for pick up at the office.`,
-    },
-    picked_up: {
-      title: 'Notary Completed',
-      body: `Your notarized document for "${label}" has been picked up. Thank you for using BatasMo.`,
-    },
-  }
-
-  const template = templates[status]
-  if (!template) return
-
-  await createNotification({
-    userId: clientId,
-    title: template.title,
-    body: template.body,
-    type: 'notarial_update',
-    data: requestId ? { notarial_request_id: requestId, status } : null,
   })
+
+  if (error) throw error
 }
 
 export async function fetchRecentProfileActivity(limit = 20) {

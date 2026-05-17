@@ -15,11 +15,10 @@ import {
   subscribeToAppointmentMessages,
   subscribeToConsultationRoomStatus,
   getOrCreateVideoMeeting,
-  clearVideoMeetingId,
+  getVideoSdkToken,
   saveAttorneyConsultationSummary,
   saveAttorneyConsultationBranch,
   fetchAttorneyProfile,
-  getVideoSdkToken,
 } from '../lib/userApi';
 import { getConsultationBranchesForAttorney } from '../lib/consultationBranches';
 import { consultationSummaryHasContent, parseConsultationSummary } from '../lib/consultationSummaryFormat';
@@ -774,37 +773,33 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
     }
   };
 
-  const handleCloseVideoCall = async () => {
-    // Closing the video modal only leaves the call. The consultation itself
-    // (chat + queue + feedback + logs) is ONLY ended when the attorney clicks
-    // the explicit "End Session" button. This prevents accidental endings
-    // when either side just leaves the call window.
-    try {
-      if (videoCall?.roomId) {
-        await clearVideoMeetingId(videoCall.roomId);
-      }
-    } catch (error) {
-      console.warn('[attorney-call] clear meeting id failed', error);
-    } finally {
-      videoCallRef.current = null;
-      setVideoCall(null);
-    }
+  const handleCloseVideoCall = () => {
+    // Leave the call UI only — keep video_meeting_id so both sides can rejoin
+    // the same room until the attorney ends the consultation session.
+    videoCallRef.current = null;
+    setVideoCall(null);
   };
 
   // Auto-open video call when client starts one (video_meeting_id appears in DB)
   useEffect(() => {
     if (!activeAppointmentId) return undefined;
 
-    const unsubscribe = subscribeToConsultationRoomStatus(activeAppointmentId, async ({ videoMeetingId }) => {
-      if (videoMeetingId && !videoCallRef.current) {
+    const unsubscribe = subscribeToConsultationRoomStatus(
+      activeAppointmentId,
+      async ({ videoMeetingId, consultationRoomId }) => {
+        if (!videoMeetingId || videoCallRef.current) return;
         try {
-          const { meetingId, roomId, token } = await getOrCreateVideoMeeting(activeAppointmentId);
-          openVideoCall({ meetingId, roomId, token });
+          const token = await getVideoSdkToken();
+          openVideoCall({
+            meetingId: videoMeetingId,
+            roomId: consultationRoomId,
+            token,
+          });
         } catch {
-          // silently ignore — attorney can still click the button manually
+          // Attorney can still tap "Video Call" to join the shared room.
         }
-      }
-    });
+      },
+    );
 
     return () => unsubscribe();
   }, [activeAppointmentId]); // eslint-disable-line react-hooks/exhaustive-deps

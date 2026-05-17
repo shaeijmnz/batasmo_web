@@ -5,7 +5,11 @@ import {
   Filter, Download, Mail, Phone, Star, Calendar, CheckCircle, X
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
-import { fetchAttorneyAvailabilitySlots, saveAttorneyAvailabilitySlots } from '../lib/userApi';
+import {
+  adminCreateWalkInAttorney,
+  fetchAttorneyAvailabilitySlots,
+  saveAttorneyAvailabilitySlots,
+} from '../lib/userApi';
 import './AdminTheme.css';
 import './attorneys.css';
 
@@ -173,6 +177,13 @@ const Attorneys = ({ onNavigate }) => {
   const [monthlyTemplateTimes, setMonthlyTemplateTimes] = useState(['14:00', '15:00', '16:00']);
   const [monthlyTemplateWeekdays, setMonthlyTemplateWeekdays] = useState([1, 2, 3, 4, 5]);
   const [monthlyApplyMessage, setMonthlyApplyMessage] = useState('');
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [addEmail, setAddEmail] = useState('');
+  const [addPassword, setAddPassword] = useState('');
+  const [addFullName, setAddFullName] = useState('');
+  const [addSpecialty, setAddSpecialty] = useState('');
+  const [addSubmitting, setAddSubmitting] = useState(false);
+  const [addFormError, setAddFormError] = useState('');
   const navigate = (path) => {
     const pageMap = {
       '/': 'admin-home',
@@ -196,12 +207,9 @@ const Attorneys = ({ onNavigate }) => {
     { label: 'Settings', icon: <Settings size={20} />, path: '/settings' },
   ];
 
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadAttorneys = async () => {
-      try {
-        const [profilesRes, attorneyProfilesRes, appointmentsRes, feedbackRes] = await Promise.all([
+  const loadAttorneys = useCallback(async () => {
+    try {
+      const [profilesRes, attorneyProfilesRes, appointmentsRes, feedbackRes] = await Promise.all([
           supabase
             .from('profiles')
             .select('id, full_name, email, phone')
@@ -288,30 +296,25 @@ const Attorneys = ({ onNavigate }) => {
           };
         });
 
-        const availableCount = normalized.filter((item) => item.status === 'Available').length;
-        const completedConsultations = normalized.reduce((sum, item) => sum + item.cases, 0);
+      const availableCount = normalized.filter((item) => item.status === 'Available').length;
+      const completedConsultations = normalized.reduce((sum, item) => sum + item.cases, 0);
 
-        if (!isMounted) return;
+      setAttorneysList(normalized);
+      setAttorneyStats([
+        { label: 'Total Attorneys', value: profileRows.length.toLocaleString(), color: '#1e3a8a' },
+        { label: 'Available Now', value: availableCount.toLocaleString(), color: '#22c55e' },
+        { label: 'Total Consultations', value: completedConsultations.toLocaleString(), color: '#3b82f6' },
+      ]);
+      setLoadError('');
+    } catch (error) {
+      setAttorneysList([]);
+      setLoadError(error.message || 'Failed to load attorneys.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-        setAttorneysList(normalized);
-        setAttorneyStats([
-          { label: 'Total Attorneys', value: profileRows.length.toLocaleString(), color: '#1e3a8a' },
-          { label: 'Available Now', value: availableCount.toLocaleString(), color: '#22c55e' },
-          { label: 'Total Consultations', value: completedConsultations.toLocaleString(), color: '#3b82f6' },
-        ]);
-        setLoadError('');
-      } catch (error) {
-        if (isMounted) {
-          setAttorneysList([]);
-          setLoadError(error.message || 'Failed to load attorneys.');
-        }
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    };
-
+  useEffect(() => {
     loadAttorneys();
 
     const profilesChannel = supabase
@@ -335,13 +338,12 @@ const Attorneys = ({ onNavigate }) => {
       .subscribe();
 
     return () => {
-      isMounted = false;
       supabase.removeChannel(profilesChannel);
       supabase.removeChannel(attorneyProfilesChannel);
       supabase.removeChannel(appointmentsChannel);
       supabase.removeChannel(feedbackChannel);
     };
-  }, []);
+  }, [loadAttorneys]);
 
   const filteredAttorneys = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -555,6 +557,58 @@ const Attorneys = ({ onNavigate }) => {
   const selectedTimes = availabilityByDate[selectedDate] || [];
   const monthLabel = monthCursor.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' });
 
+  const closeAddModal = () => {
+    if (addSubmitting) return;
+    setAddModalOpen(false);
+    setAddFormError('');
+  };
+
+  const openAddAttorneyModal = () => {
+    setAddFormError('');
+    setAddModalOpen(true);
+  };
+
+  const handleAddAttorney = async (event) => {
+    event.preventDefault();
+    setAddFormError('');
+    const email = addEmail.trim().toLowerCase();
+    const password = addPassword;
+    const fullName = addFullName.trim();
+    if (!email || !password) {
+      setAddFormError('Email and password are required.');
+      return;
+    }
+    if (!fullName) {
+      setAddFormError('Attorney name is required.');
+      return;
+    }
+    if (password.length < 6) {
+      setAddFormError('Password must be at least 6 characters.');
+      return;
+    }
+
+    try {
+      setAddSubmitting(true);
+      await adminCreateWalkInAttorney({
+        email,
+        password,
+        fullName,
+        specialty: addSpecialty.trim(),
+      });
+      setAddEmail('');
+      setAddPassword('');
+      setAddFullName('');
+      setAddSpecialty('');
+      setAddModalOpen(false);
+      setLoading(true);
+      await loadAttorneys();
+    } catch (error) {
+      setAddFormError(error.message || 'Unable to create attorney account.');
+    } finally {
+      setAddSubmitting(false);
+    }
+  };
+
   return (
     <div className="app-container">
       {/* SIDEBAR */}
@@ -605,7 +659,7 @@ const Attorneys = ({ onNavigate }) => {
               <h2 className="title">Attorneys Management</h2>
               <p className="subtitle">Manage and view all registered attorneys</p>
             </div>
-            <button className="add-btn" onClick={() => handleQuickAction('Use the main admin flow to add attorneys.')}> 
+            <button type="button" className="add-btn" onClick={openAddAttorneyModal}>
               <Plus size={18} /> Add New Attorney
             </button>
           </div>
@@ -693,6 +747,101 @@ const Attorneys = ({ onNavigate }) => {
           </div>
         </div>
       </main>
+
+      {addModalOpen ? (
+        <div
+          className="modal-overlay"
+          role="presentation"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeAddModal();
+          }}
+        >
+          <div
+            className="add-attorney-modal"
+            role="dialog"
+            aria-labelledby="add-attorney-title"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h3 id="add-attorney-title">Add attorney</h3>
+              <button
+                type="button"
+                className="modal-close-btn"
+                disabled={addSubmitting}
+                onClick={closeAddModal}
+                aria-label="Close"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <p className="modal-subtitle">
+              Creates an attorney login for the web app. Give them the email and password you set here.
+            </p>
+            <form className="modal-form" onSubmit={handleAddAttorney}>
+              <div className="modal-input-group">
+                <label htmlFor="add-attorney-email">Email</label>
+                <input
+                  id="add-attorney-email"
+                  type="email"
+                  autoComplete="off"
+                  value={addEmail}
+                  onChange={(e) => setAddEmail(e.target.value)}
+                  disabled={addSubmitting}
+                  required
+                />
+              </div>
+              <div className="modal-input-group">
+                <label htmlFor="add-attorney-password">Password</label>
+                <input
+                  id="add-attorney-password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={addPassword}
+                  onChange={(e) => setAddPassword(e.target.value)}
+                  disabled={addSubmitting}
+                  required
+                  minLength={6}
+                />
+              </div>
+              <div className="modal-input-group">
+                <label htmlFor="add-attorney-name">Full name</label>
+                <input
+                  id="add-attorney-name"
+                  type="text"
+                  placeholder="Atty. Juan Dela Cruz"
+                  value={addFullName}
+                  onChange={(e) => setAddFullName(e.target.value)}
+                  disabled={addSubmitting}
+                  required
+                />
+              </div>
+              <div className="modal-input-group">
+                <label htmlFor="add-attorney-specialty">
+                  Specialty <span className="modal-optional">(optional)</span>
+                </label>
+                <input
+                  id="add-attorney-specialty"
+                  type="text"
+                  placeholder="Real Estate and Land Registration Law"
+                  value={addSpecialty}
+                  onChange={(e) => setAddSpecialty(e.target.value)}
+                  disabled={addSubmitting}
+                />
+              </div>
+              {addFormError ? <p className="modal-form-error">{addFormError}</p> : null}
+              <div className="modal-actions">
+                <button type="button" className="modal-cancel-btn" disabled={addSubmitting} onClick={closeAddModal}>
+                  Cancel
+                </button>
+                <button type="submit" className="modal-submit-btn" disabled={addSubmitting}>
+                  {addSubmitting ? 'Creating…' : 'Create account'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
 
       {availabilityAttorney ? (
         <div className="availability-page-overlay">

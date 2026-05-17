@@ -13,7 +13,6 @@ import {
   subscribeToAdminNotifications,
   signOutUser,
 } from '../lib/userApi';
-import { fetchPaidNotarialRequests, notifyClientNotarialStatusUpdate } from '../lib/adminApi';
 import './AdminTheme.css';
 import './dashboard.css';
 
@@ -184,11 +183,15 @@ const Dashboard = ({ onNavigate }) => {
   };
 
   const fetchPendingNotaryRequests = async () => {
-    const data = await fetchPaidNotarialRequests({
-      select:
-        'id, client_id, service_type, document_url, status, preferred_date, created_at, updated_at, notes, client:client_id(full_name)',
-      extraQuery: (query) => query.in('status', ['pending', 'accepted']),
-    });
+    const { data, error } = await supabase
+      .from('notarial_requests')
+      .select('id, client_id, service_type, document_url, status, preferred_date, created_at, updated_at, notes, client:client_id(full_name)')
+      .in('status', ['pending', 'approved', 'accepted', 'in_process'])
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw error;
+    }
 
     const mapped = (data || []).map((item) => {
       const { date } = formatDateTimeForUi(item.created_at);
@@ -543,6 +546,24 @@ const Dashboard = ({ onNavigate }) => {
     };
   }, []);
 
+  const notifyClient = async (clientId, body) => {
+    if (!clientId) {
+      return;
+    }
+
+    const { error } = await supabase.from('notifications').insert({
+      user_id: clientId,
+      title: 'Notarial Request Update',
+      body,
+      type: 'notarial_update',
+      is_read: false,
+    });
+
+    if (error) {
+      throw error;
+    }
+  };
+
   const openNotaryDocument = (request) => {
     if (!request.documentUrl) {
       showToast('No document uploaded for this request.', 'error');
@@ -568,19 +589,17 @@ const Dashboard = ({ onNavigate }) => {
     try {
       const { error } = await supabase
         .from('notarial_requests')
-        .update({ status: 'accepted', updated_at: new Date().toISOString() })
+        .update({ status: 'approved', updated_at: new Date().toISOString() })
         .eq('id', request.id);
 
       if (error) {
         throw error;
       }
 
-      await notifyClientNotarialStatusUpdate({
-        clientId: request.clientId,
-        requestId: request.id,
-        status: 'in_process',
-        serviceLabel: request.document,
-      });
+      await notifyClient(
+        request.clientId,
+        `Your notary request for ${request.document} is now in process.`,
+      );
 
       await fetchPendingNotaryRequests();
       showToast('Notary request moved to In Process. Client notified.');
@@ -608,12 +627,10 @@ const Dashboard = ({ onNavigate }) => {
         throw error;
       }
 
-      await notifyClientNotarialStatusUpdate({
-        clientId: request.clientId,
-        requestId: request.id,
-        status: 'ready_for_pickup',
-        serviceLabel: request.document,
-      });
+      await notifyClient(
+        request.clientId,
+        `Your notarized document for ${request.document} is ready for pick up.`,
+      );
 
       await fetchPendingNotaryRequests();
       showToast('Notary request marked as ready for pick up. Client notified.');
@@ -641,12 +658,10 @@ const Dashboard = ({ onNavigate }) => {
         throw error;
       }
 
-      await notifyClientNotarialStatusUpdate({
-        clientId: request.clientId,
-        requestId: request.id,
-        status: 'picked_up',
-        serviceLabel: request.document,
-      });
+      await notifyClient(
+        request.clientId,
+        `Your notarized document for ${request.document} was marked as claimed.`,
+      );
 
       setCompletedNotaryRequests((prev) =>
         prev.map((item) => (item.id === request.id ? { ...item, pickedUp: true, notes: appendClaimedMarker(item.notes) } : item)),
@@ -671,20 +686,21 @@ const Dashboard = ({ onNavigate }) => {
 
       isFetching = true;
       try {
-        const [appointmentsRes, paidCompletedNotary] = await Promise.all([
+        const [appointmentsRes, notaryRes] = await Promise.all([
           supabase
             .from('appointments')
             .select('id, title, notes, scheduled_at, updated_at, client:client_id(full_name), attorney:attorney_id(full_name)')
             .eq('status', 'completed')
             .order('updated_at', { ascending: false }),
-          fetchPaidNotarialRequests({
-            select:
-              'id, client_id, service_type, document_url, status, created_at, updated_at, notes, client:client_id(full_name)',
-            extraQuery: (query) => query.eq('status', 'completed'),
-          }),
+          supabase
+            .from('notarial_requests')
+            .select('id, client_id, service_type, document_url, status, created_at, updated_at, notes, client:client_id(full_name)')
+            .eq('status', 'completed')
+            .order('updated_at', { ascending: false }),
         ]);
 
         if (appointmentsRes.error) throw appointmentsRes.error;
+        if (notaryRes.error) throw notaryRes.error;
 
         const nextCompletedConsultations = (appointmentsRes.data || []).map((item) => {
           const { date, time } = formatDateTimeForUi(item.scheduled_at || item.updated_at);
@@ -699,7 +715,7 @@ const Dashboard = ({ onNavigate }) => {
           };
         });
 
-        const nextCompletedNotaryRequests = (paidCompletedNotary || []).map((item) => {
+        const nextCompletedNotaryRequests = (notaryRes.data || []).map((item) => {
           const { date } = formatDateTimeForUi(item.updated_at || item.created_at);
           return {
             id: item.id,

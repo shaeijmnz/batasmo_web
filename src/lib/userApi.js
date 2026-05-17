@@ -685,6 +685,35 @@ export async function adminCreateWalkInClient({ email, password, fullName }) {
 }
 
 /**
+ * Admin: create an Attorney auth user (email confirmed) + profile via Render backend.
+ */
+export async function adminCreateWalkInAttorney({ email, password, fullName, specialty }) {
+  const session = (await supabase.auth.getSession())?.data?.session
+  if (!session?.access_token) {
+    throw new Error('You must be signed in as admin to add an attorney.')
+  }
+  const baseUrl = resolvePaymentApiBaseUrl()
+  const response = await fetch(`${baseUrl}/admin/attorneys/walk-in`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: String(email || '').trim().toLowerCase(),
+      password: String(password || ''),
+      fullName: String(fullName || '').trim(),
+      specialty: String(specialty || '').trim() || undefined,
+    }),
+  })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    throw new Error(payload?.error || payload?.message || `Request failed (${response.status}).`)
+  }
+  return payload
+}
+
+/**
  * Admin-driven reschedule: frees the old slot, books the new slot, updates the
  * appointment to point at the new slot, and notifies the client + attorney +
  * other admins.
@@ -3115,7 +3144,7 @@ export async function assertNoActiveAppointmentForClient(clientId) {
 
 const normalizeNotarialStatus = (status) => {
   const value = (status || '').toLowerCase()
-  if (value === 'approved' || value === 'accepted') return 'APPROVED'
+  if (value === 'approved') return 'APPROVED'
   if (value === 'completed') return 'COMPLETED'
   if (value === 'rejected' || value === 'cancelled') return 'REJECTED'
   return 'PENDING'
@@ -3144,10 +3173,7 @@ export async function fetchClientNotarialRequests(userId) {
   return (requestsRes.data || []).map((item) => {
     const status = normalizeNotarialStatus(item.status)
     const datetime = formatDateTime(item.created_at)
-    const paymentRaw = paymentByRequest.get(item.id) || 'unpaid'
-    const paymentNorm = String(paymentRaw).toLowerCase()
-    const isPaid =
-      paymentNorm === 'paid' || paymentNorm === 'succeeded' || paymentNorm === 'success'
+    const paymentStatus = (paymentByRequest.get(item.id) || 'unpaid').toLowerCase()
     return {
       id: item.id,
       service: item.service_type || 'Notarial Service',
@@ -3156,7 +3182,7 @@ export async function fetchClientNotarialRequests(userId) {
       file: item.document_url || 'N/A',
       notes: item.notes || '',
       status,
-      payment: isPaid ? 'PAID' : 'UNPAID',
+      payment: paymentStatus === 'paid' ? 'PAID' : 'UNPAID',
       fee: `PHP ${Number(item.amount || 0).toFixed(2)}`,
       amount: Number(item.amount || 0),
       message: status === 'COMPLETED' ? 'Notarization Completed' : status === 'APPROVED' ? 'Ready for Payment' : 'Waiting for Review',
@@ -3185,7 +3211,7 @@ export async function payForNotarialRequest({ requestId, clientId, attorneyId, a
 
   const { error: reqError } = await supabase
     .from('notarial_requests')
-    .update({ status: 'accepted', updated_at: now })
+    .update({ status: 'approved', updated_at: now })
     .eq('id', requestId)
 
   if (reqError) throw reqError
@@ -3230,50 +3256,6 @@ export async function cancelNotarialRequest(requestId) {
     .eq('id', requestId)
 
   if (error) throw error
-}
-
-/** Realtime updates when admin changes notary status (same account on web or mobile). */
-export function subscribeToClientNotarialRequests(clientId, onChange) {
-  if (!clientId) {
-    return () => {}
-  }
-
-  const { schedule, dispose } = createDebouncedRealtimeHandler(() => {
-    onChange?.()
-  })
-
-  const channel = supabase
-    .channel(`client-notary:${clientId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'notarial_requests',
-        filter: `client_id=eq.${clientId}`,
-      },
-      () => schedule(),
-    )
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'transactions',
-        filter: `client_id=eq.${clientId}`,
-      },
-      () => schedule(),
-    )
-    .subscribe((status) => {
-      if (status === 'CHANNEL_ERROR') {
-        console.warn('[realtime] client-notary channel error — using poll/focus refresh')
-      }
-    })
-
-  return () => {
-    dispose()
-    supabase.removeChannel(channel)
-  }
 }
 
 export async function fetchClientTransactions(userId) {
@@ -4305,6 +4287,7 @@ export async function fetchAppointmentMessages(appointmentId) {
       `
       id,
       is_closed,
+      video_meeting_id,
       messages (
         id,
         sender_id,
@@ -4334,7 +4317,12 @@ export async function fetchAppointmentMessages(appointmentId) {
 
   const mapped = sorted.map((row) => mapRoomMessage(row, data.id, Boolean(data.is_closed), user.id))
 
-  return { messages: mapped, isClosed: Boolean(data.is_closed), roomId: data.id }
+  return {
+    messages: mapped,
+    isClosed: Boolean(data.is_closed),
+    roomId: data.id,
+    videoMeetingId: data.video_meeting_id || null,
+  }
 }
 
 export async function sendAppointmentMessage(appointmentId, messageText) {
@@ -4527,7 +4515,7 @@ export async function endConsultationSession(appointmentId) {
   if (existingRoom?.id) {
     const { error: closeError } = await supabase
       .from('consultation_rooms')
-      .update({ is_closed: true })
+      .update({ is_closed: true, video_meeting_id: null })
       .eq('id', existingRoom.id)
 
     if (closeError) throw new Error(closeError.message)
@@ -4864,6 +4852,7 @@ export function subscribeToConsultationRoomStatus(appointmentId, onStatusChange)
           onStatusChange({
             isClosed: Boolean(payload?.new?.is_closed),
             videoMeetingId: payload?.new?.video_meeting_id ?? null,
+            consultationRoomId: payload?.new?.id ?? null,
           })
         }
       },
@@ -5634,8 +5623,7 @@ export async function fetchAttorneyNotarialRequests(userId) {
       id: item.id,
       docType: item.service_type || 'Notarial Request',
       status:
-        (item.status || '').toLowerCase() === 'approved' ||
-        (item.status || '').toLowerCase() === 'accepted'
+        (item.status || '').toLowerCase() === 'approved'
           ? 'Approved'
           : (item.status || '').toLowerCase() === 'rejected' || (item.status || '').toLowerCase() === 'cancelled'
             ? 'Rejected'
@@ -5702,49 +5690,45 @@ export async function getVideoSdkToken() {
 }
 
 /**
- * Returns the VideoSDK meeting ID for the consultation room linked to the
- * given appointmentId. If no meeting exists yet, a new VideoSDK room is
- * created via the REST API and the ID is stored on `consultation_rooms`.
+ * Returns the shared VideoSDK meeting for this appointment. Server creates at most
+ * one room per appointment (deterministic customRoomId + in-process lock) so client
+ * and attorney always receive the same meetingId.
  */
 export async function getOrCreateVideoMeeting(appointmentId) {
   if (!appointmentId) throw new Error('appointmentId is required')
 
-  const { data: room, error: roomError } = await supabase
-    .from('consultation_rooms')
-    .select('id, video_meeting_id')
-    .eq('appointment_id', appointmentId)
-    .maybeSingle()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  if (!session?.access_token) throw new Error('Not authenticated')
 
-  if (roomError) throw roomError
-  if (!room) throw new Error('Consultation room not found for this appointment.')
-
-  if (room.video_meeting_id) {
-    const videoToken = await getVideoSdkToken()
-    return { meetingId: room.video_meeting_id, roomId: room.id, token: videoToken }
-  }
-
-  // Create a new VideoSDK room via the backend (server-to-server — avoids CORS/auth issues)
-  const createRes = await fetch(`${VIDEOSDK_BACKEND_URL}/videosdk-create-room`, {
+  const res = await fetch(`${VIDEOSDK_BACKEND_URL}/videosdk-meeting-for-appointment`, {
     method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({ appointmentId }),
   })
 
-  if (!createRes.ok) {
-    const body = await createRes.text()
-    let message = `VideoSDK room creation failed (${createRes.status})`
-    try { message = JSON.parse(body).error || message } catch { /* ignore */ }
-    throw new Error(message)
+  const body = await res.text()
+  let payload = null
+  try {
+    payload = body ? JSON.parse(body) : null
+  } catch {
+    payload = null
   }
 
-  const { roomId: newMeetingId, token: videoToken } = await createRes.json()
+  if (!res.ok) {
+    throw new Error(payload?.error || `Video meeting setup failed (${res.status})`)
+  }
 
-  const { error: updateError } = await supabase
-    .from('consultation_rooms')
-    .update({ video_meeting_id: newMeetingId })
-    .eq('id', room.id)
+  const { meetingId, roomId, token } = payload || {}
+  if (!meetingId || !roomId || !token) {
+    throw new Error('Video meeting response was incomplete.')
+  }
 
-  if (updateError) throw updateError
-
-  return { meetingId: newMeetingId, roomId: room.id, token: videoToken }
+  return { meetingId, roomId, token }
 }
 
 /**

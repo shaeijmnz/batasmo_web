@@ -823,6 +823,126 @@ const supabaseAdminCreateWalkInClient = async ({ email, password, fullName }) =>
 }
 
 /**
+ * Create a Supabase Auth user (email pre-confirmed) + Attorney profile rows.
+ */
+const supabaseAdminCreateWalkInAttorney = async ({ email, password, fullName, specialty }) => {
+  const normalizedEmail = String(email || '').trim().toLowerCase()
+  const safePassword = String(password || '')
+  const displayName = String(fullName || '').trim() || 'Attorney'
+  const specialtyRaw = String(specialty || '').trim()
+
+  if (!normalizedEmail || !normalizedEmail.includes('@')) {
+    throw new Error('A valid email address is required.')
+  }
+  if (safePassword.length < 6) {
+    throw new Error('Password must be at least 6 characters.')
+  }
+  if (!String(fullName || '').trim()) {
+    throw new Error('Attorney name is required.')
+  }
+
+  const specialties = specialtyRaw
+    ? specialtyRaw.split(',').map((part) => part.trim()).filter(Boolean)
+    : ['General Practice']
+
+  const authResponse = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      email: normalizedEmail,
+      password: safePassword,
+      email_confirm: true,
+      user_metadata: {
+        full_name: displayName,
+        role: 'Attorney',
+      },
+    }),
+  })
+
+  const authPayload = await authResponse.json().catch(() => null)
+  if (!authResponse.ok) {
+    const msg =
+      authPayload?.msg ||
+      authPayload?.message ||
+      authPayload?.error_description ||
+      authPayload?.error ||
+      `Failed to create account (${authResponse.status}).`
+    throw new Error(String(msg))
+  }
+
+  const userId = authPayload?.id || authPayload?.user?.id
+  if (!userId) {
+    throw new Error('Account was created but no user id was returned.')
+  }
+
+  const nowIso = new Date().toISOString()
+  const profileBody = {
+    id: userId,
+    email: normalizedEmail,
+    full_name: displayName,
+    role: 'Attorney',
+    preferred_otp_channel: 'email',
+    created_at: nowIso,
+    updated_at: nowIso,
+  }
+
+  const profileRes = await fetch(`${SUPABASE_URL}/rest/v1/profiles?on_conflict=id`, {
+    method: 'POST',
+    headers: {
+      ...supabaseRestHeaders(),
+      Prefer: 'resolution=merge-duplicates',
+    },
+    body: JSON.stringify(profileBody),
+  })
+
+  const profilePayload = await profileRes.json().catch(() => null)
+  if (!profileRes.ok) {
+    console.warn('[admin walk-in attorney] profile upsert failed', profilePayload)
+    throw new Error(
+      profilePayload?.message ||
+        profilePayload?.error ||
+        'User was created but saving the attorney profile failed. Check Supabase logs.',
+    )
+  }
+
+  const attorneyProfileBody = {
+    user_id: userId,
+    specialties,
+    years_experience: 0,
+    consultation_fee: 2000,
+    bio: '',
+    is_verified: true,
+    prc_id: `PRC-${String(userId).slice(0, 8).toUpperCase()}`,
+    updated_at: nowIso,
+  }
+
+  const attorneyProfileRes = await fetch(`${SUPABASE_URL}/rest/v1/attorney_profiles?on_conflict=user_id`, {
+    method: 'POST',
+    headers: {
+      ...supabaseRestHeaders(),
+      Prefer: 'resolution=merge-duplicates',
+    },
+    body: JSON.stringify(attorneyProfileBody),
+  })
+
+  const attorneyProfilePayload = await attorneyProfileRes.json().catch(() => null)
+  if (!attorneyProfileRes.ok) {
+    console.warn('[admin walk-in attorney] attorney_profiles upsert failed', attorneyProfilePayload)
+    throw new Error(
+      attorneyProfilePayload?.message ||
+        attorneyProfilePayload?.error ||
+        'User was created but saving attorney details failed. Check Supabase logs.',
+    )
+  }
+
+  return { userId, email: normalizedEmail, fullName: displayName, specialties }
+}
+
+/**
  * Admin reschedule using the service role (bypasses RLS on appointments / slots).
  */
 const supabaseAdminRescheduleConsultation = async ({ appointmentId, newSlotId }) => {
@@ -1462,6 +1582,136 @@ const buildVideoSdkToken = () => {
   return jwt.sign(payload, secret, { expiresIn: '120m', algorithm: 'HS256' })
 }
 
+const videoMeetingCreationLocks = new Map()
+
+const videoSdkCustomRoomIdForAppointment = (appointmentId) =>
+  `batasmo-appt-${String(appointmentId || '').trim()}`
+
+const createVideoSdkRoom = async (customRoomId) => {
+  const token = buildVideoSdkToken()
+  const body = customRoomId ? { customRoomId } : {}
+
+  const response = await fetch('https://api.videosdk.live/v2/rooms', {
+    method: 'POST',
+    headers: {
+      Authorization: token,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+
+  const raw = await response.text()
+  if (!response.ok) {
+    console.error('[videosdk] Room creation failed:', response.status, raw)
+    throw new Error(`VideoSDK room creation failed: ${raw}`)
+  }
+
+  const parsed = JSON.parse(raw)
+  if (!parsed?.roomId) {
+    throw new Error('VideoSDK did not return a roomId.')
+  }
+
+  return { roomId: parsed.roomId, token }
+}
+
+const assertAppointmentVideoAccess = async (userId, appointmentId) => {
+  requireSupabaseServiceConfig()
+  const appointment = await supabaseSelectSingle({
+    table: 'appointments',
+    query: new URLSearchParams({ id: `eq.${appointmentId}` }).toString(),
+  })
+  if (!appointment) {
+    throw new Error('Appointment not found.')
+  }
+
+  const uid = String(userId)
+  if (uid !== String(appointment.client_id) && uid !== String(appointment.attorney_id)) {
+    throw new Error('You are not allowed to join this consultation video call.')
+  }
+
+  return appointment
+}
+
+const resolveVideoMeetingForAppointment = async (appointmentId) => {
+  requireSupabaseServiceConfig()
+
+  let consultationRoom = await supabaseSelectSingle({
+    table: 'consultation_rooms',
+    query: new URLSearchParams({ appointment_id: `eq.${appointmentId}` }).toString(),
+  })
+
+  if (!consultationRoom) {
+    const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/consultation_rooms`, {
+      method: 'POST',
+      headers: {
+        ...supabaseRestHeaders(),
+        Prefer: 'return=representation,resolution=merge-duplicates',
+      },
+      body: JSON.stringify({ appointment_id: appointmentId, is_closed: false }),
+    })
+    const inserted = await insertRes.json().catch(() => null)
+    if (insertRes.ok && Array.isArray(inserted) && inserted[0]?.id) {
+      consultationRoom = inserted[0]
+    } else {
+      consultationRoom = await supabaseSelectSingle({
+        table: 'consultation_rooms',
+        query: new URLSearchParams({ appointment_id: `eq.${appointmentId}` }).toString(),
+      })
+    }
+  }
+
+  if (!consultationRoom?.id) {
+    throw new Error('Consultation room not found for this appointment.')
+  }
+
+  if (consultationRoom.video_meeting_id) {
+    return {
+      meetingId: consultationRoom.video_meeting_id,
+      roomId: consultationRoom.id,
+      token: buildVideoSdkToken(),
+    }
+  }
+
+  const customRoomId = videoSdkCustomRoomIdForAppointment(appointmentId)
+  const { roomId: meetingId, token } = await createVideoSdkRoom(customRoomId)
+
+  await supabaseRestPatch({
+    table: 'consultation_rooms',
+    query: new URLSearchParams({ id: `eq.${consultationRoom.id}` }).toString(),
+    body: { video_meeting_id: meetingId },
+  })
+
+  return { meetingId, roomId: consultationRoom.id, token }
+}
+
+const getOrCreateVideoMeetingLocked = async (appointmentId) => {
+  if (videoMeetingCreationLocks.has(appointmentId)) {
+    return videoMeetingCreationLocks.get(appointmentId)
+  }
+
+  const work = (async () => {
+    const existing = await supabaseSelectSingle({
+      table: 'consultation_rooms',
+      query: new URLSearchParams({ appointment_id: `eq.${appointmentId}` }).toString(),
+    })
+    if (existing?.video_meeting_id) {
+      return {
+        meetingId: existing.video_meeting_id,
+        roomId: existing.id,
+        token: buildVideoSdkToken(),
+      }
+    }
+    return resolveVideoMeetingForAppointment(appointmentId)
+  })()
+
+  videoMeetingCreationLocks.set(appointmentId, work)
+  try {
+    return await work
+  } finally {
+    videoMeetingCreationLocks.delete(appointmentId)
+  }
+}
+
 // ── VideoSDK token endpoint ───────────────────────────────────────────────────
 app.get('/videosdk-token', (req, res) => {
   try {
@@ -1477,28 +1727,40 @@ app.get('/videosdk-token', (req, res) => {
 // Returns { roomId, token } — roomId to join, token for the React SDK.
 app.post('/videosdk-create-room', async (req, res) => {
   try {
-    const token = buildVideoSdkToken()
-
-    const response = await fetch('https://api.videosdk.live/v2/rooms', {
-      method: 'POST',
-      headers: {
-        Authorization: token,
-        'Content-Type': 'application/json',
-      },
-    })
-
-    const body = await response.text()
-
-    if (!response.ok) {
-      console.error('[videosdk] Room creation failed:', response.status, body)
-      return res.status(response.status).json({ error: `VideoSDK room creation failed: ${body}` })
-    }
-
-    const { roomId } = JSON.parse(body)
+    const customRoomId = String(req.body?.customRoomId || '').trim() || null
+    const { roomId, token } = await createVideoSdkRoom(customRoomId)
     res.json({ roomId, token })
   } catch (err) {
     console.error('[videosdk] /videosdk-create-room error:', err)
     res.status(500).json({ error: err.message })
+  }
+})
+
+// One shared VideoSDK room per appointment (client + attorney join the same meetingId).
+app.post('/videosdk-meeting-for-appointment', async (req, res) => {
+  try {
+    requireSupabaseServiceConfig()
+
+    const authHeader = String(req.headers.authorization || '').trim()
+    const jwt = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
+    if (!jwt) {
+      return res.status(401).json({ error: 'Authorization Bearer token is required.' })
+    }
+
+    const user = await verifySupabaseUserJwt(jwt)
+    const appointmentId = String(req.body?.appointmentId || '').trim()
+    if (!appointmentId) {
+      return res.status(400).json({ error: 'appointmentId is required.' })
+    }
+
+    await assertAppointmentVideoAccess(user.id, appointmentId)
+    const result = await getOrCreateVideoMeetingLocked(appointmentId)
+    return res.json(result)
+  } catch (err) {
+    console.error('[videosdk] /videosdk-meeting-for-appointment error:', err)
+    const msg = err?.message || 'Unable to prepare video meeting.'
+    const status = msg.includes('not allowed') || msg.includes('not found') ? 403 : 500
+    return res.status(status).json({ error: msg })
   }
 })
 
@@ -1701,6 +1963,52 @@ app.post('/admin/clients/walk-in', async (req, res) => {
           ? 401
           : lower.includes('valid email') ||
               lower.includes('password must') ||
+              lower.includes('already been registered') ||
+              lower.includes('already registered') ||
+              lower.includes('user already') ||
+              lower.includes('duplicate key')
+            ? 400
+            : 500
+    return res.status(status).json({ error: msg })
+  }
+})
+
+// Admin creates an Attorney login (email + password, email confirmed).
+app.post('/admin/attorneys/walk-in', async (req, res) => {
+  try {
+    requireSupabaseServiceConfig()
+
+    const authHeader = String(req.headers.authorization || '').trim()
+    const jwt = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
+    if (!jwt) {
+      return res.status(401).json({ error: 'Authorization Bearer token is required.' })
+    }
+
+    await verifyCallerIsAdmin(jwt)
+
+    const email = String(req.body?.email || '').trim()
+    const password = String(req.body?.password || '')
+    const fullName = String(req.body?.fullName || '').trim()
+    const specialty = String(req.body?.specialty || '').trim()
+
+    const result = await supabaseAdminCreateWalkInAttorney({
+      email,
+      password,
+      fullName,
+      specialty,
+    })
+    return res.status(201).json(result)
+  } catch (error) {
+    const msg = error?.message || 'Unable to create attorney account.'
+    const lower = msg.toLowerCase()
+    const status =
+      msg.includes('Only Admin') || msg.includes('Invalid') || msg.includes('session')
+        ? 403
+        : msg.includes('Bearer')
+          ? 401
+          : lower.includes('valid email') ||
+              lower.includes('password must') ||
+              lower.includes('name is required') ||
               lower.includes('already been registered') ||
               lower.includes('already registered') ||
               lower.includes('user already') ||
