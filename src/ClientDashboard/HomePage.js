@@ -352,13 +352,13 @@ function HomePage({ onNavigate, profile, onSignOut }) {
               <p>Schedule a consultation with our expert attorneys</p>
             </div>
           </div>
-          <div className="hp-action-card" onClick={() => onNavigate('client-notary-tracking')}>
+          <div className="hp-action-card" onClick={() => onNavigate('notarial-request')}>
             <div className="hp-action-card__icon">
               <DocumentIcon />
             </div>
             <div>
-              <h3>Notary Status</h3>
-              <p>Track notary requests from the BatasMo mobile app</p>
+              <h3>Request Notary</h3>
+              <p>Notary requests are completed on the BatasMo mobile app</p>
             </div>
           </div>
         </div>
