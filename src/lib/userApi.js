@@ -2985,26 +2985,69 @@ export async function cancelPendingUnpaidBooking({ appointmentId }) {
   invalidateAttorneyAppointmentsCache(appt.attorney_id)
 }
 
-const RESCHEDULE_PENDING_RE =
-  /\[RESCHEDULE_PENDING:([^:\]]+):([^\]]*)\]/i
+const RESCHEDULE_PENDING_PIPE_RE =
+  /\[RESCHEDULE_PENDING\|([^|\]]+)\|([^\]]*)\]/i
+const RESCHEDULE_PENDING_LEGACY_RE = /\[RESCHEDULE_PENDING:[^\]]+\]/i
+const RESCHEDULE_PENDING_ISO_TAIL_RE =
+  /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z):?(.*)$/i
+
+const decodeRescheduleReason = (raw) => {
+  const trimmed = String(raw || '').trim()
+  if (!trimmed) return ''
+  try {
+    return decodeURIComponent(trimmed)
+  } catch {
+    return trimmed
+  }
+}
+
+const isGarbageRescheduleReason = (reason) => {
+  const text = String(reason || '').trim()
+  if (!text) return true
+  if (/^\d{2}:\d{2}/.test(text)) return true
+  if (/^\d{4}-\d{2}-\d{2}T/.test(text)) return true
+  if (/^00:00\.000Z:?$/i.test(text)) return true
+  return false
+}
 
 export function parseReschedulePendingFromNotes(notes) {
-  const match = String(notes || '').match(RESCHEDULE_PENDING_RE)
-  if (!match) return null
-  const requestedScheduledAt = String(match[1] || '').trim()
-  if (!requestedScheduledAt) return null
-  let reason = ''
-  try {
-    reason = decodeURIComponent(String(match[2] || ''))
-  } catch {
-    reason = String(match[2] || '')
+  const text = String(notes || '')
+
+  const pipeMatch = text.match(RESCHEDULE_PENDING_PIPE_RE)
+  if (pipeMatch) {
+    const requestedScheduledAt = String(pipeMatch[1] || '').trim()
+    if (!requestedScheduledAt) return null
+    const reason = decodeRescheduleReason(pipeMatch[2])
+    return {
+      requestedScheduledAt,
+      reason: isGarbageRescheduleReason(reason) ? '' : reason,
+    }
   }
-  return { requestedScheduledAt, reason }
+
+  const legacyMatch = text.match(RESCHEDULE_PENDING_LEGACY_RE)
+  if (!legacyMatch) return null
+
+  const inner = legacyMatch[0]
+    .replace(/^\[RESCHEDULE_PENDING:/i, '')
+    .replace(/\]$/, '')
+
+  const isoTail = inner.match(RESCHEDULE_PENDING_ISO_TAIL_RE)
+  if (isoTail) {
+    const requestedScheduledAt = String(isoTail[1] || '').trim()
+    const reason = decodeRescheduleReason(isoTail[2])
+    return {
+      requestedScheduledAt,
+      reason: isGarbageRescheduleReason(reason) ? '' : reason,
+    }
+  }
+
+  return null
 }
 
 export function stripReschedulePendingMarker(notes) {
   return String(notes || '')
-    .replace(RESCHEDULE_PENDING_RE, '')
+    .replace(RESCHEDULE_PENDING_PIPE_RE, '')
+    .replace(RESCHEDULE_PENDING_LEGACY_RE, '')
     .replace(/\n{2,}/g, '\n')
     .trim()
 }
@@ -3012,7 +3055,7 @@ export function stripReschedulePendingMarker(notes) {
 export function buildReschedulePendingNotes(existingNotes, { scheduledAt, reason }) {
   const base = stripReschedulePendingMarker(existingNotes)
   const encodedReason = encodeURIComponent(String(reason || '').slice(0, 500))
-  const marker = `[RESCHEDULE_PENDING:${scheduledAt}:${encodedReason}]`
+  const marker = `[RESCHEDULE_PENDING|${scheduledAt}|${encodedReason}]`
   return base ? `${base}\n${marker}` : marker
 }
 

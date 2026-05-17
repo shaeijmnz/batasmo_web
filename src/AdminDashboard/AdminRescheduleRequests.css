@@ -164,3 +164,68 @@
   justify-content: flex-end;
   margin-top: 10px;
 }
+
+.adm-resched-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(21, 34, 56, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.adm-resched-modal {
+  width: min(480px, 100%);
+  background: #faf9f7;
+  border-radius: 14px;
+  border: 1px solid rgba(21, 34, 56, 0.14);
+  box-shadow: 0 16px 40px rgba(21, 34, 56, 0.2);
+  padding: 22px 24px;
+}
+
+.adm-resched-modal h4 {
+  margin: 0 0 10px;
+  font-size: 1.05rem;
+  color: #152238;
+}
+
+.adm-resched-modal__summary {
+  margin: 0 0 16px;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: #4b5563;
+}
+
+.adm-resched-modal label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 6px;
+}
+
+.adm-resched-modal textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 0.88rem;
+  resize: vertical;
+}
+
+.adm-resched-modal__error {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+  color: #b91c1c;
+}
+
+.adm-resched-modal__actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
