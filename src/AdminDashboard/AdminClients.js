@@ -671,7 +671,7 @@ const Clients = ({ onNavigate }) => {
 
           <div className="clients-container clients-container--admins">
             <div className="list-header">
-              <motion.div>
+              <div>
                 <h3>Admin users ({admins.length})</h3>
                 <p className="clients-admin-subtitle">
                   Demote back to Client for testing. You cannot demote yourself or the last admin.
