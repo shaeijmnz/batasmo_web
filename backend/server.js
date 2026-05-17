@@ -962,6 +962,146 @@ const supabaseAdminPromoteClientToAdmin = async ({ targetUserId }) => {
   }
 }
 
+const supabaseListAdminProfileIds = async () => {
+  const response = await fetch(
+    `${SUPABASE_URL}/rest/v1/profiles?${new URLSearchParams({ role: 'eq.Admin', select: 'id' }).toString()}`,
+    {
+      method: 'GET',
+      headers: supabaseRestHeaders(),
+    },
+  )
+  const payload = await response.json().catch(() => [])
+  if (!response.ok) {
+    throw new Error(payload?.message || payload?.error || 'Failed to list Admin users.')
+  }
+  return Array.isArray(payload) ? payload.map((row) => String(row.id || '')).filter(Boolean) : []
+}
+
+/**
+ * Demote an Admin profile (and auth metadata) back to Client — for testing / rollback.
+ */
+const supabaseAdminDemoteAdminToClient = async ({ targetUserId, actingAdminId }) => {
+  const userId = String(targetUserId || '').trim()
+  if (!userId) {
+    throw new Error('User id is required.')
+  }
+
+  if (actingAdminId && String(actingAdminId) === userId) {
+    throw new Error('You cannot demote your own account while signed in.')
+  }
+
+  const profile = await supabaseSelectSingle({
+    table: 'profiles',
+    query: new URLSearchParams({ id: `eq.${userId}` }).toString(),
+  })
+  if (!profile) {
+    throw new Error('User not found.')
+  }
+
+  const role = String(profile.role || '').trim()
+  if (role === 'Client') {
+    throw new Error('This user is already a Client.')
+  }
+  if (role === 'Attorney') {
+    throw new Error('Attorney accounts cannot be demoted here. Manage them under Attorneys.')
+  }
+  if (role !== 'Admin') {
+    throw new Error(`Cannot demote user with role "${role || 'unknown'}".`)
+  }
+
+  const adminIds = await supabaseListAdminProfileIds()
+  if (adminIds.length <= 1) {
+    throw new Error('Cannot demote the only remaining Admin account.')
+  }
+
+  const nowIso = new Date().toISOString()
+  const profileRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/profiles?${new URLSearchParams({ id: `eq.${userId}` }).toString()}`,
+    {
+      method: 'PATCH',
+      headers: supabaseRestHeaders(),
+      body: JSON.stringify({
+        role: 'Client',
+        updated_at: nowIso,
+      }),
+    },
+  )
+  const profilePayload = await profileRes.json().catch(() => null)
+  if (!profileRes.ok) {
+    throw new Error(
+      profilePayload?.message ||
+        profilePayload?.error ||
+        `Failed to update profile role (${profileRes.status}).`,
+    )
+  }
+
+  const authGetRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    },
+  })
+  const authUser = await authGetRes.json().catch(() => null)
+  if (!authGetRes.ok) {
+    console.warn('[admin demote] auth user fetch failed', authUser)
+    throw new Error(
+      authUser?.msg ||
+        authUser?.message ||
+        'Profile was updated but loading the auth user failed. Check Supabase logs.',
+    )
+  }
+
+  const existingMeta = authUser?.user_metadata || authUser?.raw_user_meta_data || {}
+  const authPatchRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
+    method: 'PUT',
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      user_metadata: {
+        ...existingMeta,
+        role: 'Client',
+        full_name: existingMeta.full_name || profile.full_name || profile.email || 'Client',
+      },
+    }),
+  })
+  const authPatchPayload = await authPatchRes.json().catch(() => null)
+  if (!authPatchRes.ok) {
+    console.warn('[admin demote] auth metadata update failed', authPatchPayload)
+    throw new Error(
+      authPatchPayload?.msg ||
+        authPatchPayload?.message ||
+        'Profile role was set to Client but updating login metadata failed. Ask the user to sign out and back in, or retry.',
+    )
+  }
+
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/notifications`, {
+      method: 'POST',
+      headers: supabaseRestHeaders(),
+      body: JSON.stringify({
+        user_id: userId,
+        title: 'Admin access removed',
+        body: 'Your account was changed back to Client. Sign out and sign in again to use the client dashboard.',
+        type: 'admin_update',
+        is_read: false,
+        created_at: nowIso,
+      }),
+    })
+  } catch (notifyErr) {
+    console.warn('[admin demote] notification insert failed', notifyErr)
+  }
+
+  return {
+    userId,
+    email: profile.email || authUser?.email || '',
+    fullName: profile.full_name || existingMeta.full_name || 'Client',
+    role: 'Client',
+  }
+}
+
 /**
  * Create a Supabase Auth user (email pre-confirmed) + Attorney profile rows.
  */
@@ -2101,6 +2241,46 @@ app.post('/admin/clients/:userId/promote-to-admin', async (req, res) => {
           : lower.includes('not found') ||
               lower.includes('already an admin') ||
               lower.includes('cannot promote') ||
+              lower.includes('attorney accounts') ||
+              lower.includes('user id is required')
+            ? 400
+            : 500
+    return res.status(status).json({ error: msg })
+  }
+})
+
+// Demote an Admin account back to Client (profile + auth metadata).
+app.post('/admin/users/:userId/demote-to-client', async (req, res) => {
+  try {
+    requireSupabaseServiceConfig()
+
+    const authHeader = String(req.headers.authorization || '').trim()
+    const jwt = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
+    if (!jwt) {
+      return res.status(401).json({ error: 'Authorization Bearer token is required.' })
+    }
+
+    const actingAdminId = await verifyCallerIsAdmin(jwt)
+
+    const userId = String(req.params?.userId || '').trim()
+    const result = await supabaseAdminDemoteAdminToClient({
+      targetUserId: userId,
+      actingAdminId,
+    })
+    return res.status(200).json(result)
+  } catch (error) {
+    const msg = error?.message || 'Unable to demote user to Client.'
+    const lower = msg.toLowerCase()
+    const status =
+      msg.includes('Only Admin') || msg.includes('Invalid') || msg.includes('session')
+        ? 403
+        : msg.includes('Bearer')
+          ? 401
+          : lower.includes('not found') ||
+              lower.includes('already a client') ||
+              lower.includes('cannot demote') ||
+              lower.includes('cannot demote your own') ||
+              lower.includes('only remaining admin') ||
               lower.includes('attorney accounts') ||
               lower.includes('user id is required')
             ? 400
