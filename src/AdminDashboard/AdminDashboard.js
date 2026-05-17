@@ -96,20 +96,44 @@ const getLastSixMonthKeys = () => {
   return result;
 };
 
-const getWeekWindow = () => {
-  const now = new Date();
-  const start = new Date(now);
-  const day = start.getDay();
-  const diffToMonday = day === 0 ? 6 : day - 1;
-  start.setDate(start.getDate() - diffToMonday);
-  start.setHours(0, 0, 0, 0);
+const MANILA_TZ = 'Asia/Manila';
 
-  const end = new Date(start);
-  end.setDate(start.getDate() + 7);
-  return { start, end };
+const getManilaDateKey = (date) =>
+  new Intl.DateTimeFormat('en-CA', {
+    timeZone: MANILA_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+
+const addDaysToManilaDateKey = (ymd, deltaDays) => {
+  const anchor = new Date(`${ymd}T12:00:00+08:00`);
+  if (Number.isNaN(anchor.getTime())) return ymd;
+  anchor.setDate(anchor.getDate() + deltaDays);
+  return getManilaDateKey(anchor);
 };
 
-const dayToMondayFirstIndex = (day) => (day === 0 ? 6 : day - 1);
+const getWeekWindow = () => {
+  const todayKey = getManilaDateKey(new Date());
+  const weekday = new Intl.DateTimeFormat('en-US', {
+    timeZone: MANILA_TZ,
+    weekday: 'short',
+  }).format(new Date());
+  const daysFromMonday = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 }[weekday] ?? 0;
+
+  const mondayKey = addDaysToManilaDateKey(todayKey, -daysFromMonday);
+  const endKey = addDaysToManilaDateKey(mondayKey, 7);
+  const dayKeys = Array.from({ length: 7 }, (_, i) => addDaysToManilaDateKey(mondayKey, i));
+
+  return {
+    start: new Date(`${mondayKey}T00:00:00+08:00`),
+    end: new Date(`${endKey}T00:00:00+08:00`),
+    mondayKey,
+    dayKeys,
+  };
+};
+
+const dayIndexFromManilaDateKey = (dayKeys, dateKey) => dayKeys.indexOf(dateKey);
 
 const formatNotifBadgeCount = (count) => {
   const safeCount = Number(count || 0);
@@ -554,7 +578,7 @@ const Dashboard = ({ onNavigate }) => {
         const months = getLastSixMonthKeys();
         const monthMap = new Map(months.map((item) => [item.key, 0]));
         const weekCounts = [0, 0, 0, 0, 0, 0, 0];
-        const { start, end } = getWeekWindow();
+        const { start, end, dayKeys } = getWeekWindow();
 
         const [transactionsRes, appointmentsRes] = await Promise.all([
           supabase
@@ -565,9 +589,9 @@ const Dashboard = ({ onNavigate }) => {
             .order('created_at', { ascending: true }),
           supabase
             .from('appointments')
-            .select('status, created_at')
-            .gte('created_at', start.toISOString())
-            .lt('created_at', end.toISOString()),
+            .select('status, scheduled_at, created_at')
+            .gte('scheduled_at', start.toISOString())
+            .lt('scheduled_at', end.toISOString()),
         ]);
 
         if (transactionsRes.error) throw transactionsRes.error;
@@ -587,16 +611,20 @@ const Dashboard = ({ onNavigate }) => {
 
         (appointmentsRes.data || []).forEach((row) => {
           const status = String(row.status || '').toLowerCase();
-          if (status === 'cancelled') {
+          if (status === 'cancelled' || status === 'rejected') {
             return;
           }
 
-          const createdAt = new Date(row.created_at);
-          if (Number.isNaN(createdAt.getTime())) {
+          const whenIso = row.scheduled_at || row.created_at;
+          const when = whenIso ? new Date(whenIso) : null;
+          if (!when || Number.isNaN(when.getTime())) {
             return;
           }
 
-          const index = dayToMondayFirstIndex(createdAt.getDay());
+          const index = dayIndexFromManilaDateKey(dayKeys, getManilaDateKey(when));
+          if (index < 0 || index > 6) {
+            return;
+          }
           weekCounts[index] += 1;
         });
 
@@ -1625,8 +1653,16 @@ const SimpleBarChart = ({ values, labels }) => {
     <div className="week-bar-chart">
       {values.map((value, i) => (
         <div key={labels[i]} className="bar-col">
+          <span className="bar-value" aria-hidden={value <= 0}>
+            {value > 0 ? value : ''}
+          </span>
           <div className="bar-track">
-            <div className="bar-fill" style={{ height: `${(value / safeMax) * 100}%` }}></div>
+            <div
+              className="bar-fill"
+              style={{
+                height: `${value > 0 ? Math.max((value / safeMax) * 100, 8) : 0}%`,
+              }}
+            />
           </div>
           <span className="chart-axis-label">{labels[i]}</span>
         </div>

@@ -841,7 +841,13 @@ body { font-family: 'Inter', sans-serif; background: #F5F1EB; color: #0B0F19; }
   align-items: end;
 }
 
-.bar-col { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.bar-col { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.bar-value {
+  min-height: 16px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #122f55;
+}
 .bar-track {
   width: 100%;
   height: 186px;
