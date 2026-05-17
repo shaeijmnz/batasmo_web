@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   LayoutDashboard, Users, Scale, FileText, MessageSquare,
   BarChart3, Settings, LogOut, Menu, Star,
@@ -15,8 +15,15 @@ import {
 } from '../lib/userApi';
 import { fetchPaidNotarialRequests, notifyClientNotarialStatusUpdate } from '../lib/adminApi';
 import { attachLiveDataRefresh } from '../lib/liveDataRefresh';
+import { patchAdminPageCache, readAdminPageCache } from '../lib/adminPageCache';
 import './AdminTheme.css';
 import './dashboard.css';
+
+const DASHBOARD_CACHE_KEY = 'dashboard';
+
+const persistDashboardCache = (patch) => {
+  patchAdminPageCache(DASHBOARD_CACHE_KEY, patch);
+};
 
 const ACTIVE_QUEUE_STATUSES = ['pending', 'confirmed', 'rescheduled', 'started'];
 
@@ -167,9 +174,11 @@ const resolveAttorneyImage = (name) => {
 };
 
 const Dashboard = ({ onNavigate }) => {
+  const dashboardBoot = useMemo(() => readAdminPageCache(DASHBOARD_CACHE_KEY), []);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [activeModal, setActiveModal] = useState(null);
   const [messageInput, setMessageInput] = useState('');
+  const [isSyncing, setIsSyncing] = useState(!dashboardBoot);
   const navigate = (path) => {
     const pageMap = {
       '/': 'admin-home',
@@ -183,21 +192,33 @@ const Dashboard = ({ onNavigate }) => {
     onNavigate?.(pageMap[path] || 'admin-home');
   };
 
-  const [clients, setClients] = useState([]);
-  const [totalClients, setTotalClients] = useState(0);
-  const [attorneys, setAttorneys] = useState([]);
-  const [totalAttorneys, setTotalAttorneys] = useState(0);
-  const [pendingNotaryRequests, setPendingNotaryRequests] = useState([]);
+  const [clients, setClients] = useState(() => dashboardBoot?.clients || []);
+  const [totalClients, setTotalClients] = useState(() => dashboardBoot?.totalClients ?? 0);
+  const [attorneys, setAttorneys] = useState(() => dashboardBoot?.attorneys || []);
+  const [totalAttorneys, setTotalAttorneys] = useState(() => dashboardBoot?.totalAttorneys ?? 0);
+  const [pendingNotaryRequests, setPendingNotaryRequests] = useState(
+    () => dashboardBoot?.pendingNotaryRequests || [],
+  );
   const [isUpdatingNotary, setIsUpdatingNotary] = useState(false);
-  const [completedConsultations, setCompletedConsultations] = useState([]);
-  const [completedNotaryRequests, setCompletedNotaryRequests] = useState([]);
+  const [completedConsultations, setCompletedConsultations] = useState(
+    () => dashboardBoot?.completedConsultations || [],
+  );
+  const [completedNotaryRequests, setCompletedNotaryRequests] = useState(
+    () => dashboardBoot?.completedNotaryRequests || [],
+  );
   const [toast, setToast] = useState(null);
   const [documentPreview, setDocumentPreview] = useState({ open: false, url: '', title: '' });
-  const [revenueData, setRevenueData] = useState([0, 0, 0, 0, 0, 0]);
-  const [monthLabels, setMonthLabels] = useState(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']);
-  const [weekData, setWeekData] = useState([0, 0, 0, 0, 0, 0, 0]);
-  const [recentRequests, setRecentRequests] = useState([]);
-  const [topAttorneys, setTopAttorneys] = useState([]);
+  const [revenueData, setRevenueData] = useState(
+    () => dashboardBoot?.revenueData || [0, 0, 0, 0, 0, 0],
+  );
+  const [monthLabels, setMonthLabels] = useState(
+    () => dashboardBoot?.monthLabels || ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+  );
+  const [weekData, setWeekData] = useState(
+    () => dashboardBoot?.weekData || [0, 0, 0, 0, 0, 0, 0],
+  );
+  const [recentRequests, setRecentRequests] = useState(() => dashboardBoot?.recentRequests || []);
+  const [topAttorneys, setTopAttorneys] = useState(() => dashboardBoot?.topAttorneys || []);
 
   const [adminUserId, setAdminUserId] = useState('');
   const [adminNotifications, setAdminNotifications] = useState([]);
@@ -237,6 +258,7 @@ const Dashboard = ({ onNavigate }) => {
     });
 
     setPendingNotaryRequests(mapped);
+    persistDashboardCache({ pendingNotaryRequests: mapped });
   };
 
   useEffect(() => {
@@ -254,7 +276,8 @@ const Dashboard = ({ onNavigate }) => {
             .from('profiles')
             .select('id, full_name, email, phone')
             .eq('role', 'Client')
-            .order('created_at', { ascending: false }),
+            .order('created_at', { ascending: false })
+            .limit(40),
           supabase
             .from('profiles')
             .select('id', { count: 'exact', head: true })
@@ -263,7 +286,8 @@ const Dashboard = ({ onNavigate }) => {
             .from('profiles')
             .select('id, full_name, email')
             .eq('role', 'Attorney')
-            .order('created_at', { ascending: false }),
+            .order('created_at', { ascending: false })
+            .limit(40),
           supabase
             .from('profiles')
             .select('id', { count: 'exact', head: true })
@@ -296,18 +320,25 @@ const Dashboard = ({ onNavigate }) => {
           return;
         }
 
+        const nextTotalClients = clientCount ?? normalizedClients.length ?? 0;
+        const nextTotalAttorneys = attorneyCount ?? normalizedAttorneys.length ?? 0;
+
         setClients(normalizedClients);
         setAttorneys(normalizedAttorneys);
-        setTotalClients(clientCount ?? normalizedClients.length ?? 0);
-        setTotalAttorneys(attorneyCount ?? normalizedAttorneys.length ?? 0);
+        setTotalClients(nextTotalClients);
+        setTotalAttorneys(nextTotalAttorneys);
+        persistDashboardCache({
+          clients: normalizedClients,
+          attorneys: normalizedAttorneys,
+          totalClients: nextTotalClients,
+          totalAttorneys: nextTotalAttorneys,
+        });
       } catch (error) {
+        console.error('[admin-dashboard] clients load failed', error);
+      } finally {
         if (isMounted) {
-          setClients([]);
-          setTotalClients(0);
-          setAttorneys([]);
-          setTotalAttorneys(0);
+          setIsSyncing(false);
         }
-        console.error(error);
       }
     };
 
@@ -324,35 +355,42 @@ const Dashboard = ({ onNavigate }) => {
     const loadQueueAndTopAttorneys = async () => {
       if (!isMounted) return;
 
-      const [profilesRes, attorneyProfilesRes, allAppointmentsRes, feedbackRes] = await Promise.all([
-        supabase
-          .from('profiles')
-          .select('id, full_name')
-          .eq('role', 'Attorney')
-          .order('created_at', { ascending: false }),
-        supabase.from('attorney_profiles').select('user_id, specialties'),
-        supabase
-          .from('appointments')
-          .select(
-            'id, title, status, scheduled_at, created_at, client_id, attorney_id',
-          )
-          .order('created_at', { ascending: false }),
-        supabase.from('consultation_feedback').select('attorney_id, rating'),
-      ]);
+      const appointmentStatsStatuses = ['completed', ...ACTIVE_QUEUE_STATUSES];
+
+      const [profilesRes, attorneyProfilesRes, queueAppointmentsRes, statsAppointmentsRes, feedbackRes] =
+        await Promise.all([
+          supabase
+            .from('profiles')
+            .select('id, full_name')
+            .eq('role', 'Attorney')
+            .order('created_at', { ascending: false }),
+          supabase.from('attorney_profiles').select('user_id, specialties'),
+          supabase
+            .from('appointments')
+            .select('id, title, status, scheduled_at, created_at, client_id, attorney_id')
+            .in('status', ACTIVE_QUEUE_STATUSES)
+            .order('created_at', { ascending: true })
+            .limit(8),
+          supabase
+            .from('appointments')
+            .select('attorney_id, status')
+            .in('status', appointmentStatsStatuses),
+          supabase.from('consultation_feedback').select('attorney_id, rating'),
+        ]);
 
       if (profilesRes.error) {
         console.error('[admin-dashboard] attorney profiles load failed', profilesRes.error);
-        setTopAttorneys([]);
-        setRecentRequests([]);
         return;
       }
 
       if (attorneyProfilesRes.error) {
         console.warn('[admin-dashboard] attorney_profiles load failed', attorneyProfilesRes.error);
       }
-      if (allAppointmentsRes.error) {
-        console.warn('[admin-dashboard] appointments load failed', allAppointmentsRes.error);
-        setRecentRequests([]);
+      if (queueAppointmentsRes.error) {
+        console.warn('[admin-dashboard] queue appointments load failed', queueAppointmentsRes.error);
+      }
+      if (statsAppointmentsRes.error) {
+        console.warn('[admin-dashboard] appointment stats load failed', statsAppointmentsRes.error);
       }
       if (feedbackRes.error) {
         console.warn('[admin-dashboard] feedback load failed', feedbackRes.error);
@@ -366,12 +404,8 @@ const Dashboard = ({ onNavigate }) => {
         (attorneyProfilesRes.data || []).map((row) => [row.user_id, row.specialties]),
       );
 
-      const appointmentRows = allAppointmentsRes.data || [];
-
-      const queueRows = appointmentRows
-        .filter((row) => ACTIVE_QUEUE_STATUSES.includes(String(row.status || '').toLowerCase()))
-        .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')))
-        .slice(0, 8);
+      const queueRows = queueAppointmentsRes.data || [];
+      const appointmentRows = statsAppointmentsRes.data || [];
 
       const queueClientIds = [
         ...new Set(queueRows.map((row) => row.client_id).filter(Boolean)),
@@ -393,19 +427,19 @@ const Dashboard = ({ onNavigate }) => {
         }
       }
 
-      if (!allAppointmentsRes.error) {
-        setRecentRequests(
-          queueRows.map((item, index) => ({
-            id: item.id,
-            queuePosition: index + 1,
-            name: clientNameById.get(item.client_id) || 'Client',
-            atty: attorneyNameById.get(item.attorney_id) || 'Attorney',
-            law: item.title || 'Consultation',
-            status: normalizeRequestStatusForUi(item.status),
-            bookedLabel: `Booked ${formatScheduleLabel(item.created_at)}`,
-            age: `Scheduled ${formatScheduleLabel(item.scheduled_at)}`,
-          })),
-        );
+      let nextRecentRequests = [];
+      if (!queueAppointmentsRes.error) {
+        nextRecentRequests = queueRows.map((item, index) => ({
+          id: item.id,
+          queuePosition: index + 1,
+          name: clientNameById.get(item.client_id) || 'Client',
+          atty: attorneyNameById.get(item.attorney_id) || 'Attorney',
+          law: item.title || 'Consultation',
+          status: normalizeRequestStatusForUi(item.status),
+          bookedLabel: `Booked ${formatScheduleLabel(item.created_at)}`,
+          age: `Scheduled ${formatScheduleLabel(item.scheduled_at)}`,
+        }));
+        setRecentRequests(nextRecentRequests);
       }
 
       const completedCountByAttorney = new Map();
@@ -465,11 +499,20 @@ const Dashboard = ({ onNavigate }) => {
         .map((item, index) => ({ ...item, rank: index + 1 }));
 
       setTopAttorneys(nextTopAttorneys);
+      persistDashboardCache({
+        recentRequests: nextRecentRequests,
+        topAttorneys: nextTopAttorneys,
+      });
     };
 
     const detachLiveRefresh = attachLiveDataRefresh({
-      reload: loadQueueAndTopAttorneys,
-      pollMs: 10000,
+      reload: async (options = {}) => {
+        await loadQueueAndTopAttorneys();
+        if (!options.silent) {
+          setIsSyncing(false);
+        }
+      },
+      pollMs: 30000,
       subscribe: (onChange) => {
         const appointmentsChannel = supabase
           .channel('admin-dashboard-queue-appointments')
@@ -560,14 +603,22 @@ const Dashboard = ({ onNavigate }) => {
           return;
         }
 
-        setMonthLabels(months.map((item) => item.label));
-        setRevenueData(months.map((item) => Number(monthMap.get(item.key) || 0)));
+        const nextMonthLabels = months.map((item) => item.label);
+        const nextRevenueData = months.map((item) => Number(monthMap.get(item.key) || 0));
+
+        setMonthLabels(nextMonthLabels);
+        setRevenueData(nextRevenueData);
         setWeekData(weekCounts);
+        persistDashboardCache({
+          monthLabels: nextMonthLabels,
+          revenueData: nextRevenueData,
+          weekData: weekCounts,
+        });
       } catch (error) {
-        console.error(error);
+        console.error('[admin-dashboard] chart load failed', error);
+      } finally {
         if (isMounted) {
-          setRevenueData([0, 0, 0, 0, 0, 0]);
-          setWeekData([0, 0, 0, 0, 0, 0, 0]);
+          setIsSyncing(false);
         }
       }
     };
@@ -769,7 +820,8 @@ const Dashboard = ({ onNavigate }) => {
             .from('appointments')
             .select('id, title, notes, scheduled_at, updated_at, client:client_id(full_name), attorney:attorney_id(full_name)')
             .eq('status', 'completed')
-            .order('updated_at', { ascending: false }),
+            .order('updated_at', { ascending: false })
+            .limit(30),
           fetchPaidNotarialRequests({
             select:
               'id, client_id, service_type, document_url, status, created_at, updated_at, notes, client:client_id(full_name)',
@@ -812,12 +864,12 @@ const Dashboard = ({ onNavigate }) => {
 
         setCompletedConsultations(nextCompletedConsultations);
         setCompletedNotaryRequests(nextCompletedNotaryRequests);
+        persistDashboardCache({
+          completedConsultations: nextCompletedConsultations,
+          completedNotaryRequests: nextCompletedNotaryRequests,
+        });
       } catch (error) {
-        if (isMounted) {
-          setCompletedConsultations([]);
-          setCompletedNotaryRequests([]);
-        }
-        console.error(error);
+        console.error('[admin-dashboard] completed requests load failed', error);
       } finally {
         isFetching = false;
       }
@@ -878,18 +930,11 @@ const Dashboard = ({ onNavigate }) => {
       }
     };
 
-    const pollId = window.setInterval(() => {
-      if (!document.hidden) {
-        fetchCompletedRequests();
-      }
-    }, 5000);
-
     window.addEventListener('focus', fetchCompletedRequests);
     document.addEventListener('visibilitychange', handleVisibilityRefresh);
 
     return () => {
       isMounted = false;
-      window.clearInterval(pollId);
       window.removeEventListener('focus', fetchCompletedRequests);
       document.removeEventListener('visibilitychange', handleVisibilityRefresh);
       supabase.removeChannel(appointmentsChannel);
@@ -1065,6 +1110,11 @@ const Dashboard = ({ onNavigate }) => {
               <div className="header-container">
                 <div className="header-content">
                   <h1>Welcome Back, Admin</h1>
+                  {isSyncing ? (
+                    <span className="adm-dashboard-sync" role="status">
+                      Updating data…
+                    </span>
+                  ) : null}
                   <p>Here's what's happening with your legal matters today.</p>
                 </div>
                 <div className="header-overlay"></div>

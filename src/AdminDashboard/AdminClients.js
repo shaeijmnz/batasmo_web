@@ -1,13 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { 
+import {
   LayoutDashboard, Users, Scale, FileText,
-  BarChart3, Settings, LogOut, Menu, Search, 
+  BarChart3, Settings, LogOut, Menu, Search,
   Filter, Download, Mail, Phone, Calendar, MoreVertical, Plus, X
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import { readAdminPageCache, writeAdminPageCache } from '../lib/adminPageCache';
 import { adminCreateWalkInClient } from '../lib/userApi';
 import './AdminTheme.css';
 import './clients.css';
+
+const CLIENTS_CACHE_KEY = 'clients';
 
 const formatJoinedDate = (value) => {
   const parsed = value ? new Date(value) : null;
@@ -22,12 +25,15 @@ const initialsFromName = (name) => {
 };
 
 const Clients = ({ onNavigate }) => {
+  const clientsBoot = useMemo(() => readAdminPageCache(CLIENTS_CACHE_KEY), []);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [clients, setClients] = useState([]);
-  const [clientMetrics, setClientMetrics] = useState({ total: 0, newThisMonth: 0, totalConsultations: 0 });
+  const [clients, setClients] = useState(() => clientsBoot?.clients || []);
+  const [clientMetrics, setClientMetrics] = useState(
+    () => clientsBoot?.clientMetrics || { total: 0, newThisMonth: 0, totalConsultations: 0 },
+  );
   const [onlineClientIds, setOnlineClientIds] = useState(new Set());
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!clientsBoot);
   const [loadError, setLoadError] = useState('');
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [addEmail, setAddEmail] = useState('');
@@ -68,10 +74,7 @@ const Clients = ({ onNavigate }) => {
           .select('id, full_name, email, phone, address, created_at')
           .eq('role', 'Client')
           .order('created_at', { ascending: false }),
-        supabase
-          .from('appointments')
-          .select('id, client_id, status, created_at')
-          .order('created_at', { ascending: false }),
+        supabase.from('appointments').select('client_id, status'),
       ]);
 
       if (profilesRes.error) throw profilesRes.error;
@@ -110,15 +113,20 @@ const Clients = ({ onNavigate }) => {
         consultations: Number(consultationsByClient.get(row.id) || 0),
       }));
 
-      setClients(normalizedClients);
-      setClientMetrics({
+      const nextMetrics = {
         total: profileRows.length,
         newThisMonth,
         totalConsultations: validConsultations.length,
+      };
+
+      setClients(normalizedClients);
+      setClientMetrics(nextMetrics);
+      writeAdminPageCache(CLIENTS_CACHE_KEY, {
+        clients: normalizedClients,
+        clientMetrics: nextMetrics,
       });
       setLoadError('');
     } catch (error) {
-      setClients([]);
       setLoadError(error.message || 'Failed to load clients.');
     } finally {
       setLoading(false);
