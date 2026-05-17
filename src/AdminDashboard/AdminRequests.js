@@ -279,13 +279,13 @@ function AdminRequests({ onNavigate }) {
         {/* Stats row */}
         <div className="adm-nr-stats">
           {[
-            { label: 'In Process', value: counts.in_process, color: '#3b82f6' },
-            { label: 'Ready for Pickup', value: counts.ready_for_pickup, color: '#22c55e' },
-            { label: 'Completed', value: counts.completed, color: '#64748b' },
-            { label: 'Total', value: counts.total, color: '#1e3a8a' },
+            { label: 'In Process', value: counts.in_process, accent: 'process' },
+            { label: 'Ready for Pickup', value: counts.ready_for_pickup, accent: 'pickup' },
+            { label: 'Completed', value: counts.completed, accent: 'done' },
+            { label: 'Total', value: counts.total, accent: 'total' },
           ].map((s) => (
-            <div key={s.label} className="adm-nr-stat-card">
-              <span className="adm-nr-stat-value" style={{ color: s.color }}>{s.value}</span>
+            <div key={s.label} className={`adm-nr-stat-card adm-nr-stat-card--${s.accent}`}>
+              <span className="adm-nr-stat-value">{s.value}</span>
               <span className="adm-nr-stat-label">{s.label}</span>
             </div>
           ))}
