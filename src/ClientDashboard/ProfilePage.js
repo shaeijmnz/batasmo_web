@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import './ProfilePage.css';
+import { currentUserMustChangePassword, updatePasswordForCurrentUser } from '../lib/authApi';
 import { signOutUser, upsertProfile } from '../lib/userApi';
 import {
   isValidEmail,
@@ -113,12 +114,23 @@ const PersonSmIcon = () => (
   </svg>
 );
 
-function ProfilePage({ onNavigate, profile, onSignOut, onProfileUpdated }) {
+function ProfilePage({
+  onNavigate,
+  profile,
+  onSignOut,
+  onProfileUpdated,
+  initialTab,
+  forcePasswordChange = false,
+  onPasswordChangeComplete,
+}) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [activeTab, setActiveTab] = useState('info');
+  const [activeTab, setActiveTab] = useState(initialTab === 'password' ? 'password' : 'info');
   const [saved, setSaved] = useState(false);
   const [pwSaved, setPwSaved] = useState(false);
   const [errorText, setErrorText] = useState('');
+  const [pwErrorText, setPwErrorText] = useState('');
+  const [pwSubmitting, setPwSubmitting] = useState(false);
+  const [mustChangePassword, setMustChangePassword] = useState(forcePasswordChange);
 
   const [info, setInfo] = useState({ fullName: '', email: '', contact: '', address: '' });
   const [passwords, setPasswords] = useState({ current: '', newPass: '', confirm: '' });
@@ -134,6 +146,29 @@ function ProfilePage({ onNavigate, profile, onSignOut, onProfileUpdated }) {
       address: profile.address || '',
     });
   }, [profile]);
+
+  useEffect(() => {
+    if (initialTab === 'password') {
+      setActiveTab('password');
+    }
+  }, [initialTab]);
+
+  useEffect(() => {
+    setMustChangePassword(forcePasswordChange);
+  }, [forcePasswordChange]);
+
+  useEffect(() => {
+    if (!forcePasswordChange) return undefined;
+    let cancelled = false;
+    currentUserMustChangePassword()
+      .then((required) => {
+        if (!cancelled) setMustChangePassword(required);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [forcePasswordChange]);
 
   useEffect(() => {
     return () => {
@@ -187,11 +222,34 @@ function ProfilePage({ onNavigate, profile, onSignOut, onProfileUpdated }) {
     scheduleAfter(() => setSaved(false), 3000);
   };
 
-  const handleSavePassword = (e) => {
+  const handleSavePassword = async (e) => {
     e.preventDefault();
-    setPwSaved(true);
-    setPasswords({ current: '', newPass: '', confirm: '' });
-    scheduleAfter(() => setPwSaved(false), 3000);
+    setPwErrorText('');
+    const { newPass, confirm } = passwords;
+    if (!newPass || newPass.length < 6) {
+      setPwErrorText('New password must be at least 6 characters.');
+      return;
+    }
+    if (newPass !== confirm) {
+      setPwErrorText('New password and confirmation do not match.');
+      return;
+    }
+    setPwSubmitting(true);
+    try {
+      await updatePasswordForCurrentUser({
+        newPassword: newPass,
+        clearMustChangePassword: mustChangePassword,
+      });
+      setMustChangePassword(false);
+      if (onPasswordChangeComplete) onPasswordChangeComplete();
+      setPwSaved(true);
+      setPasswords({ current: '', newPass: '', confirm: '' });
+      scheduleAfter(() => setPwSaved(false), 3000);
+    } catch (error) {
+      setPwErrorText(error?.message || 'Could not update password.');
+    } finally {
+      setPwSubmitting(false);
+    }
   };
 
   const handleSignOutClick = async () => {
@@ -327,11 +385,17 @@ function ProfilePage({ onNavigate, profile, onSignOut, onProfileUpdated }) {
                 <div className="pp-form-card__header">
                   <LockIcon />
                   <div>
-                    <h2>Change Password</h2>
-                    <p>Keep your account secure with a strong password.</p>
+                    <h2>{mustChangePassword ? 'Set your password' : 'Change Password'}</h2>
+                    <p>
+                      {mustChangePassword
+                        ? 'You signed in with a temporary password from the office. Choose a new password to continue.'
+                        : 'Keep your account secure with a strong password.'}
+                    </p>
                   </div>
                 </div>
                 <form className="pp-form" onSubmit={handleSavePassword}>
+                  {pwErrorText ? <p>{pwErrorText}</p> : null}
+                  {!mustChangePassword ? (
                   <div className="pp-field">
                     <label>Current Password</label>
                     <div className="pp-input-wrap">
@@ -340,6 +404,7 @@ function ProfilePage({ onNavigate, profile, onSignOut, onProfileUpdated }) {
                       <button type="button" className="pp-eye" onClick={() => setShow({ ...show, current: !show.current })}><EyeIcon show={show.current} /></button>
                     </div>
                   </div>
+                  ) : null}
                   <div className="pp-field">
                     <label>New Password</label>
                     <div className="pp-input-wrap">
@@ -358,7 +423,9 @@ function ProfilePage({ onNavigate, profile, onSignOut, onProfileUpdated }) {
                   </div>
                   <div className="pp-form-actions">
                     {pwSaved && <span className="pp-saved">✓ Password updated!</span>}
-                    <button type="submit" className="pp-btn pp-btn--primary">Update Password</button>
+                    <button type="submit" className="pp-btn pp-btn--primary" disabled={pwSubmitting}>
+                      {pwSubmitting ? 'Updating…' : mustChangePassword ? 'Save new password' : 'Update Password'}
+                    </button>
                   </div>
                 </form>
               </>

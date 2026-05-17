@@ -263,3 +263,34 @@
 .clients-modal__actions .add-btn {
   min-height: 42px;
 }
+
+.clients-modal__credentials {
+  margin: 4px 0 12px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(21, 34, 56, 0.05);
+  border: 1px solid var(--ui-border);
+}
+
+.clients-modal__credentials p {
+  margin: 0 0 10px;
+  font-size: 0.9rem;
+  color: var(--ui-text-primary);
+  word-break: break-word;
+}
+
+.clients-modal__credentials p:last-child {
+  margin-bottom: 0;
+}
+
+.clients-modal__credentials code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+}
+
+.clients-modal__copy-feedback {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+  color: var(--ui-accent);
+}

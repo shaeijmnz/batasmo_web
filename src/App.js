@@ -509,11 +509,18 @@ function App() {
     })
   }, [page, currentProfile?.id, currentProfile?.role])
 
-  const handleAuthSuccess = useCallback((profile) => {
+  const handleAuthSuccess = useCallback((profile, options = {}) => {
     clearTransientAuthState({ includeRecovery: true });
     setSignupContext({ email: '', role: 'Client', otpChannel: 'email' });
     setCurrentProfile(profile);
-    setPage(pageFromRole(profile?.role));
+    const role = normalizeRole(profile?.role || '');
+    if (options.mustChangePassword && role === 'Client') {
+      setPageParams({ initialProfileTab: 'password', mustChangePassword: true });
+      setPage('profile');
+    } else {
+      setPageParams({});
+      setPage(pageFromRole(profile?.role));
+    }
   }, []);
 
   const handleNavigate = useCallback((nextPage, params = {}) => {
@@ -637,7 +644,19 @@ function App() {
   if (page === 'book-appointment') return renderClientShell(<BookAppointment onNavigate={handleNavigate} profile={currentProfile} />);
   if (page === 'notarial-request') return renderClientShell(<NotarialRequest onNavigate={handleNavigate} profile={currentProfile} />);
   if (page === 'my-appointments') return renderClientShell(<MyAppointments onNavigate={handleNavigate} profile={currentProfile} />);
-  if (page === 'profile') return renderClientShell(<ProfilePage onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} onProfileUpdated={setCurrentProfile} />);
+  if (page === 'profile') {
+    return renderClientShell(
+      <ProfilePage
+        onNavigate={handleNavigate}
+        profile={currentProfile}
+        onSignOut={handleSignOut}
+        onProfileUpdated={setCurrentProfile}
+        initialTab={pageParams?.initialProfileTab}
+        forcePasswordChange={Boolean(pageParams?.mustChangePassword)}
+        onPasswordChangeComplete={() => setPageParams((prev) => ({ ...(prev || {}), mustChangePassword: false }))}
+      />,
+    );
+  }
   if (page === 'chat-room') return renderClientShell(<ChatRoom onNavigate={handleNavigate} profile={currentProfile} initialAppointmentId={pageParams?.appointmentId || ''} />);
   if (page === 'my-notarial-requests') return renderClientShell(<MyNotarialRequests onNavigate={handleNavigate} profile={currentProfile} />);
   if (page === 'announcements') return renderClientShell(<Announcements onNavigate={handleNavigate} profile={currentProfile} />);

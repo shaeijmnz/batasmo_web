@@ -96,8 +96,12 @@ function Login({ onNavigate, onAuthSuccess }) {
         updated_at: new Date().toISOString(),
       };
 
-      if (onAuthSuccess) onAuthSuccess(optimisticProfile);
-      onNavigate(pageFromRole(role));
+      const mustChangePassword = Boolean(user?.user_metadata?.must_change_password);
+      if (onAuthSuccess) {
+        onAuthSuccess(optimisticProfile, { mustChangePassword });
+      } else if (!mustChangePassword) {
+        onNavigate(pageFromRole(role));
+      }
     } catch (error) {
       if (String(error?.message || '').startsWith('LOCKOUT:')) {
         const timeRemaining = Number(String(error.message).split(':')[1] || 0);

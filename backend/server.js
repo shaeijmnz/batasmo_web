@@ -1,5 +1,6 @@
 import express from 'express'
 import cors from 'cors'
+import crypto from 'crypto'
 import dotenv from 'dotenv'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import jwt from 'jsonwebtoken'
@@ -740,19 +741,39 @@ const verifyCallerIsAdmin = async (jwt) => {
   return user.id
 }
 
+const WALK_IN_PASSWORD_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
+
+const generateWalkInPassword = () => {
+  const bytes = crypto.randomBytes(12)
+  return Array.from(bytes, (b) => WALK_IN_PASSWORD_CHARS[b % WALK_IN_PASSWORD_CHARS.length]).join('')
+}
+
 /**
  * Create a Supabase Auth user (email pre-confirmed) + Client profile — walk-in registration.
+ * Password is optional: when omitted, the system generates one and flags must_change_password.
  */
 const supabaseAdminCreateWalkInClient = async ({ email, password, fullName }) => {
   const normalizedEmail = String(email || '').trim().toLowerCase()
-  const safePassword = String(password || '')
+  let safePassword = String(password || '').trim()
   const displayName = String(fullName || '').trim() || 'Walk-in Client'
+  let passwordWasGenerated = false
 
   if (!normalizedEmail || !normalizedEmail.includes('@')) {
     throw new Error('A valid email address is required.')
   }
-  if (safePassword.length < 6) {
+  if (!safePassword) {
+    safePassword = generateWalkInPassword()
+    passwordWasGenerated = true
+  } else if (safePassword.length < 6) {
     throw new Error('Password must be at least 6 characters.')
+  }
+
+  const userMetadata = {
+    full_name: displayName,
+    role: 'Client',
+  }
+  if (passwordWasGenerated) {
+    userMetadata.must_change_password = true
   }
 
   const authResponse = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
@@ -766,10 +787,7 @@ const supabaseAdminCreateWalkInClient = async ({ email, password, fullName }) =>
       email: normalizedEmail,
       password: safePassword,
       email_confirm: true,
-      user_metadata: {
-        full_name: displayName,
-        role: 'Client',
-      },
+      user_metadata: userMetadata,
     }),
   })
 
@@ -819,7 +837,13 @@ const supabaseAdminCreateWalkInClient = async ({ email, password, fullName }) =>
     )
   }
 
-  return { userId, email: normalizedEmail, fullName: displayName }
+  return {
+    userId,
+    email: normalizedEmail,
+    fullName: displayName,
+    generatedPassword: passwordWasGenerated ? safePassword : undefined,
+    mustChangePassword: passwordWasGenerated,
+  }
 }
 
 /**

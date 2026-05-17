@@ -31,10 +31,11 @@ const Clients = ({ onNavigate }) => {
   const [loadError, setLoadError] = useState('');
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [addEmail, setAddEmail] = useState('');
-  const [addPassword, setAddPassword] = useState('');
   const [addFullName, setAddFullName] = useState('');
   const [addSubmitting, setAddSubmitting] = useState(false);
   const [addFormError, setAddFormError] = useState('');
+  const [createdCredentials, setCreatedCredentials] = useState(null);
+  const [copyFeedback, setCopyFeedback] = useState('');
 
   const navigate = (path) => {
     const pageMap = {
@@ -190,39 +191,54 @@ const Clients = ({ onNavigate }) => {
     if (addSubmitting) return;
     setAddModalOpen(false);
     setAddFormError('');
+    setCreatedCredentials(null);
+    setCopyFeedback('');
   };
 
   const openAddClientModal = () => {
     setAddFormError('');
+    setCreatedCredentials(null);
+    setCopyFeedback('');
     setAddModalOpen(true);
+  };
+
+  const copyCredentials = async () => {
+    if (!createdCredentials) return;
+    const text = `Email: ${createdCredentials.email}\nPassword: ${createdCredentials.password}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyFeedback('Copied to clipboard');
+    } catch {
+      setCopyFeedback('Could not copy — select and copy manually');
+    }
   };
 
   const handleAddWalkInClient = async (event) => {
     event.preventDefault();
     setAddFormError('');
     const email = addEmail.trim().toLowerCase();
-    const password = addPassword;
-    if (!email || !password) {
-      setAddFormError('Email and password are required.');
-      return;
-    }
-    if (password.length < 6) {
-      setAddFormError('Password must be at least 6 characters.');
+    if (!email) {
+      setAddFormError('Email is required.');
       return;
     }
     setAddSubmitting(true);
     try {
-      await adminCreateWalkInClient({
+      const result = await adminCreateWalkInClient({
         email,
-        password,
         fullName: addFullName.trim() || undefined,
       });
+      const generatedPassword = result?.generatedPassword;
+      if (!generatedPassword) {
+        throw new Error('Account created but no password was returned. Check the backend deployment.');
+      }
+      setCreatedCredentials({
+        email: result.email || email,
+        password: generatedPassword,
+        fullName: result.fullName || addFullName.trim() || 'Walk-in Client',
+      });
       setAddEmail('');
-      setAddPassword('');
       setAddFullName('');
-      setAddModalOpen(false);
       await loadClients();
-      window.alert('Client account created. They can sign in with this email and password.');
     } catch (err) {
       setAddFormError(err?.message || 'Could not create account.');
     } finally {
@@ -316,59 +332,68 @@ const Clients = ({ onNavigate }) => {
                     <X size={20} />
                   </button>
                 </div>
-                <p className="clients-modal__hint">
-                  Creates a client login they can use on the web or mobile app. Give them the email and password you set here.
-                </p>
-                <form className="clients-modal__form" onSubmit={handleAddWalkInClient}>
-                  <label className="clients-modal__label" htmlFor="walk-in-email">
-                    Email
-                  </label>
-                  <input
-                    id="walk-in-email"
-                    className="clients-modal__input"
-                    type="email"
-                    autoComplete="off"
-                    value={addEmail}
-                    onChange={(e) => setAddEmail(e.target.value)}
-                    disabled={addSubmitting}
-                    required
-                  />
-                  <label className="clients-modal__label" htmlFor="walk-in-password">
-                    Password
-                  </label>
-                  <input
-                    id="walk-in-password"
-                    className="clients-modal__input"
-                    type="password"
-                    autoComplete="new-password"
-                    value={addPassword}
-                    onChange={(e) => setAddPassword(e.target.value)}
-                    disabled={addSubmitting}
-                    required
-                    minLength={6}
-                  />
-                  <label className="clients-modal__label" htmlFor="walk-in-name">
-                    Display name <span className="clients-modal__optional">(optional)</span>
-                  </label>
-                  <input
-                    id="walk-in-name"
-                    className="clients-modal__input"
-                    type="text"
-                    placeholder="Walk-in Client"
-                    value={addFullName}
-                    onChange={(e) => setAddFullName(e.target.value)}
-                    disabled={addSubmitting}
-                  />
-                  {addFormError ? <p className="clients-modal__error">{addFormError}</p> : null}
-                  <div className="clients-modal__actions">
-                    <button type="button" className="btn-secondary" disabled={addSubmitting} onClick={closeAddModal}>
-                      Cancel
-                    </button>
-                    <button type="submit" className="add-btn" disabled={addSubmitting}>
-                      {addSubmitting ? 'Creating…' : 'Create account'}
-                    </button>
-                  </div>
-                </form>
+                {createdCredentials ? (
+                  <>
+                    <p className="clients-modal__hint">
+                      Account created. Give the client these login details — they will be asked to set a new password on first sign-in.
+                    </p>
+                    <div className="clients-modal__credentials">
+                      <p><strong>Email</strong> {createdCredentials.email}</p>
+                      <p><strong>Password</strong> <code>{createdCredentials.password}</code></p>
+                    </div>
+                    {copyFeedback ? <p className="clients-modal__copy-feedback">{copyFeedback}</p> : null}
+                    <div className="clients-modal__actions">
+                      <button type="button" className="btn-secondary" onClick={copyCredentials}>
+                        Copy email &amp; password
+                      </button>
+                      <button type="button" className="add-btn" onClick={closeAddModal}>
+                        Done
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="clients-modal__hint">
+                      Creates a client login for the web or mobile app. The system generates a temporary password — share it with the walk-in client.
+                    </p>
+                    <form className="clients-modal__form" onSubmit={handleAddWalkInClient}>
+                      <label className="clients-modal__label" htmlFor="walk-in-email">
+                        Email
+                      </label>
+                      <input
+                        id="walk-in-email"
+                        className="clients-modal__input"
+                        type="email"
+                        autoComplete="off"
+                        value={addEmail}
+                        onChange={(e) => setAddEmail(e.target.value)}
+                        disabled={addSubmitting}
+                        required
+                      />
+                      <label className="clients-modal__label" htmlFor="walk-in-name">
+                        Display name <span className="clients-modal__optional">(optional)</span>
+                      </label>
+                      <input
+                        id="walk-in-name"
+                        className="clients-modal__input"
+                        type="text"
+                        placeholder="Walk-in Client"
+                        value={addFullName}
+                        onChange={(e) => setAddFullName(e.target.value)}
+                        disabled={addSubmitting}
+                      />
+                      {addFormError ? <p className="clients-modal__error">{addFormError}</p> : null}
+                      <div className="clients-modal__actions">
+                        <button type="button" className="btn-secondary" disabled={addSubmitting} onClick={closeAddModal}>
+                          Cancel
+                        </button>
+                        <button type="submit" className="add-btn" disabled={addSubmitting}>
+                          {addSubmitting ? 'Creating…' : 'Create account'}
+                        </button>
+                      </div>
+                    </form>
+                  </>
+                )}
               </div>
             </div>
           ) : null}

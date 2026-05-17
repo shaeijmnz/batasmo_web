@@ -665,17 +665,21 @@ export async function adminCreateWalkInClient({ email, password, fullName }) {
     throw new Error('You must be signed in as admin to add a client.')
   }
   const baseUrl = resolvePaymentApiBaseUrl()
+  const body = {
+    email: String(email || '').trim().toLowerCase(),
+    fullName: String(fullName || '').trim() || undefined,
+  }
+  const trimmedPassword = String(password || '').trim()
+  if (trimmedPassword) {
+    body.password = trimmedPassword
+  }
   const response = await fetch(`${baseUrl}/admin/clients/walk-in`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${session.access_token}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      email: String(email || '').trim().toLowerCase(),
-      password: String(password || ''),
-      fullName: String(fullName || '').trim() || undefined,
-    }),
+    body: JSON.stringify(body),
   })
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) {

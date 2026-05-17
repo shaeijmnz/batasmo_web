@@ -372,14 +372,25 @@ export async function verifyRecoveryOtp({ email, token }) {
   return { success: true }
 }
 
-export async function updatePasswordForCurrentUser({ newPassword }) {
-  const { error } = await supabase.auth.updateUser({
-    password: newPassword,
-  })
+export async function updatePasswordForCurrentUser({ newPassword, clearMustChangePassword = false }) {
+  const payload = { password: newPassword }
+  if (clearMustChangePassword) {
+    payload.data = { must_change_password: false }
+  }
+
+  const { error } = await supabase.auth.updateUser(payload)
 
   if (error) {
     throw new Error(error.message)
   }
 
   return { success: true }
+}
+
+export async function currentUserMustChangePassword() {
+  const { data, error } = await supabase.auth.getUser()
+  if (error) {
+    throw new Error(error.message)
+  }
+  return Boolean(data?.user?.user_metadata?.must_change_password)
 }
