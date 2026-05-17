@@ -137,6 +137,14 @@ const formatScheduleLabel = (value) => {
   });
 };
 
+const formatAttorneySpecialty = (value) => {
+  if (Array.isArray(value)) {
+    return value.filter(Boolean).join(', ') || 'Legal Practice';
+  }
+  const text = String(value || '').trim();
+  return text || 'Legal Practice';
+};
+
 const Dashboard = ({ onNavigate }) => {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [activeModal, setActiveModal] = useState(null);
@@ -295,94 +303,124 @@ const Dashboard = ({ onNavigate }) => {
     const loadQueueAndTopAttorneys = async () => {
       if (!isMounted) return;
 
-      try {
-        const [appointmentsQueueRes, completedAppointmentsRes, attorneyProfilesRes, feedbackRes] =
-          await Promise.all([
-            supabase
-              .from('appointments')
-              .select(
-                'id, title, status, scheduled_at, created_at, client:client_id(full_name), attorney:attorney_id(full_name)',
-              )
-              .in('status', ACTIVE_QUEUE_STATUSES)
-              .order('created_at', { ascending: true })
-              .limit(8),
-            supabase.from('appointments').select('attorney_id').eq('status', 'completed'),
-            supabase
-              .from('profiles')
-              .select('id, full_name, attorney_profiles(specialty)')
-              .eq('role', 'Attorney'),
-            supabase.from('consultation_feedback').select('attorney_id, rating'),
-          ]);
+      const [
+        appointmentsQueueRes,
+        profilesRes,
+        attorneyProfilesRes,
+        allAppointmentsRes,
+        feedbackRes,
+      ] = await Promise.all([
+        supabase
+          .from('appointments')
+          .select(
+            'id, title, status, scheduled_at, created_at, client:client_id(full_name), attorney:attorney_id(full_name)',
+          )
+          .in('status', ACTIVE_QUEUE_STATUSES)
+          .order('created_at', { ascending: true })
+          .limit(8),
+        supabase
+          .from('profiles')
+          .select('id, full_name')
+          .eq('role', 'Attorney')
+          .order('created_at', { ascending: false }),
+        supabase.from('attorney_profiles').select('user_id, specialties'),
+        supabase.from('appointments').select('attorney_id, status'),
+        supabase.from('consultation_feedback').select('attorney_id, rating'),
+      ]);
 
-        if (appointmentsQueueRes.error) throw appointmentsQueueRes.error;
-        if (completedAppointmentsRes.error) throw completedAppointmentsRes.error;
-        if (attorneyProfilesRes.error) throw attorneyProfilesRes.error;
-        if (feedbackRes.error) throw feedbackRes.error;
+      if (appointmentsQueueRes.error) {
+        console.error('[admin-dashboard] queue load failed', appointmentsQueueRes.error);
+        setRecentRequests([]);
+      } else {
+        setRecentRequests(
+          (appointmentsQueueRes.data || []).map((item, index) => ({
+            id: item.id,
+            queuePosition: index + 1,
+            name: item.client?.full_name || 'Client',
+            atty: item.attorney?.full_name || 'Attorney',
+            law: item.title || 'Consultation',
+            status: normalizeRequestStatusForUi(item.status),
+            bookedLabel: `Booked ${formatScheduleLabel(item.created_at)}`,
+            age: `Scheduled ${formatScheduleLabel(item.scheduled_at)}`,
+          })),
+        );
+      }
 
-        const nextRecentRequests = (appointmentsQueueRes.data || []).map((item, index) => ({
-          id: item.id,
-          queuePosition: index + 1,
-          name: item.client?.full_name || 'Client',
-          atty: item.attorney?.full_name || 'Attorney',
-          law: item.title || 'Consultation',
-          status: normalizeRequestStatusForUi(item.status),
-          bookedLabel: `Booked ${formatScheduleLabel(item.created_at)}`,
-          age: `Scheduled ${formatScheduleLabel(item.scheduled_at)}`,
-        }));
+      if (profilesRes.error) {
+        console.error('[admin-dashboard] attorney profiles load failed', profilesRes.error);
+        setTopAttorneys([]);
+        return;
+      }
 
-        const completedCountByAttorney = new Map();
-        (completedAppointmentsRes.data || []).forEach((row) => {
-          if (!row.attorney_id) return;
+      if (attorneyProfilesRes.error) {
+        console.warn('[admin-dashboard] attorney_profiles load failed', attorneyProfilesRes.error);
+      }
+      if (allAppointmentsRes.error) {
+        console.warn('[admin-dashboard] appointments aggregate failed', allAppointmentsRes.error);
+      }
+      if (feedbackRes.error) {
+        console.warn('[admin-dashboard] feedback load failed', feedbackRes.error);
+      }
+
+      const specialtyByAttorney = new Map(
+        (attorneyProfilesRes.data || []).map((row) => [row.user_id, row.specialties]),
+      );
+
+      const completedCountByAttorney = new Map();
+      const activeQueueCountByAttorney = new Map();
+      (allAppointmentsRes.data || []).forEach((row) => {
+        if (!row.attorney_id) return;
+        const status = String(row.status || '').toLowerCase();
+        if (status === 'completed') {
           completedCountByAttorney.set(
             row.attorney_id,
             Number(completedCountByAttorney.get(row.attorney_id) || 0) + 1,
           );
-        });
+        }
+        if (ACTIVE_QUEUE_STATUSES.includes(status)) {
+          activeQueueCountByAttorney.set(
+            row.attorney_id,
+            Number(activeQueueCountByAttorney.get(row.attorney_id) || 0) + 1,
+          );
+        }
+      });
 
-        const ratingByAttorney = new Map();
-        (feedbackRes.data || []).forEach((row) => {
-          if (!row.attorney_id) return;
-          const existing = ratingByAttorney.get(row.attorney_id) || { total: 0, count: 0 };
-          existing.total += Number(row.rating || 0);
-          existing.count += 1;
-          ratingByAttorney.set(row.attorney_id, existing);
-        });
+      const ratingByAttorney = new Map();
+      (feedbackRes.data || []).forEach((row) => {
+        if (!row.attorney_id) return;
+        const existing = ratingByAttorney.get(row.attorney_id) || { total: 0, count: 0 };
+        existing.total += Number(row.rating || 0);
+        existing.count += 1;
+        ratingByAttorney.set(row.attorney_id, existing);
+      });
 
-        const resolveAttorneySpecialty = (profileRow) => {
-          const nested = profileRow?.attorney_profiles;
-          if (Array.isArray(nested)) return nested[0]?.specialty || 'Legal Practice';
-          return nested?.specialty || 'Legal Practice';
-        };
+      const nextTopAttorneys = (profilesRes.data || [])
+        .map((profile) => {
+          const ratingMeta = ratingByAttorney.get(profile.id);
+          const avgRating =
+            ratingMeta && ratingMeta.count > 0
+              ? Number((ratingMeta.total / ratingMeta.count).toFixed(1))
+              : null;
+          const completed = Number(completedCountByAttorney.get(profile.id) || 0);
+          const inQueue = Number(activeQueueCountByAttorney.get(profile.id) || 0);
+          return {
+            id: profile.id,
+            name: profile.full_name || 'Attorney',
+            law: formatAttorneySpecialty(specialtyByAttorney.get(profile.id)),
+            consultations: completed,
+            inQueue,
+            rating: avgRating,
+          };
+        })
+        .sort((a, b) => {
+          if (b.consultations !== a.consultations) return b.consultations - a.consultations;
+          if (b.inQueue !== a.inQueue) return b.inQueue - a.inQueue;
+          return (b.rating || 0) - (a.rating || 0);
+        })
+        .slice(0, 4)
+        .map((item, index) => ({ ...item, rank: index + 1 }));
 
-        const nextTopAttorneys = (attorneyProfilesRes.data || [])
-          .map((profile) => {
-            const ratingMeta = ratingByAttorney.get(profile.id);
-            const avgRating =
-              ratingMeta && ratingMeta.count > 0
-                ? Number((ratingMeta.total / ratingMeta.count).toFixed(1))
-                : null;
-            return {
-              id: profile.id,
-              name: profile.full_name || 'Attorney',
-              law: resolveAttorneySpecialty(profile),
-              consultations: Number(completedCountByAttorney.get(profile.id) || 0),
-              rating: avgRating,
-            };
-          })
-          .sort((a, b) => {
-            if (b.consultations !== a.consultations) return b.consultations - a.consultations;
-            return (b.rating || 0) - (a.rating || 0);
-          })
-          .slice(0, 4)
-          .map((item, index) => ({ ...item, rank: index + 1 }));
-
-        setRecentRequests(nextRecentRequests);
-        setTopAttorneys(nextTopAttorneys);
-      } catch (error) {
-        console.error('[admin-dashboard] queue/top attorneys load failed', error);
-        setRecentRequests([]);
-        setTopAttorneys([]);
-      }
+      setTopAttorneys(nextTopAttorneys);
     };
 
     const detachLiveRefresh = attachLiveDataRefresh({
@@ -1418,7 +1456,7 @@ const RequestItem = ({ queuePosition, name, atty, law, status, bookedLabel, age 
   </div>
 );
 
-const AttorneyItem = ({ rank, name, law, consultations, rating }) => (
+const AttorneyItem = ({ rank, name, law, consultations, inQueue = 0, rating }) => (
   <div className="item-row">
     <div className="rank-badge">#{rank}</div>
     <div style={{ flex: 1 }}>
@@ -1426,9 +1464,8 @@ const AttorneyItem = ({ rank, name, law, consultations, rating }) => (
       <p className="item-subtitle">{law}</p>
     </div>
     <div className="item-meta-right">
-      <p className="item-title">
-        {consultations} consult{consultations === 1 ? '' : 's'}
-      </p>
+      <p className="item-title">{consultations} completed</p>
+      {inQueue > 0 ? <p className="item-subtitle">{inQueue} in queue now</p> : null}
       <div className="rating-star">
         {rating != null ? (
           <>
