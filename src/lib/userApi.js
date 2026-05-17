@@ -689,6 +689,33 @@ export async function adminCreateWalkInClient({ email, password, fullName }) {
 }
 
 /**
+ * Admin: promote an existing Client user to Admin (profile + auth metadata).
+ */
+export async function adminPromoteClientToAdmin({ userId }) {
+  const session = (await supabase.auth.getSession())?.data?.session
+  if (!session?.access_token) {
+    throw new Error('You must be signed in as admin to promote a user.')
+  }
+  const id = String(userId || '').trim()
+  if (!id) {
+    throw new Error('User id is required.')
+  }
+  const baseUrl = resolvePaymentApiBaseUrl()
+  const response = await fetch(`${baseUrl}/admin/clients/${encodeURIComponent(id)}/promote-to-admin`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+    },
+  })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    throw new Error(payload?.error || payload?.message || `Request failed (${response.status}).`)
+  }
+  return payload
+}
+
+/**
  * Admin: create an Attorney auth user (email confirmed) + profile via Render backend.
  */
 export async function adminCreateWalkInAttorney({ email, password, fullName, specialty }) {

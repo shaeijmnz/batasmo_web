@@ -2,11 +2,11 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   LayoutDashboard, Users, Scale, FileText,
   BarChart3, Settings, LogOut, Menu, Search,
-  Filter, Download, Mail, Phone, Calendar, MoreVertical, Plus, X
+  Filter, Download, Mail, Phone, Calendar, Plus, X, Shield
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { readAdminPageCache, writeAdminPageCache } from '../lib/adminPageCache';
-import { adminCreateWalkInClient } from '../lib/userApi';
+import { adminCreateWalkInClient, adminPromoteClientToAdmin } from '../lib/userApi';
 import './AdminTheme.css';
 import './clients.css';
 
@@ -42,6 +42,10 @@ const Clients = ({ onNavigate }) => {
   const [addFormError, setAddFormError] = useState('');
   const [createdCredentials, setCreatedCredentials] = useState(null);
   const [copyFeedback, setCopyFeedback] = useState('');
+  const [promoteTarget, setPromoteTarget] = useState(null);
+  const [promoteSubmitting, setPromoteSubmitting] = useState(false);
+  const [promoteError, setPromoteError] = useState('');
+  const [promoteSuccess, setPromoteSuccess] = useState('');
 
   const navigate = (path) => {
     const pageMap = {
@@ -218,6 +222,30 @@ const Clients = ({ onNavigate }) => {
       setCopyFeedback('Copied to clipboard');
     } catch {
       setCopyFeedback('Could not copy — select and copy manually');
+    }
+  };
+
+  const closePromoteModal = () => {
+    if (promoteSubmitting) return;
+    setPromoteTarget(null);
+    setPromoteError('');
+  };
+
+  const handlePromoteToAdmin = async () => {
+    if (!promoteTarget?.id || promoteSubmitting) return;
+    setPromoteSubmitting(true);
+    setPromoteError('');
+    try {
+      const result = await adminPromoteClientToAdmin({ userId: promoteTarget.id });
+      setPromoteTarget(null);
+      setPromoteSuccess(
+        `${result?.fullName || promoteTarget.name} now has Admin access. They should sign out and sign in again.`,
+      );
+      await loadClients();
+    } catch (err) {
+      setPromoteError(err?.message || 'Could not promote user to Admin.');
+    } finally {
+      setPromoteSubmitting(false);
     }
   };
 
@@ -406,6 +434,49 @@ const Clients = ({ onNavigate }) => {
             </div>
           ) : null}
 
+          {promoteTarget ? (
+            <div
+              className="clients-modal-overlay"
+              role="presentation"
+              onMouseDown={(e) => {
+                if (e.target === e.currentTarget) closePromoteModal();
+              }}
+            >
+              <div
+                className="clients-modal clients-modal--promote"
+                role="dialog"
+                aria-labelledby="promote-admin-title"
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <div className="clients-modal__header">
+                  <h3 id="promote-admin-title">Promote to Admin</h3>
+                  <button
+                    type="button"
+                    className="clients-modal__close"
+                    disabled={promoteSubmitting}
+                    onClick={closePromoteModal}
+                    aria-label="Close"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+                <p className="clients-modal__hint">
+                  <strong>{promoteTarget.name}</strong> ({promoteTarget.email}) will get full Admin Dashboard access.
+                  They will no longer appear in the Clients list. Ask them to sign out and sign in after promotion.
+                </p>
+                {promoteError ? <p className="clients-modal__error">{promoteError}</p> : null}
+                <div className="clients-modal__actions">
+                  <button type="button" className="btn-secondary" disabled={promoteSubmitting} onClick={closePromoteModal}>
+                    Cancel
+                  </button>
+                  <button type="button" className="add-btn clients-promote-confirm" disabled={promoteSubmitting} onClick={handlePromoteToAdmin}>
+                    {promoteSubmitting ? 'Promoting…' : 'Confirm promotion'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           {/* Stats Grid */}
           <div className="stats-grid">
             {clientStats.map((stat, index) => (
@@ -438,6 +509,14 @@ const Clients = ({ onNavigate }) => {
             <div className="list-header">
               <h3>All Clients ({filteredClients.length})</h3>
             </div>
+            {promoteSuccess ? (
+              <p className="clients-success-message">
+                {promoteSuccess}
+                <button type="button" className="clients-success-dismiss" onClick={() => setPromoteSuccess('')}>
+                  Dismiss
+                </button>
+              </p>
+            ) : null}
             {loadError ? <p className="clients-info-message">{loadError}</p> : null}
             {loading ? <p className="clients-info-message">Loading clients...</p> : null}
             <div className="client-stack">
@@ -468,7 +547,19 @@ const Clients = ({ onNavigate }) => {
                         <span className="count">{client.consultations}</span>
                         <span className="label">Consultations</span>
                       </div>
-                      <MoreVertical size={18} className="more-icon" />
+                      <button
+                        type="button"
+                        className="clients-promote-btn"
+                        title="Promote to Admin"
+                        disabled={Boolean(promoteSubmitting)}
+                        onClick={() => {
+                          setPromoteError('');
+                          setPromoteTarget(client);
+                        }}
+                      >
+                        <Shield size={16} />
+                        Promote to Admin
+                      </button>
                     </div>
                   </div>
                 </div>

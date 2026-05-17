@@ -847,6 +847,122 @@ const supabaseAdminCreateWalkInClient = async ({ email, password, fullName }) =>
 }
 
 /**
+ * Promote an existing Client profile (and auth metadata) to Admin.
+ */
+const supabaseAdminPromoteClientToAdmin = async ({ targetUserId }) => {
+  const userId = String(targetUserId || '').trim()
+  if (!userId) {
+    throw new Error('User id is required.')
+  }
+
+  const profile = await supabaseSelectSingle({
+    table: 'profiles',
+    query: new URLSearchParams({ id: `eq.${userId}` }).toString(),
+  })
+  if (!profile) {
+    throw new Error('User not found.')
+  }
+
+  const role = String(profile.role || '').trim()
+  if (role === 'Admin') {
+    throw new Error('This user is already an Admin.')
+  }
+  if (role === 'Attorney') {
+    throw new Error('Attorney accounts cannot be promoted from Clients. Manage them under Attorneys.')
+  }
+  if (role !== 'Client') {
+    throw new Error(`Cannot promote user with role "${role || 'unknown'}".`)
+  }
+
+  const nowIso = new Date().toISOString()
+  const profileRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/profiles?${new URLSearchParams({ id: `eq.${userId}` }).toString()}`,
+    {
+      method: 'PATCH',
+      headers: supabaseRestHeaders(),
+      body: JSON.stringify({
+        role: 'Admin',
+        updated_at: nowIso,
+      }),
+    },
+  )
+  const profilePayload = await profileRes.json().catch(() => null)
+  if (!profileRes.ok) {
+    throw new Error(
+      profilePayload?.message ||
+        profilePayload?.error ||
+        `Failed to update profile role (${profileRes.status}).`,
+    )
+  }
+
+  const authGetRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    },
+  })
+  const authUser = await authGetRes.json().catch(() => null)
+  if (!authGetRes.ok) {
+    console.warn('[admin promote] auth user fetch failed', authUser)
+    throw new Error(
+      authUser?.msg ||
+        authUser?.message ||
+        'Profile was updated but loading the auth user failed. Check Supabase logs.',
+    )
+  }
+
+  const existingMeta = authUser?.user_metadata || authUser?.raw_user_meta_data || {}
+  const authPatchRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
+    method: 'PUT',
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      user_metadata: {
+        ...existingMeta,
+        role: 'Admin',
+        full_name: existingMeta.full_name || profile.full_name || profile.email || 'Admin',
+      },
+    }),
+  })
+  const authPatchPayload = await authPatchRes.json().catch(() => null)
+  if (!authPatchRes.ok) {
+    console.warn('[admin promote] auth metadata update failed', authPatchPayload)
+    throw new Error(
+      authPatchPayload?.msg ||
+        authPatchPayload?.message ||
+        'Profile role was set to Admin but updating login metadata failed. Ask the user to sign out and back in, or retry.',
+    )
+  }
+
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/notifications`, {
+      method: 'POST',
+      headers: supabaseRestHeaders(),
+      body: JSON.stringify({
+        user_id: userId,
+        title: 'Admin access granted',
+        body: 'Your account was promoted to BatasMo Admin. Sign out and sign in again to open the Admin Dashboard.',
+        type: 'admin_update',
+        is_read: false,
+        created_at: nowIso,
+      }),
+    })
+  } catch (notifyErr) {
+    console.warn('[admin promote] notification insert failed', notifyErr)
+  }
+
+  return {
+    userId,
+    email: profile.email || authUser?.email || '',
+    fullName: profile.full_name || existingMeta.full_name || 'Admin',
+    role: 'Admin',
+  }
+}
+
+/**
  * Create a Supabase Auth user (email pre-confirmed) + Attorney profile rows.
  */
 const supabaseAdminCreateWalkInAttorney = async ({ email, password, fullName, specialty }) => {
@@ -1954,6 +2070,41 @@ app.get('/admin/clients/:clientId/active-appointments', async (req, res) => {
         : msg.includes('Bearer')
           ? 401
           : 500
+    return res.status(status).json({ error: msg })
+  }
+})
+
+// Promote an existing Client account to Admin (profile + auth metadata).
+app.post('/admin/clients/:userId/promote-to-admin', async (req, res) => {
+  try {
+    requireSupabaseServiceConfig()
+
+    const authHeader = String(req.headers.authorization || '').trim()
+    const jwt = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
+    if (!jwt) {
+      return res.status(401).json({ error: 'Authorization Bearer token is required.' })
+    }
+
+    await verifyCallerIsAdmin(jwt)
+
+    const userId = String(req.params?.userId || '').trim()
+    const result = await supabaseAdminPromoteClientToAdmin({ targetUserId: userId })
+    return res.status(200).json(result)
+  } catch (error) {
+    const msg = error?.message || 'Unable to promote user to Admin.'
+    const lower = msg.toLowerCase()
+    const status =
+      msg.includes('Only Admin') || msg.includes('Invalid') || msg.includes('session')
+        ? 403
+        : msg.includes('Bearer')
+          ? 401
+          : lower.includes('not found') ||
+              lower.includes('already an admin') ||
+              lower.includes('cannot promote') ||
+              lower.includes('attorney accounts') ||
+              lower.includes('user id is required')
+            ? 400
+            : 500
     return res.status(status).json({ error: msg })
   }
 })

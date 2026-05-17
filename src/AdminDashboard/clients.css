@@ -126,8 +126,62 @@
 .count-group { text-align: center; }
 .count-group .count { display: block; font-size: 1.2rem; font-weight: 700; color: var(--ui-text-primary); }
 .count-group .label { font-size: 0.7rem; color: var(--ui-text-secondary); }
-.more-icon { color: var(--ui-text-secondary); cursor: pointer; transition: color 0.3s ease; }
-.more-icon:hover { color: var(--ui-accent); }
+.clients-promote-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(21, 34, 56, 0.2);
+  background: #fff;
+  color: #152238;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+  white-space: nowrap;
+}
+
+.clients-promote-btn:hover:not(:disabled) {
+  background: rgba(21, 34, 56, 0.06);
+  border-color: #152238;
+  transform: translateY(-1px);
+}
+
+.clients-promote-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.clients-promote-confirm {
+  background: linear-gradient(135deg, #152238 0%, #1e3354 100%);
+}
+
+.clients-success-message {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+  font-size: 0.88rem;
+}
+
+.clients-success-dismiss {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: #047857;
+  font-weight: 700;
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
 
 .client-stack {
   max-height: none;
