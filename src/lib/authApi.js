@@ -26,7 +26,10 @@ const normalizeRole = (role) => {
 export async function checkEmailLockout(email) {
   try {
     const { data } = await supabase.rpc('check_login_lockout', { user_email: email })
-    return Number(data) || 0
+    if (typeof data === 'boolean') {
+      return data ? 600 : 0
+    }
+    return Math.max(0, Math.floor(Number(data) || 0))
   } catch {
     return 0
   }

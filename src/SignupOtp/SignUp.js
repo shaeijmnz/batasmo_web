@@ -192,8 +192,9 @@ function SignUp({ onNavigate, onEmailChange }) {
     setErrors({});
 
     try {
+      const normalizedEmail = String(form.email || '').trim().toLowerCase();
       const result = await signUpWithEmail({
-        email: form.email.trim(),
+        email: normalizedEmail,
         password: form.password,
         fullName: form.fullName.trim(),
         role: 'Client',
@@ -206,7 +207,7 @@ function SignUp({ onNavigate, onEmailChange }) {
         preferredOtpChannel: otpDelivery,
       });
 
-      localStorage.setItem('batasmo_pending_otp_email', form.email.trim());
+      localStorage.setItem('batasmo_pending_otp_email', normalizedEmail);
       localStorage.setItem('batasmo_pending_otp_role', 'Client');
       localStorage.setItem(PENDING_OTP_CHANNEL_KEY, otpDelivery);
       localStorage.setItem(PENDING_SMS_PHONE_KEY, form.contact.trim());
@@ -216,14 +217,14 @@ function SignUp({ onNavigate, onEmailChange }) {
       try {
         sessionStorage.setItem(
           OTP_RESUME_SIGNUP_KEY,
-          JSON.stringify({ email: form.email.trim(), password: form.password }),
+          JSON.stringify({ email: normalizedEmail, password: form.password }),
         );
       } catch {
         /* ignore */
       }
 
       if (onEmailChange) {
-        onEmailChange({ email: form.email.trim(), role: 'Client', otpChannel: otpDelivery });
+        onEmailChange({ email: normalizedEmail, role: 'Client', otpChannel: otpDelivery });
       }
 
       onNavigate('otp');

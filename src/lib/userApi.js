@@ -1456,21 +1456,31 @@ export async function fetchClientNotifications(userId, options = {}) {
   if (!userId) return []
 
   const limit = Number(options?.limit || 20)
-  const [notificationsRes, appointmentsRes] = await Promise.all([
-    supabase
+  const appointmentsQuery = supabase
+    .from('appointments')
+    .select('id, title, scheduled_at, status, updated_at, attorney:attorney_id(full_name)')
+    .eq('client_id', userId)
+    .eq('status', 'rescheduled')
+    .order('updated_at', { ascending: false })
+    .limit(Number.isFinite(limit) ? limit : 20)
+
+  let notificationsRes = await supabase
+    .from('notifications')
+    .select('id, title, body, type, is_read, created_at, data')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(Number.isFinite(limit) ? limit : 20)
+
+  if (notificationsRes.error && isMissingColumnError(notificationsRes.error, 'data')) {
+    notificationsRes = await supabase
       .from('notifications')
-      .select('id, title, body, type, is_read, created_at, data')
+      .select('id, title, body, type, is_read, created_at')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
-      .limit(Number.isFinite(limit) ? limit : 20),
-    supabase
-      .from('appointments')
-      .select('id, title, scheduled_at, status, updated_at, attorney:attorney_id(full_name)')
-      .eq('client_id', userId)
-      .eq('status', 'rescheduled')
-      .order('updated_at', { ascending: false })
-      .limit(Number.isFinite(limit) ? limit : 20),
-  ])
+      .limit(Number.isFinite(limit) ? limit : 20)
+  }
+
+  const [appointmentsRes] = await Promise.all([appointmentsQuery])
 
   if (notificationsRes.error) throw notificationsRes.error
   if (appointmentsRes.error) throw appointmentsRes.error
