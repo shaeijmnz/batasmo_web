@@ -5,22 +5,18 @@ import {
   deleteAppointmentMessage,
   fetchAppointmentMessages,
   fetchClientNotifications,
-  fetchConsultationFeedback,
   fetchClientChatEligibleAppointments,
   getSignedUrlForAppointmentMessage,
   isConsultationChatActiveStatus,
   sendAppointmentAttachment,
   sendAppointmentMessage,
   subscribeToClientNotifications,
-  submitConsultationFeedback,
   subscribeToAppointmentStatus,
   subscribeToAppointmentMessages,
   subscribeToConsultationRoomStatus,
   getOrCreateVideoMeeting,
   getVideoSdkToken,
-  fetchConsultationTranscriptForAppointment,
 } from '../lib/userApi';
-import ConsultationSummaryView from '../components/ConsultationSummaryView';
 const VideoCallModal = lazy(() => import('../components/VideoCallModal'));
 
 const ATTORNEY_AVATAR_BG = 'var(--ui-accent)';
@@ -69,21 +65,14 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
   const [isClosed, setIsClosed] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [signedUrlsByMessageId, setSignedUrlsByMessageId] = useState({});
-  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
-  const [feedbackRating, setFeedbackRating] = useState(0);
-  const [feedbackComment, setFeedbackComment] = useState('');
-  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
-  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
-  const [feedbackError, setFeedbackError] = useState('');
-  const [summaryText, setSummaryText] = useState('');
-  const [summaryView, setSummaryView] = useState(false);
-  const [summaryLoading, setSummaryLoading] = useState(false);
   const [timeWarningPopup, setTimeWarningPopup] = useState(null);
   const [videoCall, setVideoCall] = useState(null);
   const [videoCallLoading, setVideoCallLoading] = useState(false);
   const [videoCallError, setVideoCallError] = useState('');
   const [incomingCallData, setIncomingCallData] = useState(null);
   const videoCallRef = useRef(null);
+  const sessionWasActiveRef = useRef(false);
+  const lastAppointmentRef = useRef('');
   const messagesEndRef = useRef(null);
   const imagePickerRef = useRef(null);
   const filePickerRef = useRef(null);
@@ -121,61 +110,6 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
       oscillator.stop(now + 0.3);
     } catch {
       // Ignore audio cue failures so popup still appears.
-    }
-  };
-
-  const syncClosedSessionFeedbackState = async (appointmentId, options = {}) => {
-    const openModalWhileLoading = options.openModalWhileLoading !== false;
-
-    if (openModalWhileLoading) {
-      setFeedbackSubmitted(false);
-      setFeedbackModalOpen(true);
-      setFeedbackError('');
-    }
-
-    try {
-      const feedbackState = await fetchConsultationFeedback(appointmentId);
-      if (feedbackState.submitted) {
-        setFeedbackRating(Number(feedbackState.rating || 0));
-        setFeedbackComment(String(feedbackState.comment || ''));
-        setFeedbackSubmitted(true);
-        setFeedbackModalOpen(true);
-        setFeedbackError('');
-      } else {
-        setFeedbackSubmitted(false);
-        setFeedbackModalOpen(true);
-        setFeedbackError('');
-      }
-    } catch (error) {
-      // Keep the feedback modal open so the client can still rate and submit.
-      setFeedbackSubmitted(false);
-      setFeedbackModalOpen(true);
-      setFeedbackError('Please submit your feedback to finish this consultation.');
-      setLoadError(error.message || 'Unable to load feedback status.');
-    }
-
-    // Best-effort: prefetch attorney's summary so "View Summary" button can
-    // surface immediately on the feedback modal.
-    try {
-      const transcript = await fetchConsultationTranscriptForAppointment(appointmentId);
-      setSummaryText(String(transcript?.attorneyConsultationSummary || ''));
-    } catch {
-      // Keep modal usable even if transcript fetch fails.
-    }
-  };
-
-  const handleViewSummary = async () => {
-    if (!activeAppointmentId) return;
-    setSummaryView(true);
-    if (summaryText) return;
-    try {
-      setSummaryLoading(true);
-      const transcript = await fetchConsultationTranscriptForAppointment(activeAppointmentId);
-      setSummaryText(String(transcript?.attorneyConsultationSummary || ''));
-    } catch (error) {
-      setFeedbackError(error.message || 'Unable to load the attorney summary.');
-    } finally {
-      setSummaryLoading(false);
     }
   };
 
@@ -245,13 +179,7 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
       setMessages([]);
       setIsClosed(false);
       setSignedUrlsByMessageId({});
-      setFeedbackModalOpen(false);
-      setFeedbackRating(0);
-      setFeedbackComment('');
-      setFeedbackSubmitted(false);
-      setFeedbackError('');
-      setSummaryText('');
-      setSummaryView(false);
+      sessionWasActiveRef.current = false;
       return undefined;
     }
 
@@ -276,10 +204,6 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
           }
         }
 
-        if (response.isClosed) {
-          await syncClosedSessionFeedbackState(activeAppointmentId);
-          if (!isMounted) return;
-        }
       } catch (error) {
         if (!isMounted) return;
         setMessages([]);
@@ -296,9 +220,25 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
   }, [activeAppointmentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!activeAppointmentId || !isClosed) return;
-    syncClosedSessionFeedbackState(activeAppointmentId);
-  }, [activeAppointmentId, isClosed]);
+    if (activeAppointmentId !== lastAppointmentRef.current) {
+      lastAppointmentRef.current = activeAppointmentId;
+      sessionWasActiveRef.current = false;
+    }
+    if (!activeAppointmentId) return;
+
+    if (!isClosed) {
+      sessionWasActiveRef.current = true;
+      return;
+    }
+
+    if (!sessionWasActiveRef.current) return;
+
+    sessionWasActiveRef.current = false;
+    videoCallRef.current = null;
+    setVideoCall(null);
+    setIncomingCallData(null);
+    onNavigate('home-logged');
+  }, [activeAppointmentId, isClosed, onNavigate]);
 
   useEffect(() => {
     if (!activeAppointmentId) return undefined;
@@ -307,9 +247,6 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
       activeAppointmentId,
       async ({ isClosed, videoMeetingId, consultationRoomId }) => {
         setIsClosed(Boolean(isClosed));
-        if (isClosed) {
-          await syncClosedSessionFeedbackState(activeAppointmentId);
-        }
 
         // Auto-open when attorney starts video (same meetingId for both parties)
         if (videoMeetingId && consultationRoomId && !videoCallRef.current) {
@@ -383,8 +320,6 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
       if (isConsultationChatActiveStatus(status)) return;
 
       setIsClosed(true);
-
-      await syncClosedSessionFeedbackState(activeAppointmentId);
     });
 
     return () => {
@@ -568,34 +503,6 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
       setLoadError(error.message || 'Unable to delete message.');
     } finally {
       setDeletingMessageId('');
-    }
-  };
-
-  const handleFeedbackSubmit = async () => {
-    if (!activeAppointmentId || feedbackSubmitting) return;
-    if (feedbackRating < 1 || feedbackRating > 5) {
-      setFeedbackError('Please select a star rating before submitting feedback.');
-      return;
-    }
-
-    try {
-      setFeedbackSubmitting(true);
-      setFeedbackError('');
-      await submitConsultationFeedback({
-        appointmentId: activeAppointmentId,
-        rating: feedbackRating,
-        comment: feedbackComment,
-      });
-      setFeedbackSubmitted(true);
-      setFeedbackModalOpen(false);
-      setLoadError('');
-      onNavigate('home-logged');
-    } catch (error) {
-      const message = error.message || 'Unable to submit feedback.';
-      setLoadError(message);
-      setFeedbackError(message);
-    } finally {
-      setFeedbackSubmitting(false);
     }
   };
 
@@ -910,104 +817,6 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
           )}
         </form>
       </div>
-
-      {feedbackModalOpen ? (
-        <div className="cr-feedback-overlay">
-          <div className="cr-feedback-modal" role="dialog" aria-modal="true">
-            {summaryView ? (
-              <>
-                <h2>Attorney Summary</h2>
-                <p className="cr-feedback-subtitle">
-                  Summary your attorney left for this consultation.
-                </p>
-                <div className="cr-feedback-summary">
-                  {summaryLoading ? (
-                    <p className="cr-feedback-summary__placeholder">Loading…</p>
-                  ) : summaryText ? (
-                    <ConsultationSummaryView summary={summaryText} />
-                  ) : (
-                    <p className="cr-feedback-summary__placeholder">
-                      Your attorney hasn&apos;t added a session summary yet. Check back later in Logs.
-                    </p>
-                  )}
-                </div>
-                <div className="cr-feedback-actions">
-                  <button
-                    type="button"
-                    className="cr-feedback-secondary"
-                    onClick={() => setSummaryView(false)}
-                  >
-                    Back
-                  </button>
-                </div>
-              </>
-            ) : !feedbackSubmitted ? (
-              <>
-                <h2>Consultation Ended</h2>
-                <p className="cr-feedback-subtitle">Please rate your attorney consultation experience.</p>
-                <div className="cr-feedback-stars" aria-label="Rate attorney">
-                  {[1, 2, 3, 4, 5].map((value) => (
-                    <button
-                      key={value}
-                      type="button"
-                      className={`cr-feedback-star ${feedbackRating >= value ? 'cr-feedback-star--active' : ''}`}
-                      onClick={() => setFeedbackRating(value)}
-                    >
-                      ★
-                    </button>
-                  ))}
-                </div>
-                <textarea
-                  className="cr-feedback-input"
-                  rows="4"
-                  placeholder="Share your feedback (optional)"
-                  value={feedbackComment}
-                  onChange={(event) => setFeedbackComment(event.target.value)}
-                />
-                {feedbackError ? <p className="cr-feedback-error">{feedbackError}</p> : null}
-                <div className="cr-feedback-actions">
-                  <button
-                    type="button"
-                    className="cr-feedback-secondary"
-                    onClick={handleViewSummary}
-                  >
-                    View attorney summary
-                  </button>
-                  <button
-                    type="button"
-                    className="cr-feedback-submit"
-                    onClick={handleFeedbackSubmit}
-                    disabled={feedbackSubmitting || feedbackRating < 1}
-                  >
-                    {feedbackSubmitting ? 'Submitting...' : 'Submit Feedback'}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <h2>Thank You</h2>
-                <p className="cr-feedback-subtitle">Your feedback has been submitted successfully.</p>
-                <div className="cr-feedback-actions">
-                  <button
-                    type="button"
-                    className="cr-feedback-secondary"
-                    onClick={handleViewSummary}
-                  >
-                    View attorney summary
-                  </button>
-                  <button
-                    type="button"
-                    className="cr-feedback-return"
-                    onClick={() => onNavigate('home-logged')}
-                  >
-                    Go to Dashboard
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      ) : null}
 
       {timeWarningPopup ? (
         <div className="cr-time-warning-overlay" onClick={() => setTimeWarningPopup(null)}>

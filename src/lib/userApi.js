@@ -1459,7 +1459,7 @@ export async function fetchClientNotifications(userId, options = {}) {
   const [notificationsRes, appointmentsRes] = await Promise.all([
     supabase
       .from('notifications')
-      .select('id, title, body, type, is_read, created_at')
+      .select('id, title, body, type, is_read, created_at, data')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(Number.isFinite(limit) ? limit : 20),
@@ -1475,15 +1475,21 @@ export async function fetchClientNotifications(userId, options = {}) {
   if (notificationsRes.error) throw notificationsRes.error
   if (appointmentsRes.error) throw appointmentsRes.error
 
-  const storedNotifications = (notificationsRes.data || []).map((item) => ({
-    id: item.id,
-    type: item.type || 'general',
-    title: item.title || 'Notification',
-    desc: item.body || '',
-    time: formatNotificationTimestamp(item.created_at),
-    read: Boolean(item.is_read),
-    createdAt: item.created_at || null,
-  }))
+  const storedNotifications = (notificationsRes.data || []).map((item) => {
+    const payload = item.data && typeof item.data === 'object' ? item.data : {}
+    const appointmentId =
+      payload.appointment_id || payload.appointmentId || payload.appointment || null
+    return {
+      id: item.id,
+      type: item.type || 'general',
+      title: item.title || 'Notification',
+      desc: item.body || '',
+      time: formatNotificationTimestamp(item.created_at),
+      read: Boolean(item.is_read),
+      createdAt: item.created_at || null,
+      appointmentId: appointmentId ? String(appointmentId) : null,
+    }
+  })
 
   const derivedRescheduleNotifications = (appointmentsRes.data || []).map((appointment) => {
     const scheduled = normalizeDateTimeForUi(appointment.scheduled_at)
