@@ -14,8 +14,11 @@ import {
   signOutUser,
 } from '../lib/userApi';
 import { fetchPaidNotarialRequests, notifyClientNotarialStatusUpdate } from '../lib/adminApi';
+import { attachLiveDataRefresh } from '../lib/liveDataRefresh';
 import './AdminTheme.css';
 import './dashboard.css';
+
+const ACTIVE_QUEUE_STATUSES = ['pending', 'confirmed', 'rescheduled', 'started'];
 
 const formatDateTimeForUi = (value) => {
   const parsed = value ? new Date(value) : null;
@@ -290,122 +293,130 @@ const Dashboard = ({ onNavigate }) => {
     let isMounted = true;
 
     const loadQueueAndTopAttorneys = async () => {
+      if (!isMounted) return;
+
       try {
-        const [appointmentsQueueRes, feedbackRes, completedAppointmentsRes] = await Promise.all([
-          supabase
-            .from('appointments')
-            .select('id, title, status, scheduled_at, client:client_id(full_name), attorney:attorney_id(full_name)')
-            .in('status', ['pending', 'confirmed', 'rescheduled', 'started', 'in_progress', 'active'])
-            .order('scheduled_at', { ascending: true })
-            .limit(8),
-          supabase
-            .from('consultation_feedback')
-            .select('attorney_id, rating, attorney:attorney_id(full_name)')
-            .order('created_at', { ascending: false }),
-          supabase
-            .from('appointments')
-            .select('attorney_id, status')
-            .eq('status', 'completed'),
-        ]);
+        const [appointmentsQueueRes, completedAppointmentsRes, attorneyProfilesRes, feedbackRes] =
+          await Promise.all([
+            supabase
+              .from('appointments')
+              .select(
+                'id, title, status, scheduled_at, created_at, client:client_id(full_name), attorney:attorney_id(full_name)',
+              )
+              .in('status', ACTIVE_QUEUE_STATUSES)
+              .order('created_at', { ascending: true })
+              .limit(8),
+            supabase.from('appointments').select('attorney_id').eq('status', 'completed'),
+            supabase
+              .from('profiles')
+              .select('id, full_name, attorney_profiles(specialty)')
+              .eq('role', 'Attorney'),
+            supabase.from('consultation_feedback').select('attorney_id, rating'),
+          ]);
 
         if (appointmentsQueueRes.error) throw appointmentsQueueRes.error;
-        if (feedbackRes.error) throw feedbackRes.error;
         if (completedAppointmentsRes.error) throw completedAppointmentsRes.error;
+        if (attorneyProfilesRes.error) throw attorneyProfilesRes.error;
+        if (feedbackRes.error) throw feedbackRes.error;
 
-        const nextRecentRequests = (appointmentsQueueRes.data || []).map((item) => ({
+        const nextRecentRequests = (appointmentsQueueRes.data || []).map((item, index) => ({
           id: item.id,
+          queuePosition: index + 1,
           name: item.client?.full_name || 'Client',
           atty: item.attorney?.full_name || 'Attorney',
           law: item.title || 'Consultation',
           status: normalizeRequestStatusForUi(item.status),
-          age: formatScheduleLabel(item.scheduled_at),
+          bookedLabel: `Booked ${formatScheduleLabel(item.created_at)}`,
+          age: `Scheduled ${formatScheduleLabel(item.scheduled_at)}`,
         }));
 
         const completedCountByAttorney = new Map();
         (completedAppointmentsRes.data || []).forEach((row) => {
-          if (!row.attorney_id) {
-            return;
-          }
+          if (!row.attorney_id) return;
           completedCountByAttorney.set(
             row.attorney_id,
             Number(completedCountByAttorney.get(row.attorney_id) || 0) + 1,
           );
         });
 
-        const feedbackByAttorney = new Map();
+        const ratingByAttorney = new Map();
         (feedbackRes.data || []).forEach((row) => {
-          const attorneyId = row.attorney_id;
-          if (!attorneyId) {
-            return;
-          }
-          const existing = feedbackByAttorney.get(attorneyId) || {
-            name: row.attorney?.full_name || 'Attorney',
-            totalRating: 0,
-            ratingCount: 0,
-          };
-          existing.totalRating += Number(row.rating || 0);
-          existing.ratingCount += 1;
-          feedbackByAttorney.set(attorneyId, existing);
+          if (!row.attorney_id) return;
+          const existing = ratingByAttorney.get(row.attorney_id) || { total: 0, count: 0 };
+          existing.total += Number(row.rating || 0);
+          existing.count += 1;
+          ratingByAttorney.set(row.attorney_id, existing);
         });
 
-        const nextTopAttorneys = Array.from(feedbackByAttorney.entries())
-          .map(([attorneyId, item]) => ({
-            id: attorneyId,
-            name: item.name,
-            law: 'Consultation Practice',
-            consultations: Number(completedCountByAttorney.get(attorneyId) || 0),
-            rating: item.ratingCount > 0 ? Number((item.totalRating / item.ratingCount).toFixed(1)) : 0,
-          }))
+        const resolveAttorneySpecialty = (profileRow) => {
+          const nested = profileRow?.attorney_profiles;
+          if (Array.isArray(nested)) return nested[0]?.specialty || 'Legal Practice';
+          return nested?.specialty || 'Legal Practice';
+        };
+
+        const nextTopAttorneys = (attorneyProfilesRes.data || [])
+          .map((profile) => {
+            const ratingMeta = ratingByAttorney.get(profile.id);
+            const avgRating =
+              ratingMeta && ratingMeta.count > 0
+                ? Number((ratingMeta.total / ratingMeta.count).toFixed(1))
+                : null;
+            return {
+              id: profile.id,
+              name: profile.full_name || 'Attorney',
+              law: resolveAttorneySpecialty(profile),
+              consultations: Number(completedCountByAttorney.get(profile.id) || 0),
+              rating: avgRating,
+            };
+          })
           .sort((a, b) => {
-            if (b.rating !== a.rating) return b.rating - a.rating;
-            return b.consultations - a.consultations;
+            if (b.consultations !== a.consultations) return b.consultations - a.consultations;
+            return (b.rating || 0) - (a.rating || 0);
           })
           .slice(0, 4)
           .map((item, index) => ({ ...item, rank: index + 1 }));
 
-        if (!isMounted) {
-          return;
-        }
-
         setRecentRequests(nextRecentRequests);
         setTopAttorneys(nextTopAttorneys);
       } catch (error) {
-        console.error(error);
-        if (isMounted) {
-          setRecentRequests([]);
-          setTopAttorneys([]);
-        }
+        console.error('[admin-dashboard] queue/top attorneys load failed', error);
+        setRecentRequests([]);
+        setTopAttorneys([]);
       }
     };
 
-    loadQueueAndTopAttorneys();
+    const detachLiveRefresh = attachLiveDataRefresh({
+      reload: loadQueueAndTopAttorneys,
+      pollMs: 10000,
+      subscribe: (onChange) => {
+        const appointmentsChannel = supabase
+          .channel('admin-dashboard-queue-appointments')
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'appointments' },
+            () => onChange(),
+          )
+          .subscribe();
 
-    const appointmentsChannel = supabase
-      .channel('admin-dashboard-queue-appointments')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'appointments' },
-        () => {
-          loadQueueAndTopAttorneys();
-        },
-      )
-      .subscribe();
+        const feedbackChannel = supabase
+          .channel('admin-dashboard-feedback')
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'consultation_feedback' },
+            () => onChange(),
+          )
+          .subscribe();
 
-    const feedbackChannel = supabase
-      .channel('admin-dashboard-feedback')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'consultation_feedback' },
-        () => {
-          loadQueueAndTopAttorneys();
-        },
-      )
-      .subscribe();
+        return () => {
+          supabase.removeChannel(appointmentsChannel);
+          supabase.removeChannel(feedbackChannel);
+        };
+      },
+    });
 
     return () => {
       isMounted = false;
-      supabase.removeChannel(appointmentsChannel);
-      supabase.removeChannel(feedbackChannel);
+      detachLiveRefresh();
     };
   }, []);
 
@@ -1069,11 +1080,11 @@ const Dashboard = ({ onNavigate }) => {
             <section className="info-card">
               <div className="card-header">
                 <h4>Recent Requests</h4>
-                <button type="button" className="view-all" onClick={() => navigate('/requests')}>View All</button>
+                <button type="button" className="view-all" onClick={() => navigate('/consultations')}>View All</button>
               </div>
               <div className="list-stack">
                 {recentRequests.length === 0 ? (
-                  <p className="item-subtitle">No upcoming scheduled consultations.</p>
+                  <p className="item-subtitle">No clients in the consultation queue yet. New bookings appear here in order (#1 = earliest booked).</p>
                 ) : (
                   recentRequests.map((item) => (
                     <RequestItem key={item.id} {...item} />
@@ -1089,7 +1100,7 @@ const Dashboard = ({ onNavigate }) => {
               </div>
               <div className="list-stack">
                 {topAttorneys.length === 0 ? (
-                  <p className="item-subtitle">No attorney ratings yet.</p>
+                  <p className="item-subtitle">No attorneys registered yet.</p>
                 ) : (
                   topAttorneys.map((item) => (
                     <AttorneyItem key={item.id} {...item} />
@@ -1389,17 +1400,19 @@ const CompletedRequestsModal = ({ consultations, notaryRequests, onOpenDocument,
   </div>
 );
 
-const RequestItem = ({ name, atty, law, status, age }) => (
+const RequestItem = ({ queuePosition, name, atty, law, status, bookedLabel, age }) => (
   <div className="item-row">
+    <div className="queue-pos-badge">#{queuePosition}</div>
     <div>
       <p className="item-title">{name}</p>
       <p className="item-subtitle">{atty}</p>
       <p className="item-subtitle">{law}</p>
     </div>
     <div className="item-meta-right">
-      <div className={`status-tag ${status.toLowerCase().replace(" ", "")}`}>
+      <div className={`status-tag ${status.toLowerCase().replace(' ', '')}`}>
         {status}
       </div>
+      <p className="item-subtitle">{bookedLabel}</p>
       <p className="item-subtitle">{age}</p>
     </div>
   </div>
@@ -1413,9 +1426,17 @@ const AttorneyItem = ({ rank, name, law, consultations, rating }) => (
       <p className="item-subtitle">{law}</p>
     </div>
     <div className="item-meta-right">
-      <p className="item-title">{consultations}</p>
+      <p className="item-title">
+        {consultations} consult{consultations === 1 ? '' : 's'}
+      </p>
       <div className="rating-star">
-        <Star size={12} fill="#eab308" color="#eab308" /> {rating}
+        {rating != null ? (
+          <>
+            <Star size={12} fill="#eab308" color="#eab308" /> {rating}
+          </>
+        ) : (
+          <span className="item-subtitle">No ratings yet</span>
+        )}
       </div>
     </div>
   </div>

@@ -1,33 +1,57 @@
--- Clear consultation queue (appointments + chat) but KEEP transaction rows.
--- Run once in Supabase SQL Editor (BatasMo project, not auth-lab).
---
--- After this:
---   - Attorney/client "Consultation Queue" dashboards are empty
---   - Transaction History still shows past payments (appointment_id set to NULL)
+-- Clear ACTIVE consultation queue only (test / upcoming bookings).
+-- KEEPS: status = 'completed' (admin reports, logs) + all transaction rows.
+-- Run the ENTIRE script at once in Supabase SQL Editor (BatasMo project).
 
 begin;
 
--- Detach transactions so appointments can be removed without FK errors.
-update public.transactions
+-- 1) Detach transactions for queue appointments only.
+update public.transactions t
 set appointment_id = null,
     updated_at = now()
-where appointment_id is not null;
+where t.appointment_id in (
+  select a.id
+  from public.appointments a
+  where a.status is distinct from 'completed'::appointment_status
+);
 
-delete from public.messages
-where room_id in (select id from public.consultation_rooms);
+-- 2) Remove chat for queue appointments only.
+delete from public.messages m
+where m.room_id in (
+  select cr.id
+  from public.consultation_rooms cr
+  where cr.appointment_id in (
+    select a.id
+    from public.appointments a
+    where a.status is distinct from 'completed'::appointment_status
+  )
+);
 
-delete from public.consultation_rooms;
+delete from public.consultation_rooms cr
+where cr.appointment_id in (
+  select a.id
+  from public.appointments a
+  where a.status is distinct from 'completed'::appointment_status
+);
 
+-- 3) Feedback for queue appointments (skip if table missing).
 do $$
 begin
   if exists (
-    select 1 from information_schema.tables
-    where table_schema = 'public' and table_name = 'consultation_feedback'
+    select 1
+    from information_schema.tables
+    where table_schema = 'public'
+      and table_name = 'consultation_feedback'
   ) then
-    execute 'delete from public.consultation_feedback';
+    delete from public.consultation_feedback f
+    where f.appointment_id in (
+      select a.id
+      from public.appointments a
+      where a.status is distinct from 'completed'::appointment_status
+    );
   end if;
 end $$;
 
+-- 4) Queue-related notifications.
 delete from public.notifications
 where lower(coalesce(type, '')) in (
   'booking', 'consultation', 'payment', 'reschedule', 'reminder',
@@ -39,16 +63,23 @@ where lower(coalesce(type, '')) in (
    or body ilike '%[noshow:%'
    or body ilike '%[admnoshow:%';
 
-delete from public.appointments;
-
-update public.availability_slots
+-- 5) Free slots before deleting appointments.
+update public.availability_slots s
 set is_booked = false,
     updated_at = now()
-where is_booked = true;
+where s.id in (
+  select distinct a.slot_id
+  from public.appointments a
+  where a.status is distinct from 'completed'::appointment_status
+    and a.slot_id is not null
+);
+
+-- 6) Remove queue appointments (completed stay for reports).
+delete from public.appointments a
+where a.status is distinct from 'completed'::appointment_status;
 
 commit;
 
--- Sanity (run separately):
--- select count(*) from public.appointments;
--- select count(*) from public.transactions;
--- select count(*) from public.transactions where appointment_id is not null;
+-- Sanity (run separately after success):
+-- select status, count(*) from public.appointments group by status;
+-- select count(*) as completed_kept from public.appointments where status = 'completed';
