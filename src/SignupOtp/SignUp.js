@@ -9,16 +9,15 @@ import {
 } from '../lib/authApi';
 import {
   getPasswordRuleChecks,
-  isValidEmail,
-  isValidPhoneNumber,
+  GMAIL_REQUIRED_MESSAGE,
+  isGmailEmail,
+  isPhilippineMobile,
   isStrongPassword,
+  NUMBERS_ONLY_MESSAGE,
+  PH_MOBILE_REQUIRED_MESSAGE,
   sanitizePhoneInput,
   VALID_PASSWORD_MESSAGE,
 } from '../lib/validators';
-
-const GMAIL_REQUIRED_MESSAGE = 'Please enter a valid Gmail address ending with @gmail.com.';
-const PH_MOBILE_REQUIRED_MESSAGE = 'Please enter a valid 11-digit Philippine mobile number (example: 09XXXXXXXXX).';
-const NUMBERS_ONLY_MESSAGE = 'Contact number must contain numbers only.';
 
 const PersonIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -98,12 +97,14 @@ function SignUp({ onNavigate, onEmailChange }) {
 
     if (!values.fullName.trim()) {
       nextErrors.fullName = 'Full name is required.';
+    } else if (values.fullName.trim().length < 2) {
+      nextErrors.fullName = 'Please enter your complete name.';
     }
 
     const normalizedEmail = String(values.email || '').trim().toLowerCase();
     if (!normalizedEmail) {
       nextErrors.email = 'Email is required.';
-    } else if (!isValidEmail(normalizedEmail) || !normalizedEmail.endsWith('@gmail.com')) {
+    } else if (!isGmailEmail(normalizedEmail)) {
       nextErrors.email = GMAIL_REQUIRED_MESSAGE;
     }
 
@@ -113,7 +114,7 @@ function SignUp({ onNavigate, onEmailChange }) {
 
     if (hasInvalidPhoneInput.contact) {
       nextErrors.contact = NUMBERS_ONLY_MESSAGE;
-    } else if (!isValidPhoneNumber(values.contact) || !/^09\d{9}$/.test(String(values.contact || ''))) {
+    } else if (!isPhilippineMobile(values.contact)) {
       nextErrors.contact = PH_MOBILE_REQUIRED_MESSAGE;
     }
 
@@ -129,30 +130,27 @@ function SignUp({ onNavigate, onEmailChange }) {
       nextErrors.confirmPassword = 'Passwords do not match.';
     }
 
-    if (!values.age.trim() || Number(values.age) < 1) {
-      nextErrors.age = 'Please enter a valid age.';
+    const parsedAge = Number(values.age);
+    if (!values.age.trim() || !Number.isFinite(parsedAge) || parsedAge < 1 || parsedAge > 120) {
+      nextErrors.age = 'Please enter a valid age (1–120).';
     }
 
     if (!values.address.trim()) {
       nextErrors.address = 'Address is required.';
     }
 
-    const parsedAge = Number(values.age);
     if (parsedAge > 0 && parsedAge < 18) {
       if (!values.guardianName.trim()) {
         nextErrors.guardianName = 'Guardian name is required for minors.';
       }
       if (hasInvalidPhoneInput.guardianContact) {
         nextErrors.guardianContact = NUMBERS_ONLY_MESSAGE;
-      } else if (
-        !isValidPhoneNumber(values.guardianContact) ||
-        !/^09\d{9}$/.test(String(values.guardianContact || ''))
-      ) {
+      } else if (!isPhilippineMobile(values.guardianContact)) {
         nextErrors.guardianContact = 'Please enter a valid 11-digit guardian mobile number (09XXXXXXXXX).';
       }
     }
 
-    if (otpDelivery === 'sms' && !isValidPhoneNumber(values.contact)) {
+    if (otpDelivery === 'sms' && !isPhilippineMobile(values.contact)) {
       nextErrors.contact = PH_MOBILE_REQUIRED_MESSAGE;
     }
 

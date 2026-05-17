@@ -7,6 +7,7 @@ import {
 import { supabase } from '../lib/supabaseClient';
 import { readAdminPageCache, writeAdminPageCache } from '../lib/adminPageCache';
 import { adminCreateWalkInClient, adminDemoteAdminToClient, adminPromoteClientToAdmin } from '../lib/userApi';
+import { GMAIL_REQUIRED_MESSAGE, isGmailEmail } from '../lib/validators';
 import './AdminTheme.css';
 import './clients.css';
 
@@ -305,6 +306,10 @@ const Clients = ({ onNavigate }) => {
     const email = addEmail.trim().toLowerCase();
     if (!email) {
       setAddFormError('Email is required.');
+      return;
+    }
+    if (!isGmailEmail(email)) {
+      setAddFormError(GMAIL_REQUIRED_MESSAGE);
       return;
     }
     setAddSubmitting(true);

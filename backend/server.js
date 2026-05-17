@@ -743,9 +743,27 @@ const verifyCallerIsAdmin = async (jwt) => {
 
 const WALK_IN_PASSWORD_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
 
+const isValidEmailAddress = (email) =>
+  /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/.test(String(email || '').trim())
+
+const isGmailAddress = (email) => {
+  const normalized = String(email || '').trim().toLowerCase()
+  return isValidEmailAddress(normalized) && normalized.endsWith('@gmail.com')
+}
+
+const isStrongAccountPassword = (password) =>
+  /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/.test(String(password || ''))
+
 const generateWalkInPassword = () => {
-  const bytes = crypto.randomBytes(12)
-  return Array.from(bytes, (b) => WALK_IN_PASSWORD_CHARS[b % WALK_IN_PASSWORD_CHARS.length]).join('')
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
+  const lower = 'abcdefghjkmnpqrstuvwxyz'
+  const digits = '23456789'
+  const symbols = '!@#$%&*'
+  const pool = upper + lower + digits + symbols
+  const pick = (chars) => chars[crypto.randomInt(chars.length)]
+  const bytes = crypto.randomBytes(8)
+  const rest = Array.from(bytes, (b) => pool[b % pool.length]).join('')
+  return `${pick(upper)}${pick(lower)}${pick(digits)}${pick(symbols)}${rest}`
 }
 
 /**
@@ -758,14 +776,16 @@ const supabaseAdminCreateWalkInClient = async ({ email, password, fullName }) =>
   const displayName = String(fullName || '').trim() || 'Walk-in Client'
   let passwordWasGenerated = false
 
-  if (!normalizedEmail || !normalizedEmail.includes('@')) {
-    throw new Error('A valid email address is required.')
+  if (!isGmailAddress(normalizedEmail)) {
+    throw new Error('A valid Gmail address ending with @gmail.com is required.')
   }
   if (!safePassword) {
     safePassword = generateWalkInPassword()
     passwordWasGenerated = true
-  } else if (safePassword.length < 6) {
-    throw new Error('Password must be at least 6 characters.')
+  } else if (!passwordWasGenerated && !isStrongAccountPassword(safePassword)) {
+    throw new Error(
+      'Password must be at least 8 characters and include uppercase, lowercase, number, and symbol.',
+    )
   }
 
   const userMetadata = {
@@ -1111,11 +1131,13 @@ const supabaseAdminCreateWalkInAttorney = async ({ email, password, fullName, sp
   const displayName = String(fullName || '').trim() || 'Attorney'
   const specialtyRaw = String(specialty || '').trim()
 
-  if (!normalizedEmail || !normalizedEmail.includes('@')) {
+  if (!isValidEmailAddress(normalizedEmail)) {
     throw new Error('A valid email address is required.')
   }
-  if (safePassword.length < 6) {
-    throw new Error('Password must be at least 6 characters.')
+  if (!isStrongAccountPassword(safePassword)) {
+    throw new Error(
+      'Password must be at least 8 characters and include uppercase, lowercase, number, and symbol.',
+    )
   }
   if (!String(fullName || '').trim()) {
     throw new Error('Attorney name is required.')

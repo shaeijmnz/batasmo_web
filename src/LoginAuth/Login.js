@@ -2,7 +2,12 @@ import { useEffect, useState } from 'react';
 import './Login.css';
 import { OTP_RESUME_LOGIN_KEY, PENDING_OTP_CHANNEL_KEY, signInWithEmail } from '../lib/authApi';
 import { normalizeRole, pageFromRole } from '../lib/userApi';
-import { isValidEmail, VALID_EMAIL_MESSAGE } from '../lib/validators';
+import {
+  formatLockoutMessage,
+  isValidEmail,
+  mapLoginErrorMessage,
+  VALID_EMAIL_MESSAGE,
+} from '../lib/validators';
 
 const MailIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -108,7 +113,7 @@ function Login({ onNavigate, onAuthSuccess }) {
         if (timeRemaining > 0) {
           setLockoutSeconds(timeRemaining);
           setLockedEmail(form.email.trim().toLowerCase());
-          setErrorText(`Account temporarily locked. Try again in ${formatLockout(timeRemaining)}.`);
+          setErrorText(formatLockoutMessage(timeRemaining));
           return;
         }
       }
@@ -130,7 +135,7 @@ function Login({ onNavigate, onAuthSuccess }) {
         return;
       }
 
-      setErrorText(error.message || 'Login failed. Please try again.');
+      setErrorText(mapLoginErrorMessage(error));
     } finally {
       setIsSubmitting(false);
     }

@@ -3,11 +3,12 @@ import './ProfilePage.css';
 import { currentUserMustChangePassword, updatePasswordForCurrentUser } from '../lib/authApi';
 import { signOutUser, upsertProfile } from '../lib/userApi';
 import {
-  isValidEmail,
-  isValidPhoneNumber,
+  GMAIL_REQUIRED_MESSAGE,
+  isGmailEmail,
+  isPhilippineMobile,
+  isStrongPassword,
   sanitizePhoneInput,
-  VALID_EMAIL_MESSAGE,
-  VALID_PHONE_MESSAGE,
+  VALID_PASSWORD_MESSAGE,
 } from '../lib/validators';
 
 const ScalesIcon = ({ size = 24, color = '#f5a623' }) => (
@@ -190,13 +191,23 @@ function ProfilePage({
     e.preventDefault();
     if (!profile?.id) return;
 
-    if (!isValidEmail(info.email)) {
-      setErrorText(VALID_EMAIL_MESSAGE);
+    if (!info.fullName.trim()) {
+      setErrorText('Full name is required.');
       return;
     }
 
-    if (!isValidPhoneNumber(info.contact)) {
-      setErrorText(VALID_PHONE_MESSAGE);
+    if (!isGmailEmail(info.email)) {
+      setErrorText(GMAIL_REQUIRED_MESSAGE);
+      return;
+    }
+
+    if (!isPhilippineMobile(info.contact)) {
+      setErrorText('Please enter a valid 11-digit Philippine mobile number (09XXXXXXXXX).');
+      return;
+    }
+
+    if (!info.address.trim()) {
+      setErrorText('Address is required.');
       return;
     }
 
@@ -226,8 +237,8 @@ function ProfilePage({
     e.preventDefault();
     setPwErrorText('');
     const { newPass, confirm } = passwords;
-    if (!newPass || newPass.length < 6) {
-      setPwErrorText('New password must be at least 6 characters.');
+    if (!isStrongPassword(newPass)) {
+      setPwErrorText(VALID_PASSWORD_MESSAGE);
       return;
     }
     if (newPass !== confirm) {

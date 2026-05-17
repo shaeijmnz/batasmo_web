@@ -10,6 +10,7 @@ import {
   fetchAttorneyAvailabilitySlots,
   saveAttorneyAvailabilitySlots,
 } from '../lib/userApi';
+import { isStrongPassword, isValidEmail, VALID_EMAIL_MESSAGE, VALID_PASSWORD_MESSAGE } from '../lib/validators';
 import './AdminTheme.css';
 import './attorneys.css';
 
@@ -577,12 +578,16 @@ const Attorneys = ({ onNavigate }) => {
       setAddFormError('Email and password are required.');
       return;
     }
+    if (!isValidEmail(email)) {
+      setAddFormError(VALID_EMAIL_MESSAGE);
+      return;
+    }
     if (!fullName) {
       setAddFormError('Attorney name is required.');
       return;
     }
-    if (password.length < 6) {
-      setAddFormError('Password must be at least 6 characters.');
+    if (!isStrongPassword(password)) {
+      setAddFormError(VALID_PASSWORD_MESSAGE);
       return;
     }
 

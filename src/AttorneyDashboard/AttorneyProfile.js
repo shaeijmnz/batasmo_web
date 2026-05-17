@@ -3,8 +3,8 @@ import './AttorneyProfile.css';
 import './AttorneyTheme.css';
 import { fetchAttorneyProfile, saveAttorneyProfile, signOutUser } from '../lib/userApi';
 import {
+  isPhilippineMobile,
   isValidEmail,
-  isValidPhoneNumber,
   sanitizePhoneInput,
   VALID_EMAIL_MESSAGE,
   VALID_PHONE_MESSAGE,
@@ -103,8 +103,9 @@ export default function AttorneyProfile({ onNavigate, profile: sessionProfile, o
 
   const handleSave = async () => {
     if (!sessionProfile?.id) return;
+    if (!form.name.trim()) return setErrorText('Full name is required.');
     if (!isValidEmail(form.email)) return setErrorText(VALID_EMAIL_MESSAGE);
-    if (!isValidPhoneNumber(form.phone)) return setErrorText(VALID_PHONE_MESSAGE);
+    if (!isPhilippineMobile(form.phone)) return setErrorText(VALID_PHONE_MESSAGE);
 
     try {
       const payload = {

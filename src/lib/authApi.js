@@ -1,4 +1,14 @@
 import { supabase } from './supabaseClient'
+import {
+  isGmailEmail,
+  isPhilippineMobile,
+  isStrongPassword,
+  isValidEmail,
+  GMAIL_REQUIRED_MESSAGE,
+  PH_MOBILE_REQUIRED_MESSAGE,
+  VALID_PASSWORD_MESSAGE,
+  normalizeAuthEmail,
+} from './validators'
 
 export const PENDING_OTP_CHANNEL_KEY = 'batasmo_pending_otp_channel'
 export const PENDING_SIGNUP_USER_ID_KEY = 'batasmo_pending_signup_user_id'
@@ -35,8 +45,38 @@ export async function signUpWithEmail({
   guardianContact,
   preferredOtpChannel = 'email',
 }) {
+  const normalizedEmail = normalizeAuthEmail(email)
   const normalizedRole = normalizeRole(role)
   const otpChannel = preferredOtpChannel === 'sms' ? 'sms' : 'email'
+
+  if (!String(fullName || '').trim()) {
+    throw new Error('Full name is required.')
+  }
+  if (!isGmailEmail(normalizedEmail)) {
+    throw new Error(GMAIL_REQUIRED_MESSAGE)
+  }
+  if (!isPhilippineMobile(phone)) {
+    throw new Error(PH_MOBILE_REQUIRED_MESSAGE)
+  }
+  if (!isStrongPassword(password)) {
+    throw new Error(VALID_PASSWORD_MESSAGE)
+  }
+  const parsedAge = Number(age)
+  if (!Number.isFinite(parsedAge) || parsedAge < 1) {
+    throw new Error('Please enter a valid age.')
+  }
+  if (!String(address || '').trim()) {
+    throw new Error('Address is required.')
+  }
+  if (parsedAge < 18) {
+    if (!String(guardianName || '').trim()) {
+      throw new Error('Guardian name is required for minors.')
+    }
+    if (!isPhilippineMobile(guardianContact)) {
+      throw new Error('Please enter a valid 11-digit guardian mobile number (09XXXXXXXXX).')
+    }
+  }
+
   const normalizedSex = String(sex || '').trim().toLowerCase()
   const safeSex =
     normalizedSex === 'male' || normalizedSex === 'female' || normalizedSex === 'others'
@@ -44,7 +84,7 @@ export async function signUpWithEmail({
       : null
 
   const { data, error } = await supabase.auth.signUp({
-    email,
+    email: normalizedEmail,
     password,
     options: {
       data: {
@@ -61,7 +101,7 @@ export async function signUpWithEmail({
   if (data?.session && data.user) {
     const { error: profileError } = await supabase.from('profiles').upsert({
       id: data.user.id,
-      email,
+      email: normalizedEmail,
       full_name: fullName,
       role: normalizedRole,
       sex: safeSex,
@@ -205,7 +245,19 @@ export async function verifySignupSmsOtp({ userId, email, token }) {
 }
 
 export async function signInWithEmail({ email, password }) {
-  const normalizedEmail = String(email || '').trim().toLowerCase()
+  const normalizedEmail = normalizeAuthEmail(email)
+
+  if (!normalizedEmail || !password) {
+    throw new Error('Email and password are required.')
+  }
+  if (!isValidEmail(normalizedEmail)) {
+    throw new Error('Please enter a valid email address.')
+  }
+
+  const lockoutBefore = await checkEmailLockout(normalizedEmail)
+  if (lockoutBefore > 0) {
+    throw new Error(`LOCKOUT:${lockoutBefore}`)
+  }
 
   const { data, error } = await supabase.auth.signInWithPassword({
     email: normalizedEmail,
@@ -214,19 +266,20 @@ export async function signInWithEmail({ email, password }) {
 
   if (error) {
     const normalized = String(error.message || '').toLowerCase()
-    
-    // Check lockout only on failure
-    const lockoutTime = await checkEmailLockout(normalizedEmail)
-    if (lockoutTime > 0) {
-      throw new Error(`LOCKOUT:${lockoutTime}`)
+
+    if (normalized.includes('credential') || normalized.includes('invalid')) {
+      try {
+        await supabase.rpc('log_failed_login', { user_email: normalizedEmail })
+      } catch {
+        /* ignore */
+      }
     }
 
-    // Log failed login in background (don't wait)
-    if (normalized.includes('credential') || normalized.includes('invalid')) {
-      void Promise.resolve(
-        supabase.rpc('log_failed_login', { user_email: normalizedEmail }),
-      ).catch(() => {})
+    const lockoutAfter = await checkEmailLockout(normalizedEmail)
+    if (lockoutAfter > 0) {
+      throw new Error(`LOCKOUT:${lockoutAfter}`)
     }
+
     throw new Error(error.message)
   }
 
