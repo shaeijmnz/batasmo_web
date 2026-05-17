@@ -1,19 +1,21 @@
 /* ── Notarial Requests Attorney Page ── */
 
 /* Sidebar */
-.nra-sidebar-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 150; }
-.nra-sidebar { position: fixed; top: 0; left: 0; height: 100vh; width: 240px; background: #1c1f2e; z-index: 200; display: flex; flex-direction: column; transform: translateX(-100%); transition: transform .25s ease; box-shadow: 4px 0 24px rgba(0,0,0,.3); }
+.nra-sidebar-overlay { position: fixed; inset: 0; background: rgba(21, 34, 56, 0.12); z-index: 150; }
+.nra-sidebar { position: fixed; top: 0; left: 0; height: 100vh; width: 240px; background: linear-gradient(180deg, #F5F1EB 0%, #ECE6DE 100%); z-index: 200; display: flex; flex-direction: column; transform: translateX(-100%); transition: transform .25s ease; box-shadow: 4px 0 30px rgba(15, 28, 46, 0.06); border-right: 1px solid rgba(15,28,46,0.04); }
 .nra-sidebar--open { transform: translateX(0); }
-.nra-sidebar__logo { display: flex; align-items: center; gap: 10px; padding: 22px 20px 20px; font-size: 1.15rem; font-weight: 800; color: #fff; border-bottom: 1px solid rgba(255,255,255,.08); margin-bottom: 10px; }
+.nra-sidebar__logo { display: flex; align-items: center; gap: 10px; padding: 22px 20px 20px; font-size: 1.15rem; font-weight: 800; color: #F5F5F5; border-bottom: 1px solid rgba(255, 255, 255, 0.08); margin-bottom: 10px; }
 .nra-sidebar__nav { display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; }
-.nra-sidebar__item { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 10px; border: none; background: none; color: #9ca3af; font-size: 0.9rem; font-weight: 500; cursor: pointer; text-align: left; width: 100%; transition: background .2s, color .2s; }
-.nra-sidebar__item:hover { background: rgba(255,255,255,.06); color: #fff; }
-.nra-sidebar__item-icon { display: flex; align-items: center; flex-shrink: 0; color: #9ca3af; }
-.nra-sidebar__item:hover .nra-sidebar__item-icon { color: #fff; }
+.nra-sidebar__item { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 10px; border: none; background: none; color: #D0D5DD; font-size: 0.9rem; font-weight: 500; cursor: pointer; text-align: left; width: 100%; transition: all 0.2s; border-left: 3px solid transparent; }
+.nra-sidebar__item:hover { background: linear-gradient(90deg, rgba(200, 169, 106, 0.15), rgba(214, 184, 124, 0.08)); color: #E5D4B8; transform: translateX(2px); }
+.nra-sidebar__item--active { background: linear-gradient(90deg, rgba(200, 169, 106, 0.2), rgba(214, 184, 124, 0.12)); color: #E5D4B8; font-weight: 700; border-left: 3px solid #C8A96A; }
+.nra-sidebar__item--active .nra-sidebar__item-icon { color: #C8A96A; }
+.nra-sidebar__item-icon { display: flex; align-items: center; flex-shrink: 0; color: #D0D5DD; }
+.nra-sidebar__item:hover .nra-sidebar__item-icon { color: #D6B87C; }
 
 .nra-page {
   min-height: 100vh;
-  background: #f8fafc;
+  background: linear-gradient(135deg, #F6F1E8 0%, #EDE3D2 40%, #F3ECE2 100%);
   display: flex;
   flex-direction: column;
   font-family: 'Segoe UI', 'Inter', sans-serif;
@@ -21,12 +23,12 @@
 
 /* Topbar */
 .nra-topbar {
-  background: #1c1f2e;
+  background: linear-gradient(180deg, rgba(246, 241, 232, 0.95) 0%, rgba(239, 231, 218, 0.9) 100%);
   height: 62px;
   display: flex; align-items: center; justify-content: space-between;
   padding: 0 28px;
   position: sticky; top: 0; z-index: 100;
-  box-shadow: 0 2px 10px rgba(0,0,0,.2);
+  box-shadow: 0 4px 12px rgba(15, 28, 46, 0.06); border-bottom: 1px solid #E2D6C2;
 }
 .nra-topbar__left {
   display: flex; align-items: center; gap: 14px;
@@ -37,10 +39,10 @@
   display: flex; align-items: center;
   transition: background .2s;
 }
-.nra-menu-btn:hover { background: rgba(255,255,255,.08); }
+.nra-menu-btn:hover { background: rgba(200, 169, 106, 0.1); }
 .nra-topbar__logo {
   display: flex; align-items: center; gap: 8px;
-  font-size: 1.1rem; font-weight: 800; color: #fff;
+  font-size: 1.1rem; font-weight: 800; color: #1A1A1A;
 }
 .nra-topbar__right {
   display: flex; align-items: center; gap: 24px;
@@ -50,14 +52,14 @@
 }
 .nra-topbar__tab {
   background: none; border: none;
-  color: #9ca3af; font-size: 0.88rem; font-weight: 600;
+  color: #5C5C5C; font-size: 0.88rem; font-weight: 600;
   padding: 8px 14px; border-radius: 6px;
   cursor: pointer; transition: all .2s;
 }
-.nra-topbar__tab:hover { color: #fff; }
+.nra-topbar__tab:hover { color: #1A1A1A; }
 .nra-topbar__tab--active {
-  color: #fff;
-  border-bottom: 2px solid #f5a623;
+  color: #1A1A1A;
+  border-bottom: 2px solid #C8A96A;
   border-radius: 0;
 }
 .nra-profile {
@@ -65,7 +67,7 @@
 }
 .nra-profile__avatar {
   width: 36px; height: 36px; border-radius: 50%;
-  background: #f5a623; color: #1c1f2e;
+  background: linear-gradient(135deg, #C8A96A, #D6B87C); color: #0F1C2E;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
 }
@@ -142,9 +144,7 @@
 .nra-card__submitter {
   font-size: 0.88rem; color: #6b7280;
 }
-.nra-card__submitter strong {
-  color: #3b82f6;
-}
+.nra-card__submitter strong { color: #0F1C2E; }
 .nra-card__meta {
   display: flex; align-items: center; gap: 18px;
   margin-top: 4px;
@@ -207,7 +207,7 @@
 /* Modal */
 .nra-modal-overlay {
   position: fixed; inset: 0;
-  background: rgba(0,0,0,.45);
+  background: rgba(21, 34, 56, 0.12);
   display: flex; align-items: center; justify-content: center;
   z-index: 500;
 }
@@ -236,9 +236,7 @@
   font-family: inherit;
   box-sizing: border-box;
 }
-.nra-modal__textarea:focus {
-  outline: none; border-color: #3b82f6;
-}
+.nra-modal__textarea:focus { outline: none; border-color: #0F1C2E; }
 .nra-modal__detail {
   font-size: 0.9rem; color: #374151; margin-bottom: 10px;
 }
