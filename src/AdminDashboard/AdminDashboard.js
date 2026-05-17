@@ -145,6 +145,27 @@ const formatAttorneySpecialty = (value) => {
   return text || 'Legal Practice';
 };
 
+const resolveAttorneyImage = (name) => {
+  const normalized = String(name || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^atty\s+/, '')
+    .trim();
+
+  if (normalized.includes('jeanne') && normalized.includes('anarna')) {
+    return '/assets/attorneys/jeanne-luz-castillo-anarna.jpg';
+  }
+  if (normalized.includes('alston') && normalized.includes('anarna')) {
+    return '/assets/attorneys/alston-kevin-anarna.jpg';
+  }
+  if (normalized.includes('allen') && normalized.includes('anarna')) {
+    return '/assets/attorneys/allen-kristopher-anarna.png';
+  }
+
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'Attorney')}&background=152238&color=ffffff`;
+};
+
 const Dashboard = ({ onNavigate }) => {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [activeModal, setActiveModal] = useState(null);
@@ -303,41 +324,82 @@ const Dashboard = ({ onNavigate }) => {
     const loadQueueAndTopAttorneys = async () => {
       if (!isMounted) return;
 
-      const [
-        appointmentsQueueRes,
-        profilesRes,
-        attorneyProfilesRes,
-        allAppointmentsRes,
-        feedbackRes,
-      ] = await Promise.all([
-        supabase
-          .from('appointments')
-          .select(
-            'id, title, status, scheduled_at, created_at, client:client_id(full_name), attorney:attorney_id(full_name)',
-          )
-          .in('status', ACTIVE_QUEUE_STATUSES)
-          .order('created_at', { ascending: true })
-          .limit(8),
+      const [profilesRes, attorneyProfilesRes, allAppointmentsRes, feedbackRes] = await Promise.all([
         supabase
           .from('profiles')
           .select('id, full_name')
           .eq('role', 'Attorney')
           .order('created_at', { ascending: false }),
         supabase.from('attorney_profiles').select('user_id, specialties'),
-        supabase.from('appointments').select('attorney_id, status'),
+        supabase
+          .from('appointments')
+          .select(
+            'id, title, status, scheduled_at, created_at, client_id, attorney_id',
+          )
+          .order('created_at', { ascending: false }),
         supabase.from('consultation_feedback').select('attorney_id, rating'),
       ]);
 
-      if (appointmentsQueueRes.error) {
-        console.error('[admin-dashboard] queue load failed', appointmentsQueueRes.error);
+      if (profilesRes.error) {
+        console.error('[admin-dashboard] attorney profiles load failed', profilesRes.error);
+        setTopAttorneys([]);
         setRecentRequests([]);
-      } else {
+        return;
+      }
+
+      if (attorneyProfilesRes.error) {
+        console.warn('[admin-dashboard] attorney_profiles load failed', attorneyProfilesRes.error);
+      }
+      if (allAppointmentsRes.error) {
+        console.warn('[admin-dashboard] appointments load failed', allAppointmentsRes.error);
+        setRecentRequests([]);
+      }
+      if (feedbackRes.error) {
+        console.warn('[admin-dashboard] feedback load failed', feedbackRes.error);
+      }
+
+      const attorneyNameById = new Map(
+        (profilesRes.data || []).map((row) => [row.id, row.full_name || 'Attorney']),
+      );
+
+      const specialtyByAttorney = new Map(
+        (attorneyProfilesRes.data || []).map((row) => [row.user_id, row.specialties]),
+      );
+
+      const appointmentRows = allAppointmentsRes.data || [];
+
+      const queueRows = appointmentRows
+        .filter((row) => ACTIVE_QUEUE_STATUSES.includes(String(row.status || '').toLowerCase()))
+        .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')))
+        .slice(0, 8);
+
+      const queueClientIds = [
+        ...new Set(queueRows.map((row) => row.client_id).filter(Boolean)),
+      ];
+
+      let clientNameById = new Map();
+      if (queueClientIds.length) {
+        const { data: clientProfiles, error: clientProfilesError } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .in('id', queueClientIds);
+
+        if (clientProfilesError) {
+          console.warn('[admin-dashboard] queue client names failed', clientProfilesError);
+        } else {
+          clientNameById = new Map(
+            (clientProfiles || []).map((row) => [row.id, row.full_name || 'Client']),
+          );
+        }
+      }
+
+      if (!allAppointmentsRes.error) {
         setRecentRequests(
-          (appointmentsQueueRes.data || []).map((item, index) => ({
+          queueRows.map((item, index) => ({
             id: item.id,
             queuePosition: index + 1,
-            name: item.client?.full_name || 'Client',
-            atty: item.attorney?.full_name || 'Attorney',
+            name: clientNameById.get(item.client_id) || 'Client',
+            atty: attorneyNameById.get(item.attorney_id) || 'Attorney',
             law: item.title || 'Consultation',
             status: normalizeRequestStatusForUi(item.status),
             bookedLabel: `Booked ${formatScheduleLabel(item.created_at)}`,
@@ -346,29 +408,9 @@ const Dashboard = ({ onNavigate }) => {
         );
       }
 
-      if (profilesRes.error) {
-        console.error('[admin-dashboard] attorney profiles load failed', profilesRes.error);
-        setTopAttorneys([]);
-        return;
-      }
-
-      if (attorneyProfilesRes.error) {
-        console.warn('[admin-dashboard] attorney_profiles load failed', attorneyProfilesRes.error);
-      }
-      if (allAppointmentsRes.error) {
-        console.warn('[admin-dashboard] appointments aggregate failed', allAppointmentsRes.error);
-      }
-      if (feedbackRes.error) {
-        console.warn('[admin-dashboard] feedback load failed', feedbackRes.error);
-      }
-
-      const specialtyByAttorney = new Map(
-        (attorneyProfilesRes.data || []).map((row) => [row.user_id, row.specialties]),
-      );
-
       const completedCountByAttorney = new Map();
       const activeQueueCountByAttorney = new Map();
-      (allAppointmentsRes.data || []).forEach((row) => {
+      appointmentRows.forEach((row) => {
         if (!row.attorney_id) return;
         const status = String(row.status || '').toLowerCase();
         if (status === 'completed') {
@@ -403,9 +445,11 @@ const Dashboard = ({ onNavigate }) => {
               : null;
           const completed = Number(completedCountByAttorney.get(profile.id) || 0);
           const inQueue = Number(activeQueueCountByAttorney.get(profile.id) || 0);
+          const displayName = profile.full_name || 'Attorney';
           return {
             id: profile.id,
-            name: profile.full_name || 'Attorney',
+            name: displayName,
+            imageUrl: resolveAttorneyImage(displayName),
             law: formatAttorneySpecialty(specialtyByAttorney.get(profile.id)),
             consultations: completed,
             inQueue,
@@ -1456,9 +1500,12 @@ const RequestItem = ({ queuePosition, name, atty, law, status, bookedLabel, age 
   </div>
 );
 
-const AttorneyItem = ({ rank, name, law, consultations, inQueue = 0, rating }) => (
+const AttorneyItem = ({ rank, name, imageUrl, law, consultations, inQueue = 0, rating }) => (
   <div className="item-row">
-    <div className="rank-badge">#{rank}</div>
+    <div className="attorney-rank-avatar">
+      <img src={imageUrl} alt="" />
+      <span className="attorney-rank-avatar__badge">#{rank}</span>
+    </div>
     <div style={{ flex: 1 }}>
       <p className="item-title">{name}</p>
       <p className="item-subtitle">{law}</p>

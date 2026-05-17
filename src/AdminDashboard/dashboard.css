@@ -777,6 +777,41 @@ body { font-family: 'Inter', sans-serif; background: #F5F1EB; color: #0B0F19; }
   border-radius: 50%; display: flex; align-items: center; justify-content: center;
   font-weight: 700; font-size: 0.8rem; margin-right: 12px;
 }
+
+.attorney-rank-avatar {
+  position: relative;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  margin-right: 4px;
+}
+
+.attorney-rank-avatar img {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.attorney-rank-avatar__badge {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 10px;
+  background: #152238;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #fff;
+}
 .rating-star { display: flex; align-items: center; gap: 4px; font-size: 0.8rem; color: var(--text-light); }
 
 .mini-chart-svg { width: 100%; height: 240px; }
