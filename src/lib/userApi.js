@@ -2309,6 +2309,7 @@ export async function fetchClientAppointmentsData(userId) {
     const rawStatus = String(item.status || '').toLowerCase()
     const status = normalizeAppointmentStatus(item.status)
     const paymentStatus = (paymentByAppointment.get(item.id) || 'unpaid').toLowerCase()
+    const pendingReschedule = parseReschedulePendingFromNotes(item.notes)
 
     return {
       id: item.id,
@@ -2331,6 +2332,7 @@ export async function fetchClientAppointmentsData(userId) {
       }),
       status,
       payment: paymentStatus === 'paid' ? 'PAID' : 'UNPAID',
+      pendingReschedule,
       message:
         status === 'COMPLETED'
           ? 'Consultation Completed'
@@ -2983,17 +2985,92 @@ export async function cancelPendingUnpaidBooking({ appointmentId }) {
   invalidateAttorneyAppointmentsCache(appt.attorney_id)
 }
 
-export async function requestAppointmentReschedule({ appointmentId, scheduledAt, note }) {
-  const { error } = await supabase
-    .from('appointments')
-    .update({ status: 'rescheduled', scheduled_at: scheduledAt, notes: note, updated_at: new Date().toISOString() })
-    .eq('id', appointmentId)
+const RESCHEDULE_PENDING_RE =
+  /\[RESCHEDULE_PENDING:([^:\]]+):([^\]]*)\]/i
 
-  if (error) throw error
+export function parseReschedulePendingFromNotes(notes) {
+  const match = String(notes || '').match(RESCHEDULE_PENDING_RE)
+  if (!match) return null
+  const requestedScheduledAt = String(match[1] || '').trim()
+  if (!requestedScheduledAt) return null
+  let reason = ''
+  try {
+    reason = decodeURIComponent(String(match[2] || ''))
+  } catch {
+    reason = String(match[2] || '')
+  }
+  return { requestedScheduledAt, reason }
 }
 
-// Client-initiated reschedule: same shape as requestAppointmentReschedule but
-// kept under a separate name to match the consumer (MyAppointments.js).
+export function stripReschedulePendingMarker(notes) {
+  return String(notes || '')
+    .replace(RESCHEDULE_PENDING_RE, '')
+    .replace(/\n{2,}/g, '\n')
+    .trim()
+}
+
+export function buildReschedulePendingNotes(existingNotes, { scheduledAt, reason }) {
+  const base = stripReschedulePendingMarker(existingNotes)
+  const encodedReason = encodeURIComponent(String(reason || '').slice(0, 500))
+  const marker = `[RESCHEDULE_PENDING:${scheduledAt}:${encodedReason}]`
+  return base ? `${base}\n${marker}` : marker
+}
+
+const formatScheduleLabelFromIso = (iso) => {
+  const parsed = iso ? new Date(iso) : null
+  if (!parsed || Number.isNaN(parsed.getTime())) return 'a new schedule'
+  return parsed.toLocaleString('en-PH', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+const phDateKeyFromIso = (iso) =>
+  new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Manila',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(iso))
+
+const phTimeLabelFromIso = (iso) =>
+  new Date(iso).toLocaleTimeString('en-US', {
+    timeZone: 'Asia/Manila',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  })
+
+export async function findAttorneyAvailabilitySlotId(attorneyId, scheduledAtIso) {
+  if (!attorneyId || !scheduledAtIso) return null
+  const dateKey = phDateKeyFromIso(scheduledAtIso)
+  const targetLabel = phTimeLabelFromIso(scheduledAtIso)
+  const targetMs = new Date(scheduledAtIso).getTime()
+
+  const { data, error } = await supabase
+    .from('availability_slots')
+    .select('id, date, time, is_booked')
+    .eq('attorney_id', attorneyId)
+    .eq('date', dateKey)
+    .eq('is_booked', false)
+
+  if (error) throw error
+
+  const rows = data || []
+  const byLabel = rows.find((row) => String(row.time || '').trim() === targetLabel)
+  if (byLabel?.id) return byLabel.id
+
+  const byParse = rows.find((row) => {
+    const parsed = parseSlotDateTime(row.date, row.time)
+    return parsed && parsed.getTime() === targetMs
+  })
+  return byParse?.id || null
+}
+
+// Client-initiated reschedule request (pending admin approval).
 export async function rescheduleClientAppointment({ appointmentId, scheduledAt, note }) {
   const {
     data: { user },
@@ -3002,7 +3079,7 @@ export async function rescheduleClientAppointment({ appointmentId, scheduledAt, 
 
   const { data: appt, error: fetchErr } = await supabase
     .from('appointments')
-    .select('id, client_id, attorney_id, title, scheduled_at, status, amount')
+    .select('id, client_id, attorney_id, title, scheduled_at, status, amount, notes')
     .eq('id', appointmentId)
     .maybeSingle()
 
@@ -3018,6 +3095,10 @@ export async function rescheduleClientAppointment({ appointmentId, scheduledAt, 
   }
   if (rawStatus === 'rescheduled') {
     throw new Error('This appointment was already rescheduled once. Contact admin for further changes.')
+  }
+
+  if (parseReschedulePendingFromNotes(appt.notes)) {
+    throw new Error('You already have a reschedule request waiting for admin approval.')
   }
 
   const schedDate = appt.scheduled_at ? new Date(appt.scheduled_at) : null
@@ -3057,45 +3138,164 @@ export async function rescheduleClientAppointment({ appointmentId, scheduledAt, 
     }
   }
 
-  await requestAppointmentReschedule({ appointmentId, scheduledAt, note })
+  const slotId = await findAttorneyAvailabilitySlotId(appt.attorney_id, scheduledAt)
+  if (!slotId) {
+    throw new Error('That time slot is no longer available. Please pick another date or time.')
+  }
 
-  // Notify the attorney so it lands in the bell + queue immediately.
+  const nowIso = new Date().toISOString()
+  const nextNotes = buildReschedulePendingNotes(appt.notes, {
+    scheduledAt,
+    reason: note,
+  })
+
+  const { error: updateErr } = await supabase
+    .from('appointments')
+    .update({ notes: nextNotes, updated_at: nowIso })
+    .eq('id', appointmentId)
+
+  if (updateErr) throw updateErr
+
+  invalidateAvailabilityCache(appt.attorney_id, phDateKeyFromIso(scheduledAt))
+
   try {
-    if (appt?.attorney_id) {
-      const clientName = await resolveClientDisplayName(appt.client_id)
-      const whenLabel = scheduledAt
-        ? new Date(scheduledAt).toLocaleString('en-PH', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-          })
-        : 'a new schedule'
+    const clientName = await resolveClientDisplayName(appt.client_id)
+    const whenLabel = formatScheduleLabelFromIso(scheduledAt)
+    const currentLabel = formatScheduleLabelFromIso(appt.scheduled_at)
 
-      const { error: notifError } = await supabase.from('notifications').insert({
-        user_id: appt.attorney_id,
-        title: 'Appointment Reschedule Request',
-        body: `${clientName} is requesting to reschedule ${appt.title || 'a consultation'} to ${whenLabel}.`,
-        type: 'consultation',
+    await notifyAdminsWithBodyMarker({
+      title: 'Reschedule approval needed',
+      body: `${clientName} requested to move ${appt.title || 'a consultation'} from ${currentLabel} to ${whenLabel}. Review and accept in Admin Dashboard.`,
+      type: 'reschedule_request',
+      marker: `[reschedreq:${appointmentId}:${String(scheduledAt || '').slice(0, 24)}]`,
+    })
+
+    if (appt.client_id) {
+      await supabase.from('notifications').insert({
+        user_id: appt.client_id,
+        title: 'Reschedule request submitted',
+        body: `Your request to move this consultation to ${whenLabel} was sent to BatasMo Admin for approval.`,
+        type: 'reschedule',
         is_read: false,
-        created_at: new Date().toISOString(),
-      })
-      if (notifError) {
-        console.warn('[reschedule] attorney notify insert failed', notifError)
-      }
-      invalidateAttorneyAppointmentsCache(appt.attorney_id)
-
-      await notifyAdminsWithBodyMarker({
-        title: 'Client requested reschedule',
-        body: `${clientName} rescheduled ${appt.title || 'a consultation'} to ${whenLabel}.`,
-        type: 'admin_general',
-        marker: `[adminresched:${appointmentId}:${String(scheduledAt || '').slice(0, 24)}]`,
+        created_at: nowIso,
       })
     }
   } catch (notifyError) {
-    console.warn('[reschedule] attorney notify step failed', notifyError)
+    console.warn('[reschedule] notify step failed', notifyError)
   }
+}
+
+export async function fetchPendingRescheduleRequestsForAdmin() {
+  const { data, error } = await supabase
+    .from('appointments')
+    .select(
+      'id, title, notes, scheduled_at, status, updated_at, client_id, attorney_id, client:client_id(full_name), attorney:attorney_id(full_name)',
+    )
+    .order('updated_at', { ascending: false })
+    .limit(250)
+
+  if (error) throw error
+
+  return (data || [])
+    .map((row) => {
+      const pending = parseReschedulePendingFromNotes(row.notes)
+      if (!pending) return null
+      return {
+        id: row.id,
+        title: row.title || 'Consultation',
+        currentScheduledAt: row.scheduled_at,
+        requestedScheduledAt: pending.requestedScheduledAt,
+        reason: pending.reason,
+        status: row.status,
+        updatedAt: row.updated_at,
+        clientId: row.client_id,
+        clientName: row.client?.full_name || 'Client',
+        attorneyId: row.attorney_id,
+        attorneyName: row.attorney?.full_name || 'Attorney',
+      }
+    })
+    .filter(Boolean)
+}
+
+export async function acceptClientRescheduleRequest({ appointmentId }) {
+  if (!appointmentId) throw new Error('appointmentId is required.')
+
+  const { data: appt, error: fetchErr } = await supabase
+    .from('appointments')
+    .select('id, notes, attorney_id, client_id, title, scheduled_at')
+    .eq('id', appointmentId)
+    .maybeSingle()
+
+  if (fetchErr) throw fetchErr
+  if (!appt) throw new Error('Appointment not found.')
+
+  const pending = parseReschedulePendingFromNotes(appt.notes)
+  if (!pending?.requestedScheduledAt) {
+    throw new Error('No pending reschedule request found for this appointment.')
+  }
+
+  const newSlotId = await findAttorneyAvailabilitySlotId(appt.attorney_id, pending.requestedScheduledAt)
+  if (!newSlotId) {
+    throw new Error('The requested time slot is no longer available. Ask the client to pick another slot.')
+  }
+
+  await adminRescheduleAppointment({ appointmentId, newSlotId })
+
+  const cleanedNotes = stripReschedulePendingMarker(appt.notes)
+  const reasonLine = pending.reason ? `Client reason: ${pending.reason}` : ''
+  const finalNotes = [cleanedNotes, reasonLine].filter(Boolean).join('\n').trim()
+
+  await supabase
+    .from('appointments')
+    .update({
+      notes: finalNotes || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', appointmentId)
+
+  return { requestedScheduledAt: pending.requestedScheduledAt, newSlotId }
+}
+
+export async function rejectClientRescheduleRequest({ appointmentId, adminNote }) {
+  if (!appointmentId) throw new Error('appointmentId is required.')
+
+  const { data: appt, error: fetchErr } = await supabase
+    .from('appointments')
+    .select('id, notes, client_id, title, scheduled_at')
+    .eq('id', appointmentId)
+    .maybeSingle()
+
+  if (fetchErr) throw fetchErr
+  if (!appt) throw new Error('Appointment not found.')
+
+  const pending = parseReschedulePendingFromNotes(appt.notes)
+  if (!pending) throw new Error('No pending reschedule request found for this appointment.')
+
+  const cleanedNotes = stripReschedulePendingMarker(appt.notes)
+  const nowIso = new Date().toISOString()
+
+  await supabase
+    .from('appointments')
+    .update({ notes: cleanedNotes || null, updated_at: nowIso })
+    .eq('id', appointmentId)
+
+  if (appt.client_id) {
+    const whenLabel = formatScheduleLabelFromIso(pending.requestedScheduledAt)
+    const body = adminNote?.trim()
+      ? `Your reschedule request for ${whenLabel} was declined. ${adminNote.trim()}`
+      : `Your reschedule request for ${whenLabel} was declined. Your original schedule stays in place.`
+
+    await supabase.from('notifications').insert({
+      user_id: appt.client_id,
+      title: 'Reschedule request declined',
+      body,
+      type: 'reschedule',
+      is_read: false,
+      created_at: nowIso,
+    })
+  }
+
+  return { ok: true }
 }
 
 // Throws when prevent_double_booking is ON and the client already has an

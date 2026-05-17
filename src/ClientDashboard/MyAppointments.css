@@ -705,6 +705,21 @@
   cursor: not-allowed;
 }
 
+.ma-btn--queue-pending {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: rgba(21, 34, 56, 0.08);
+  color: #152238;
+  border: 1px dashed rgba(21, 34, 56, 0.25);
+  cursor: default;
+}
+
 .ma-btn--primary {
   background: var(--ui-accent);
   color: #fff;

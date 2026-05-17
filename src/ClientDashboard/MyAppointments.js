@@ -201,6 +201,16 @@ function MyAppointments({ onNavigate, profile }) {
       .toUpperCase();
 
   const getReschedulePolicyState = (appointment) => {
+    if (appointment.pendingReschedule?.requestedScheduledAt) {
+      return {
+        can: false,
+        type: 'pending',
+        title: 'Reschedule pending approval',
+        reason:
+          'Your new schedule is waiting for BatasMo Admin to approve. You will be notified once it is confirmed.',
+      };
+    }
+
     const status = String(appointment.rawStatus || '').toLowerCase();
     if (status === 'completed' || status === 'cancelled' || status === 'rejected') {
       return {
@@ -367,22 +377,18 @@ function MyAppointments({ onNavigate, profile }) {
       });
       await loadAppointments();
       closeRescheduleModal();
+      setReschedulePolicyNotice({
+        type: 'pending',
+        title: 'Request submitted',
+        reason:
+          'BatasMo Admin will review your chosen date and time. Your consultation queue updates after approval.',
+        appointment: selectedAppointmentForReschedule,
+      });
     } catch (error) {
       setRescheduleError(error.message || 'Unable to reschedule appointment.');
     } finally {
       setRescheduleSubmitting(false);
     }
-  };
-
-  const requestRescheduleViaAdmin = (appointment) => {
-    const attorneyName = formatAttorneyName(appointment.attorney);
-    const draft =
-      `Hi BatasMo Admin, I'd like to request a reschedule for my consultation` +
-      `${attorneyName ? ` with Atty. ${attorneyName}` : ''}` +
-      `${appointment.date ? ` on ${appointment.date}` : ''}` +
-      `${appointment.time ? ` at ${appointment.time}` : ''}.` +
-      ` Please help me set a new schedule. Thank you!`;
-    onNavigate('support-messages', { draft });
   };
 
   const renderAppointmentCard = (appointment) => {
@@ -407,13 +413,19 @@ function MyAppointments({ onNavigate, profile }) {
           </div>
 
           <div className="ma-queue-card__btns">
-            <button
-              className="ma-btn ma-btn--queue-secondary"
-              title="Message BatasMo Admin to set a new schedule"
-              onClick={() => requestRescheduleViaAdmin(appointment)}
-            >
-              RESCHEDULE
-            </button>
+            {appointment.pendingReschedule ? (
+              <span className="ma-btn ma-btn--queue-pending" title="Waiting for admin approval">
+                PENDING RESCHEDULE
+              </span>
+            ) : (
+              <button
+                className="ma-btn ma-btn--queue-secondary"
+                title="Choose a new date and time (admin approval required)"
+                onClick={() => openRescheduleModal(appointment)}
+              >
+                RESCHEDULE
+              </button>
+            )}
             <button
               className="ma-btn ma-btn--queue-primary"
               disabled={!canEnterChat}
@@ -589,7 +601,7 @@ function MyAppointments({ onNavigate, profile }) {
           <section className="ma-reschedule-note" aria-label="Reschedule notice">
             <p className="ma-reschedule-note__title">Need to reschedule?</p>
             <p className="ma-reschedule-note__text">
-              Tap <strong>RESCHEDULE</strong> on your appointment to message <strong>BatasMo Admin</strong>. Admin will confirm a new slot and update your consultation queue automatically. Requests must be submitted at least <strong>1 day before</strong> the consultation date (same-day reschedules are not allowed).
+              Tap <strong>RESCHEDULE</strong> to pick a new date and time from your attorney&apos;s open slots. <strong>BatasMo Admin</strong> will review and approve your request before it updates the consultation queue. Submit at least <strong>1 day before</strong> your consultation (same-day reschedules are not allowed).
             </p>
           </section>
 
@@ -622,7 +634,7 @@ function MyAppointments({ onNavigate, profile }) {
             </div>
             <div className="ma-reschedule-content">
               <div className="ma-reschedule-notice">
-                One-time policy: Reschedule is allowed only once and must be made at least 1 day before the consultation date (same-day reschedules are not allowed).
+                Choose an available slot. Admin will approve before your queue updates. One reschedule per appointment; must be at least 1 day before the consultation date.
               </div>
               <div className="ma-form-group">
                 <label>New Date</label>
@@ -675,7 +687,7 @@ function MyAppointments({ onNavigate, profile }) {
                   onClick={handleRescheduleSubmit}
                   disabled={rescheduleSubmitting}
                 >
-                  {rescheduleSubmitting ? 'Submitting...' : 'Confirm Reschedule'}
+                      {rescheduleSubmitting ? 'Submitting...' : 'Submit reschedule request'}
                 </button>
               </div>
             </div>
@@ -711,21 +723,25 @@ function MyAppointments({ onNavigate, profile }) {
                 </div>
               </div>
 
-              <div className="ma-policy-support-box">
-                For further schedule changes, please contact <strong>BatasMo Admin</strong> so your request can be reviewed properly.
-              </div>
+              {reschedulePolicyNotice.type !== 'pending' ? (
+                <div className="ma-policy-support-box">
+                  For further schedule changes, please contact <strong>BatasMo Admin</strong> so your request can be reviewed properly.
+                </div>
+              ) : null}
 
               <div className="ma-policy-actions">
                 <button className="ma-btn--cancel" onClick={closeReschedulePolicyNotice}>Close</button>
-                <button
-                  className="ma-btn--submit"
-                  onClick={() => {
-                    closeReschedulePolicyNotice();
-                    onNavigate('support-messages');
-                  }}
-                >
-                  Contact Admin
-                </button>
+                {reschedulePolicyNotice.type !== 'pending' ? (
+                  <button
+                    className="ma-btn--submit"
+                    onClick={() => {
+                      closeReschedulePolicyNotice();
+                      onNavigate('support-messages');
+                    }}
+                  >
+                    Contact Admin
+                  </button>
+                ) : null}
               </div>
             </div>
           </div>

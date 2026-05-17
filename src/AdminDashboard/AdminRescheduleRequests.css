@@ -1,0 +1,166 @@
+.adm-resched-section {
+  margin-bottom: 24px;
+  padding: 20px 22px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(21, 34, 56, 0.12);
+  box-shadow: 0 6px 20px rgba(21, 34, 56, 0.08);
+}
+
+.adm-resched-section__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.adm-resched-section__header h3 {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+  color: #152238;
+}
+
+.adm-resched-section__header p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #4b5563;
+}
+
+.adm-resched-count {
+  flex-shrink: 0;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #152238;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.adm-resched-muted {
+  margin: 0;
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.adm-resched-error {
+  margin: 0 0 12px;
+  color: #b91c1c;
+  font-size: 0.85rem;
+}
+
+.adm-resched-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.adm-resched-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: #faf9f7;
+}
+
+.adm-resched-card__client {
+  margin: 0 0 2px;
+  font-weight: 700;
+  color: #152238;
+}
+
+.adm-resched-card__title,
+.adm-resched-card__attorney {
+  margin: 0 0 4px;
+  font-size: 0.88rem;
+  color: #4b5563;
+}
+
+.adm-resched-card__times {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  font-size: 0.84rem;
+  color: #374151;
+}
+
+.adm-resched-card__reason {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.adm-resched-card__actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.adm-resched-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 9px 16px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.adm-resched-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.adm-resched-btn--accept {
+  background: #152238;
+  color: #fff;
+}
+
+.adm-resched-btn--decline {
+  background: #fff;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.adm-resched-btn--ghost {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.adm-resched-reject {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed #d1d5db;
+}
+
+.adm-resched-reject label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 6px;
+}
+
+.adm-resched-reject textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  resize: vertical;
+}
+
+.adm-resched-reject__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 10px;
+}

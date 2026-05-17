@@ -7,6 +7,7 @@ import {
 import { supabase } from '../lib/supabaseClient';
 import AttorneyNotificationDropdown from '../AttorneyDashboard/AttorneyNotificationDropdown';
 import AdminSupportDrawer from './AdminSupportDrawer';
+import AdminRescheduleRequests from './AdminRescheduleRequests';
 import {
   fetchAdminHomeNotifications,
   markAdminNotificationsAsRead,
@@ -1169,6 +1170,8 @@ const Dashboard = ({ onNavigate }) => {
               <p className="action-description">Review pending notary requests</p>
             </div>
           </section>
+
+          <AdminRescheduleRequests adminUserId={adminUserId} />
 
           {/* Stat Cards Grid */}
           <section className="stats-row">
