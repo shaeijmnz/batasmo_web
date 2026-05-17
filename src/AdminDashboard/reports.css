@@ -249,14 +249,17 @@
    STATS GRID — premium cards
    ============================================================ */
 .stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
   margin-bottom: 28px;
 }
 
 .report-stat-card {
   position: relative;
   background: var(--ui-bg-card);
-  padding: 22px 22px 20px;
-  border-radius: 18px;
+  padding: 16px 18px;
+  border-radius: 14px;
   border: 1px solid var(--ui-glass-border);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06);
   backdrop-filter: blur(10px);
@@ -305,9 +308,9 @@
 }
 
 .stat-value {
-  font-size: 1.6rem;
+  font-size: 1.35rem;
   font-weight: 700;
-  margin: 8px 0 10px;
+  margin: 6px 0 8px;
   color: var(--ui-text-primary);
   line-height: 1.15;
   letter-spacing: -0.015em;
@@ -348,10 +351,10 @@
 /* Icon bubble — slightly larger with soft glow. The inline backgroundColor
    from JS provides the tinted color. */
 .stat-icon-wrapper {
-  width: 52px;
-  height: 52px;
-  min-width: 52px;
-  border-radius: 16px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  border-radius: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -369,8 +372,8 @@
   z-index: -1;
 }
 .stat-icon-wrapper svg {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   stroke-width: 2.2;
 }
 
@@ -878,6 +881,10 @@
   .reports-header-actions {
     width: 100%;
     justify-content: flex-start;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .report-buttons {
