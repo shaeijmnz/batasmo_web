@@ -21,15 +21,6 @@ export const PENDING_SMS_PHONE_KEY = 'batasmo_pending_sms_phone'
 export const OTP_RESUME_LOGIN_KEY = 'batasmo_otp_resume_login'
 export const OTP_RESUME_SIGNUP_KEY = 'batasmo_otp_resume_signup'
 
-const getBackendApiBase = () =>
-  String(
-    process.env.REACT_APP_PAYMENT_API_URL ||
-      process.env.REACT_APP_CHATBOT_API_URL ||
-      '',
-  )
-    .trim()
-    .replace(/\/+$/, '')
-
 const normalizeRole = (role) => {
   const value = String(role || '').trim().toLowerCase()
   if (value === 'admin') return 'Admin'
@@ -164,18 +155,6 @@ export async function signUpWithEmail({
       // Never keep an active session after signup — user must verify OTP first.
       await supabase.auth.signOut()
     }
-
-    if (otpChannel === 'email') {
-      try {
-        await requestSignupEmailOtp({
-          email: normalizedEmail,
-          userId: createdUser.id,
-          password,
-        })
-      } catch (emailErr) {
-        console.warn('[signup] email OTP dispatch failed', emailErr?.message || emailErr)
-      }
-    }
   }
 
   return { user: createdUser, preferredOtpChannel: otpChannel }
@@ -244,36 +223,6 @@ async function invokeOtpFunction(name, body) {
     throw err
   }
   return data
-}
-
-/**
- * Send signup OTP to Gmail via Render (SMTP/Resend). Reliable delivery vs Supabase default mailer.
- */
-export async function requestSignupEmailOtp({ userId, email, password }) {
-  const base = getBackendApiBase()
-  if (!base) {
-    throw new Error(
-      'Verification email service is not configured. Set REACT_APP_PAYMENT_API_URL on Vercel.',
-    )
-  }
-
-  const body = {
-    email: String(email || '').trim().toLowerCase(),
-  }
-  if (userId) body.userId = String(userId).trim()
-  if (password) body.password = String(password)
-
-  const response = await fetch(`${base}/auth/signup-email-otp`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-
-  const payload = await response.json().catch(() => ({}))
-  if (!response.ok) {
-    throw new Error(payload?.error || 'Failed to send verification email.')
-  }
-  return payload
 }
 
 /**
@@ -399,25 +348,14 @@ export async function signInWithEmail({ email, password }) {
 }
 
 export async function verifySignUpOtp({ email, token }) {
-  const normalizedToken = String(token || '').replace(/\D/g, '')
-  const typesToTry = ['signup', 'email']
-  let lastError = null
+  const { error } = await supabase.auth.verifyOtp({
+    email,
+    token: String(token || '').replace(/\D/g, ''),
+    type: 'signup',
+  })
 
-  for (const type of typesToTry) {
-    const { error } = await supabase.auth.verifyOtp({
-      email,
-      token: normalizedToken,
-      type,
-    })
-    if (!error) {
-      lastError = null
-      break
-    }
-    lastError = error
-  }
-
-  if (lastError) {
-    throw new Error(lastError.message)
+  if (error) {
+    throw new Error(error.message)
   }
 
   await markSignupOtpCompleted()
@@ -445,22 +383,8 @@ export async function verifySignUpOtp({ email, token }) {
   return { success: true }
 }
 
-export async function resendSignUpOtp({ email, userId, password }) {
+export async function resendSignUpOtp({ email }) {
   const normalizedEmail = String(email || '').trim().toLowerCase()
-  const base = getBackendApiBase()
-
-  if (base) {
-    try {
-      return await requestSignupEmailOtp({
-        email: normalizedEmail,
-        userId,
-        password,
-      })
-    } catch (backendErr) {
-      console.warn('[resend] backend email OTP failed, trying Supabase', backendErr?.message)
-    }
-  }
-
   const { error } = await supabase.auth.resend({
     type: 'signup',
     email: normalizedEmail,
