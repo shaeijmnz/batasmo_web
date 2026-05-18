@@ -6,6 +6,7 @@ import {
   PENDING_SMS_PHONE_KEY,
   OTP_RESUME_LOGIN_KEY,
   OTP_RESUME_SIGNUP_KEY,
+  requestSignupEmailOtp,
   requestSignupSmsOtp,
   resendSignUpOtp,
   signInWithEmail,
@@ -60,10 +61,13 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
   });
   const [optionalPhone, setOptionalPhone] = useState(() => localStorage.getItem(PENDING_SMS_PHONE_KEY) || '');
   const [smsInitDone, setSmsInitDone] = useState(false);
+  const [emailInitDone, setEmailInitDone] = useState(false);
   const [smsSending, setSmsSending] = useState(false);
+  const [emailSending, setEmailSending] = useState(false);
   const [needsPhone, setNeedsPhone] = useState(false);
   const inputs = useRef([]);
   const smsAutoTriedRef = useRef(false);
+  const emailAutoTriedRef = useRef(false);
 
   const pendingEmail = String(email || localStorage.getItem('batasmo_pending_otp_email') || '').trim();
   const pendingRole = String(role || localStorage.getItem('batasmo_pending_otp_role') || 'Client');
@@ -127,11 +131,28 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
     return () => clearTimeout(t);
   }, [timer]);
 
-  useEffect(() => {
-    if (smsInitDone && delivery === 'sms') {
-      setTimer(59);
+  const readSignupResumePassword = useCallback(() => {
+    try {
+      const raw = sessionStorage.getItem(OTP_RESUME_SIGNUP_KEY);
+      if (!raw) return '';
+      const parsed = JSON.parse(raw);
+      return String(parsed?.password || '');
+    } catch {
+      return '';
     }
-  }, [smsInitDone, delivery]);
+  }, []);
+
+  const sendEmailOtp = useCallback(
+    async () => {
+      await requestSignupEmailOtp({
+        email: pendingEmail,
+        userId: pendingUserId || undefined,
+        password: readSignupResumePassword() || undefined,
+      });
+      setEmailInitDone(true);
+    },
+    [pendingEmail, pendingUserId, readSignupResumePassword],
+  );
 
   const sendSmsOtp = useCallback(
     async (otpPhoneOverride) => {
@@ -149,6 +170,32 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
     },
     [pendingEmail, pendingUserId, optionalPhone],
   );
+
+  useEffect(() => {
+    if (delivery !== 'email' || !pendingEmail || emailAutoTriedRef.current) return;
+    emailAutoTriedRef.current = true;
+    setErrorText('');
+    setEmailSending(true);
+    sendEmailOtp()
+      .catch((err) => {
+        setErrorText(getErrorMessage(err, 'Could not send verification email. Check spam or tap Resend.'));
+      })
+      .finally(() => {
+        setEmailSending(false);
+      });
+  }, [delivery, pendingEmail, sendEmailOtp]);
+
+  useEffect(() => {
+    if (smsInitDone && delivery === 'sms') {
+      setTimer(59);
+    }
+  }, [smsInitDone, delivery]);
+
+  useEffect(() => {
+    if (emailInitDone && delivery === 'email') {
+      setTimer(59);
+    }
+  }, [emailInitDone, delivery]);
 
   useEffect(() => {
     if (delivery !== 'sms' || !pendingEmail || smsAutoTriedRef.current) return;
@@ -200,7 +247,11 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
     };
 
     if (delivery === 'email') {
-      resendSignUpOtp({ email: pendingEmail })
+      resendSignUpOtp({
+        email: pendingEmail,
+        userId: pendingUserId || undefined,
+        password: readSignupResumePassword() || undefined,
+      })
         .then(done)
         .catch((error) => {
           setErrorText(getErrorMessage(error, 'Failed to resend OTP.'));
@@ -393,6 +444,10 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
             </label>
           </div>
 
+          {delivery === 'email' && emailSending ? (
+            <p className="otp-sms-status">Sending verification email to your Gmail...</p>
+          ) : null}
+
           {delivery === 'sms' && smsSending ? (
             <p className="otp-sms-status">Sending SMS...</p>
           ) : null}
@@ -444,7 +499,7 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
 
           {errorText ? <p className="otp-error">{errorText}</p> : null}
 
-          {(delivery === 'email' || smsInitDone) && !smsSending ? (
+          {(delivery === 'email' || smsInitDone) && !smsSending && !emailSending ? (
             <>
               <p className="otp-resend-timer">
                 Resend code in <span>00:{String(timer).padStart(2, '0')}</span>
