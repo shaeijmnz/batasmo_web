@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import AttorneyNotificationDropdown from '../AttorneyDashboard/AttorneyNotificationDropdown';
+import './AdminNotificationDropdown.css';
 import AdminSupportDrawer from './AdminSupportDrawer';
 import AdminRescheduleRequests from './AdminRescheduleRequests';
 import {
@@ -1174,6 +1175,7 @@ const Dashboard = ({ onNavigate }) => {
                   ) : null}
                 </button>
                 <AttorneyNotificationDropdown
+                  variant="admin"
                   open={adminNotifOpen}
                   onClose={() => setAdminNotifOpen(false)}
                   notifications={displayAdminNotifications}
