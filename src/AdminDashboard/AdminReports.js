@@ -10,12 +10,18 @@ import {
   Menu,
   Download,
   Megaphone,
+  ImagePlus,
+  X,
   TrendingUp,
   DollarSign,
   UserCheck,
   Star,
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import {
+  uploadAnnouncementImage,
+  validateAnnouncementImageFile,
+} from '../lib/announcementImages';
 import './AdminTheme.css';
 import './reports.css';
 
@@ -75,7 +81,10 @@ const Reports = ({ onNavigate }) => {
     title: '',
     body: '',
     type: 'general',
+    imageUrl: '',
   });
+  const [announcementImagePreview, setAnnouncementImagePreview] = useState('');
+  const [announcementImageUploading, setAnnouncementImageUploading] = useState(false);
   const [reportMetrics, setReportMetrics] = useState({
     totalRevenue: 0,
     currentRevenue: 0,
@@ -495,32 +504,82 @@ const Reports = ({ onNavigate }) => {
     return 'admin_announcement';
   };
 
+  const clearAnnouncementImage = () => {
+    if (announcementImagePreview) {
+      URL.revokeObjectURL(announcementImagePreview);
+    }
+    setAnnouncementImagePreview('');
+    setAnnouncementForm((prev) => ({ ...prev, imageUrl: '' }));
+  };
+
   const openAnnouncementModal = () => {
     setAnnouncementError('');
     setAnnouncementSuccess('');
+    clearAnnouncementImage();
     setAnnouncementForm({
       targetMode: 'all',
       clientId: '',
       title: '',
       body: '',
       type: 'general',
+      imageUrl: '',
     });
     setAnnouncementModalOpen(true);
   };
 
   const closeAnnouncementModal = () => {
-    if (announcementSending) return;
+    if (announcementSending || announcementImageUploading) return;
+    clearAnnouncementImage();
     setAnnouncementModalOpen(false);
+  };
+
+  const handleAnnouncementImagePick = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    const validationError = validateAnnouncementImageFile(file);
+    if (validationError) {
+      setAnnouncementError(validationError);
+      return;
+    }
+
+    if (announcementImagePreview) {
+      URL.revokeObjectURL(announcementImagePreview);
+    }
+    setAnnouncementImagePreview(URL.createObjectURL(file));
+    setAnnouncementError('');
+    setAnnouncementImageUploading(true);
+
+    try {
+      const { publicUrl } = await uploadAnnouncementImage(file);
+      setAnnouncementForm((prev) => ({ ...prev, imageUrl: publicUrl }));
+    } catch (error) {
+      clearAnnouncementImage();
+      setAnnouncementError(error.message || 'Failed to upload image.');
+    } finally {
+      setAnnouncementImageUploading(false);
+    }
   };
 
   const sendAnnouncement = async () => {
     const title = String(announcementForm.title || '').trim();
     const body = String(announcementForm.body || '').trim();
+    const imageUrl = String(announcementForm.imageUrl || '').trim();
     const targetMode = announcementForm.targetMode === 'single' ? 'single' : 'all';
     const selectedClientId = String(announcementForm.clientId || '').trim();
 
-    if (!title || !body) {
-      setAnnouncementError('Title and announcement message are required.');
+    if (announcementImageUploading) {
+      setAnnouncementError('Please wait for the image upload to finish.');
+      return;
+    }
+
+    if (!title) {
+      setAnnouncementError('Title is required.');
+      return;
+    }
+    if (!body && !imageUrl) {
+      setAnnouncementError('Add a message, an image, or both.');
       return;
     }
 
@@ -544,13 +603,15 @@ const Reports = ({ onNavigate }) => {
     setAnnouncementSuccess('');
     try {
       const nowIso = new Date().toISOString();
+      const notificationData = imageUrl ? { image_url: imageUrl } : {};
       const payload = targetClientIds.map((clientId) => ({
         user_id: clientId,
         title,
-        body,
+        body: body || (imageUrl ? 'See attached announcement image.' : ''),
         type: toAnnouncementType(announcementForm.type),
         is_read: false,
         created_at: nowIso,
+        data: notificationData,
       }));
       const { error } = await supabase.from('notifications').insert(payload);
       if (error) throw error;
@@ -568,10 +629,11 @@ const Reports = ({ onNavigate }) => {
         extraRows.push({
           user_id: row.id,
           title: `Admin announcement: ${title}`,
-          body,
+          body: body || (imageUrl ? 'See attached announcement image.' : ''),
           type: annType,
           is_read: false,
           created_at: nowIso,
+          data: notificationData,
         });
       });
       (adminRows || []).forEach((row) => {
@@ -601,10 +663,12 @@ const Reports = ({ onNavigate }) => {
           ? 'Announcement sent to selected client.'
           : `Announcement sent to ${payload.length} clients.`,
       );
+      clearAnnouncementImage();
       setAnnouncementForm((previous) => ({
         ...previous,
         title: '',
         body: '',
+        imageUrl: '',
       }));
     } catch (error) {
       setAnnouncementError(error.message || 'Failed to send announcement.');
@@ -791,19 +855,63 @@ const Reports = ({ onNavigate }) => {
                     placeholder="Type your announcement for clients..."
                     value={announcementForm.body}
                     onChange={(event) => setAnnouncementForm((prev) => ({ ...prev, body: event.target.value }))}
-                    disabled={announcementSending}
+                    disabled={announcementSending || announcementImageUploading}
                   />
                 </label>
+
+                <div className="announce-full announce-image-field">
+                  <span className="announce-image-label">Image (optional)</span>
+                  <p className="announce-image-hint">JPG, PNG, WebP, or GIF — max 5 MB. Shown in client and attorney announcement feeds.</p>
+                  {announcementImagePreview || announcementForm.imageUrl ? (
+                    <div className="announce-image-preview-wrap">
+                      <img
+                        src={announcementImagePreview || announcementForm.imageUrl}
+                        alt="Announcement preview"
+                        className="announce-image-preview"
+                      />
+                      <button
+                        type="button"
+                        className="announce-image-remove"
+                        onClick={clearAnnouncementImage}
+                        disabled={announcementSending || announcementImageUploading}
+                        aria-label="Remove image"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ) : null}
+                  <label className="announce-image-upload-btn">
+                    <ImagePlus size={18} />
+                    {announcementImageUploading ? 'Uploading...' : announcementImagePreview ? 'Replace image' : 'Insert image'}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      className="announce-image-input"
+                      onChange={handleAnnouncementImagePick}
+                      disabled={announcementSending || announcementImageUploading}
+                    />
+                  </label>
+                </div>
               </div>
 
               {announcementError ? <p className="announce-error">{announcementError}</p> : null}
               {announcementSuccess ? <p className="announce-success">{announcementSuccess}</p> : null}
 
               <div className="announce-actions">
-                <button type="button" className="chart-export" onClick={closeAnnouncementModal} disabled={announcementSending}>
+                <button
+                  type="button"
+                  className="chart-export"
+                  onClick={closeAnnouncementModal}
+                  disabled={announcementSending || announcementImageUploading}
+                >
                   Close
                 </button>
-                <button type="button" className="export-all-btn" onClick={sendAnnouncement} disabled={announcementSending}>
+                <button
+                  type="button"
+                  className="export-all-btn"
+                  onClick={sendAnnouncement}
+                  disabled={announcementSending || announcementImageUploading}
+                >
                   {announcementSending ? 'Sending...' : 'Send Announcement'}
                 </button>
               </div>

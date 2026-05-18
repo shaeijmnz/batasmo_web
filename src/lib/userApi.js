@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient'
+import { parseNotificationImageUrl } from './announcementImages'
 import { isSignupVerificationComplete, signOutIfSignupIncomplete } from './signupVerification'
 import {
   getConsultationBranchesForAttorney,
@@ -5990,7 +5991,7 @@ export async function updateAttorneyNotarialRequestStatus({ requestId, status, n
 export async function fetchAttorneyAnnouncementsData(userId) {
   const { data, error } = await supabase
     .from('notifications')
-    .select('id, title, body, type, created_at')
+    .select('id, title, body, type, created_at, data')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(20)
@@ -6005,6 +6006,7 @@ export async function fetchAttorneyAnnouncementsData(userId) {
       id: item.id,
       title: item.title || 'Announcement',
       body: item.body || '',
+      imageUrl: parseNotificationImageUrl(item.data),
       date: valid ? dt.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Today',
       time: valid ? dt.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' }) : 'Now',
       author: 'BatasMo Admin',
