@@ -6,7 +6,11 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 import jwt from 'jsonwebtoken'
 import { isWelcomeEmailConfigured, sendAttorneyWelcomeEmail } from './lib/welcomeEmail.js'
 import { isSignupOtpEmailConfigured } from './lib/signupOtpEmail.js'
-import { dispatchSignupEmailOtp } from './lib/signupOtpDispatch.js'
+import {
+  startPendingClientSignup,
+  resendPendingSignupOtp,
+  completePendingClientSignup,
+} from './lib/pendingSignup.js'
 
 dotenv.config()
 
@@ -17,6 +21,7 @@ const ALLOWED_ORIGIN_BASE = String(ALLOWED_ORIGIN).trim().replace(/\/+$/, '')
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').trim()
 const SUPABASE_SERVICE_ROLE_KEY = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
+const IPROG_API_KEY = String(process.env.IPROG_API_KEY || process.env.IPROG_API_TOKEN || '').trim()
 const PAYMONGO_SECRET_KEY = String(process.env.PAYMONGO_SECRET_KEY || '').trim()
 const AZURE_FACE_KEY = String(process.env.AZURE_FACE_KEY || '').trim()
 const AZURE_FACE_ENDPOINT = String(process.env.AZURE_FACE_ENDPOINT || '').trim().replace(/\/+$/, '')
@@ -2308,39 +2313,88 @@ app.post('/verify-identity', async (req, res) => {
   }
 })
 
-app.post('/auth/signup-email-otp', async (req, res) => {
+const signupErrorStatus = (msg) => {
+  const lower = String(msg || '').toLowerCase()
+  if (lower.includes('wait') || lower.includes('limit')) return 429
+  if (
+    lower.includes('configured') ||
+    lower.includes('required') ||
+    lower.includes('valid') ||
+    lower.includes('already') ||
+    lower.includes('not found') ||
+    lower.includes('invalid') ||
+    lower.includes('expired') ||
+    lower.includes('mismatch')
+  ) {
+    return 400
+  }
+  return 500
+}
+
+// Client signup step 1: pending record + OTP only (no auth.users row yet).
+app.post('/auth/signup-start', async (req, res) => {
   try {
     requireSupabaseServiceConfig()
     const email = String(req.body?.email || '').trim()
-    const userId = String(req.body?.userId || '').trim()
-    const password = req.body?.password != null ? String(req.body.password) : ''
-
     if (!isGmailAddress(email)) {
       return res.status(400).json({ error: 'A valid Gmail address is required.' })
     }
-
-    const result = await dispatchSignupEmailOtp({
+    const result = await startPendingClientSignup({
       supabaseUrl: SUPABASE_URL,
       serviceKey: SUPABASE_SERVICE_ROLE_KEY,
-      email,
-      userId,
-      password,
+      iprogApiKey: IPROG_API_KEY,
+      payload: req.body,
     })
     return res.status(200).json(result)
   } catch (error) {
-    const msg = error?.message || 'Unable to send verification email.'
-    const lower = msg.toLowerCase()
-    const status =
-      lower.includes('wait') || lower.includes('limit')
-        ? 429
-        : lower.includes('configured') ||
-            lower.includes('required') ||
-            lower.includes('already verified') ||
-            lower.includes('unable')
-          ? 400
-          : 500
-    console.error('[signup-email-otp]', msg)
-    return res.status(status).json({ error: msg })
+    const msg = error?.message || 'Unable to start signup.'
+    console.error('[signup-start]', msg)
+    return res.status(signupErrorStatus(msg)).json({ error: msg })
+  }
+})
+
+// Resend OTP for pending signup (email or SMS).
+app.post('/auth/signup-resend-otp', async (req, res) => {
+  try {
+    requireSupabaseServiceConfig()
+    const email = String(req.body?.email || '').trim()
+    const pendingId = String(req.body?.pendingId || '').trim()
+    if (!email && !pendingId) {
+      return res.status(400).json({ error: 'Email or pendingId is required.' })
+    }
+    const result = await resendPendingSignupOtp({
+      supabaseUrl: SUPABASE_URL,
+      serviceKey: SUPABASE_SERVICE_ROLE_KEY,
+      iprogApiKey: IPROG_API_KEY,
+      email,
+      pendingId,
+    })
+    return res.status(200).json(result)
+  } catch (error) {
+    const msg = error?.message || 'Unable to resend verification code.'
+    console.error('[signup-resend-otp]', msg)
+    return res.status(signupErrorStatus(msg)).json({ error: msg })
+  }
+})
+
+// Client signup step 2: verify OTP → create Supabase auth user + profile.
+app.post('/auth/signup-complete', async (req, res) => {
+  try {
+    requireSupabaseServiceConfig()
+    const result = await completePendingClientSignup({
+      supabaseUrl: SUPABASE_URL,
+      serviceKey: SUPABASE_SERVICE_ROLE_KEY,
+      iprogApiKey: IPROG_API_KEY,
+      email: req.body?.email,
+      pendingId: req.body?.pendingId,
+      otp: req.body?.otp,
+      password: req.body?.password,
+    })
+    return res.status(200).json(result)
+  } catch (error) {
+    const msg = error?.message || 'Unable to complete signup.'
+    console.error('[signup-complete]', msg)
+    return res.status(signupErrorStatus(msg)).json({ error: msg })
   }
 })
 

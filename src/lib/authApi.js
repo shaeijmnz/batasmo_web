@@ -17,6 +17,7 @@ import {
 
 export const PENDING_OTP_CHANNEL_KEY = 'batasmo_pending_otp_channel'
 export const PENDING_SIGNUP_USER_ID_KEY = 'batasmo_pending_signup_user_id'
+export const PENDING_SIGNUP_ID_KEY = 'batasmo_pending_signup_id'
 export const PENDING_SMS_PHONE_KEY = 'batasmo_pending_sms_phone'
 export const OTP_RESUME_LOGIN_KEY = 'batasmo_otp_resume_login'
 export const OTP_RESUME_SIGNUP_KEY = 'batasmo_otp_resume_signup'
@@ -100,125 +101,95 @@ export async function signUpWithEmail({
       ? normalizedSex
       : null
 
-  const { data, error } = await supabase.auth.signUp({
-    email: normalizedEmail,
-    password,
-    options: {
-      data: {
-        full_name: fullName,
-        role: normalizedRole,
-        signup_otp_completed: false,
-      },
-    },
-  })
-
-  if (error) {
-    throw new Error(error.message)
+  const base = getBackendApiBase()
+  if (!base) {
+    throw new Error(
+      'Signup is not configured. Set REACT_APP_PAYMENT_API_URL on Vercel to your Render backend URL.',
+    )
   }
 
-  const createdUser = data?.user
-  if (createdUser?.id) {
-    const { error: profileError } = await supabase.from('profiles').upsert({
-      id: createdUser.id,
+  const response = await fetch(`${base}/auth/signup-start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
       email: normalizedEmail,
-      full_name: fullName,
+      password,
+      fullName,
       role: normalizedRole,
       sex: safeSex,
       phone: phone || null,
-      age: age || null,
+      age: parsedAge,
       address: address || null,
-      guardian_name: guardianName || null,
-      guardian_contact: guardianContact || null,
-      preferred_otp_channel: otpChannel,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
+      guardianName: guardianName || null,
+      guardianContact: guardianContact || null,
+      preferredOtpChannel: otpChannel,
+    }),
+  })
 
-    if (profileError) {
-      console.error('Failed to create profile:', profileError)
-    }
-
-    if (normalizedRole === 'Attorney') {
-      const { error: attorneyProfileError } = await supabase
-        .from('attorney_profiles')
-        .upsert(
-          {
-            user_id: createdUser.id,
-            is_verified: false,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'user_id' },
-        )
-
-      if (attorneyProfileError) {
-        console.error('Failed to initialize attorney profile:', attorneyProfileError)
-      }
-    }
-
-    createdUser.role = normalizedRole
-    createdUser.name = fullName
-    createdUser.phone = phone
-    createdUser.address = address
-
-    if (data?.session) {
-      // Never keep an active session after signup — user must verify OTP first.
-      await supabase.auth.signOut()
-    }
-
-    if (otpChannel === 'email') {
-      try {
-        await sendSignupVerificationEmail({
-          email: normalizedEmail,
-          userId: createdUser.id,
-          password,
-        })
-      } catch (emailErr) {
-        console.warn('[signup] verification email', emailErr?.message || emailErr)
-      }
-    }
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    throw new Error(payload?.error || 'Failed to start signup.')
   }
 
-  return { user: createdUser, preferredOtpChannel: otpChannel }
+  return {
+    pendingId: payload?.pendingId,
+    email: payload?.email || normalizedEmail,
+    preferredOtpChannel: payload?.preferredOtpChannel || otpChannel,
+  }
 }
 
 /**
- * Send 6-digit signup verification code to Gmail.
- * Uses Render SMTP when configured; falls back to Supabase resend.
+ * Resend signup verification code (pending signup — no Supabase auth user yet).
  */
-export async function sendSignupVerificationEmail({ email, userId, password }) {
+export async function sendSignupVerificationEmail({ email, pendingId }) {
   const normalizedEmail = normalizeAuthEmail(email)
-  if (!normalizedEmail) throw new Error('Email is required.')
+  if (!normalizedEmail && !pendingId) throw new Error('Email is required.')
 
   const base = getBackendApiBase()
-  if (base) {
-    const body = { email: normalizedEmail }
-    if (userId) body.userId = String(userId).trim()
-    if (password) body.password = String(password)
-
-    const response = await fetch(`${base}/auth/signup-email-otp`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    const payload = await response.json().catch(() => ({}))
-    if (response.ok) return payload
-    const backendMsg = payload?.error
-    if (backendMsg && !String(backendMsg).toLowerCase().includes('configured')) {
-      throw new Error(backendMsg)
-    }
+  if (!base) {
+    throw new Error('Signup service is not configured (REACT_APP_PAYMENT_API_URL).')
   }
 
-  const { error } = await supabase.auth.resend({
-    type: 'signup',
-    email: normalizedEmail,
+  const body = {}
+  if (normalizedEmail) body.email = normalizedEmail
+  if (pendingId) body.pendingId = String(pendingId).trim()
+
+  const response = await fetch(`${base}/auth/signup-resend-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
   })
-  if (error) {
-    throw new Error(
-      error.message ||
-        'Failed to send verification email. Ask admin to set Gmail SMTP on Render.',
-    )
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    throw new Error(payload?.error || 'Failed to send verification email.')
   }
-  return { ok: true, source: 'supabase' }
+  return payload
+}
+
+/**
+ * Verify OTP and create Supabase account (auth + profile) — only after this does email appear in Supabase.
+ */
+export async function completePendingSignup({ email, pendingId, otp, password }) {
+  const base = getBackendApiBase()
+  if (!base) {
+    throw new Error('Signup service is not configured (REACT_APP_PAYMENT_API_URL).')
+  }
+
+  const response = await fetch(`${base}/auth/signup-complete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: normalizeAuthEmail(email),
+      pendingId: pendingId ? String(pendingId).trim() : undefined,
+      otp: String(otp || '').replace(/\D/g, ''),
+      password: String(password || ''),
+    }),
+  })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    throw new Error(payload?.error || 'Verification failed.')
+  }
+  return payload
 }
 
 /**
@@ -450,8 +421,8 @@ export async function verifySignUpOtp({ email, token }) {
   return { success: true }
 }
 
-export async function resendSignUpOtp({ email, userId, password }) {
-  return sendSignupVerificationEmail({ email, userId, password })
+export async function resendSignUpOtp({ email, pendingId }) {
+  return sendSignupVerificationEmail({ email, pendingId })
 }
 
 export async function startPasswordRecovery({ email }) {
