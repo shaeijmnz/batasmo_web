@@ -72,6 +72,8 @@ const Attorneys = ({ onNavigate }) => {
   const [addSubmitting, setAddSubmitting] = useState(false);
   const [addFormError, setAddFormError] = useState('');
   const [addSuccessNotice, setAddSuccessNotice] = useState('');
+  const [createdAttorney, setCreatedAttorney] = useState(null);
+  const [copyFeedback, setCopyFeedback] = useState('');
   const navigate = (path) => {
     const pageMap = {
       '/': 'admin-home',
@@ -229,12 +231,34 @@ const Attorneys = ({ onNavigate }) => {
     if (addSubmitting) return;
     setAddModalOpen(false);
     setAddFormError('');
+    setCreatedAttorney(null);
+    setCopyFeedback('');
   };
 
   const openAddAttorneyModal = () => {
     setAddFormError('');
     setAddSuccessNotice('');
+    setCreatedAttorney(null);
+    setCopyFeedback('');
     setAddModalOpen(true);
+  };
+
+  const copyAttorneyCredentials = async () => {
+    if (!createdAttorney) return;
+    const loginUrl = 'https://batasmo-web.vercel.app/login';
+    const text = [
+      `Welcome to BatasMo, ${createdAttorney.fullName}!`,
+      '',
+      `Email: ${createdAttorney.email}`,
+      `Password: ${createdAttorney.password}`,
+      `Sign in: ${loginUrl}`,
+    ].join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyFeedback('Copied to clipboard');
+    } catch {
+      setCopyFeedback('Could not copy — select and copy manually');
+    }
   };
 
   const handleAddAttorney = async (event) => {
@@ -268,18 +292,24 @@ const Attorneys = ({ onNavigate }) => {
         fullName,
         specialty: addSpecialty.trim(),
       });
+      setCreatedAttorney({
+        email,
+        password,
+        fullName,
+        welcomeEmailSent: Boolean(result?.welcomeEmailSent),
+        welcomeEmailError: result?.welcomeEmailError || '',
+      });
       setAddEmail('');
       setAddPassword('');
       setAddFullName('');
       setAddSpecialty('');
-      setAddModalOpen(false);
       if (result?.welcomeEmailSent) {
-        setAddSuccessNotice(`Welcome email sent to ${email} with login credentials.`);
+        setAddSuccessNotice(`Welcome email sent to ${email}.`);
       } else {
         setAddSuccessNotice(
-          `Account created for ${email}. Welcome email was not sent${
-            result?.welcomeEmailError ? ` (${result.welcomeEmailError})` : ' — configure email on the backend (Resend or Gmail SMTP).'
-          }`,
+          `Account created for ${email}. Copy credentials below${
+            result?.welcomeEmailError ? ` (email: ${result.welcomeEmailError})` : ' — add Gmail SMTP on Render for auto-email to any Gmail.'
+          }.`,
         );
       }
       setLoading(true);
@@ -459,8 +489,40 @@ const Attorneys = ({ onNavigate }) => {
                 <X size={20} />
               </button>
             </div>
+            {createdAttorney ? (
+              <>
+                <p className="modal-subtitle">
+                  Account created for <strong>{createdAttorney.fullName}</strong>.
+                  {createdAttorney.welcomeEmailSent
+                    ? ' A welcome email with these credentials was sent.'
+                    : ' Share these login details with the attorney (email was not sent automatically).'}
+                </p>
+                <div className="attorney-created-credentials">
+                  <p><strong>Email</strong> {createdAttorney.email}</p>
+                  <p><strong>Password</strong> <code>{createdAttorney.password}</code></p>
+                  <p><strong>Login</strong> https://batasmo-web.vercel.app/login</p>
+                </div>
+                {createdAttorney.welcomeEmailSent ? (
+                  <p className="attorney-email-sent-badge">Welcome email sent</p>
+                ) : (
+                  <p className="attorney-email-warn-badge">
+                    {createdAttorney.welcomeEmailError || 'Configure Gmail SMTP on Render to email any Gmail address.'}
+                  </p>
+                )}
+                {copyFeedback ? <p className="modal-copy-feedback">{copyFeedback}</p> : null}
+                <div className="modal-actions">
+                  <button type="button" className="modal-cancel-btn" onClick={copyAttorneyCredentials}>
+                    Copy credentials
+                  </button>
+                  <button type="button" className="modal-submit-btn" onClick={closeAddModal}>
+                    Done
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
             <p className="modal-subtitle">
-              Creates an attorney login for the web app. Give them the email and password you set here.
+              Creates an attorney login. Credentials can be emailed automatically (Gmail SMTP on Render) or copied after create.
             </p>
             <form className="modal-form" onSubmit={handleAddAttorney}>
               <div className="modal-input-group">
@@ -523,6 +585,8 @@ const Attorneys = ({ onNavigate }) => {
                 </button>
               </div>
             </form>
+              </>
+            )}
           </div>
         </div>
       ) : null}

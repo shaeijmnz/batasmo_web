@@ -4,7 +4,7 @@ import crypto from 'crypto'
 import dotenv from 'dotenv'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import jwt from 'jsonwebtoken'
-import { sendAttorneyWelcomeEmail } from './lib/welcomeEmail.js'
+import { isWelcomeEmailConfigured, sendAttorneyWelcomeEmail } from './lib/welcomeEmail.js'
 
 dotenv.config()
 
@@ -2314,6 +2314,7 @@ app.get('/health', (req, res) => {
     configuredProviderMode: CHATBOT_PROVIDER_MODE,
     hasGeminiKey,
     modelCandidates: GEMINI_MODEL_CANDIDATES,
+    welcomeEmailConfigured: isWelcomeEmailConfigured(),
   })
 })
 

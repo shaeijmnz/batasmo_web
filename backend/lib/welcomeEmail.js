@@ -162,11 +162,16 @@ export async function sendAttorneyWelcomeEmail({
     loginUrl: resolvedLoginUrl,
   })
 
+  const smtpReady = Boolean(SMTP_HOST && SMTP_USER && SMTP_PASS && WELCOME_EMAIL_FROM)
+
   try {
-    if (RESEND_API_KEY) {
+    // SMTP first when configured — delivers to any Gmail; Resend testing sender is limited.
+    if (smtpReady) {
+      await sendViaSmtp({ to, subject, html, text })
+    } else if (RESEND_API_KEY) {
       await sendViaResend({ to, subject, html, text })
     } else {
-      await sendViaSmtp({ to, subject, html, text })
+      return { sent: false, skipped: true, error: 'Email service is not configured on the server.' }
     }
     return { sent: true }
   } catch (error) {

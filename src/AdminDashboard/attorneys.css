@@ -65,6 +65,58 @@
 /* Attorney Card Styles */
 .attorneys-container { background: white; border-radius: 12px; border: 1px solid var(--border); overflow: visible; }
 .list-header { padding: 20px; border-bottom: 1px solid var(--border); }
+.attorney-created-credentials {
+  margin: 0 0 14px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: #f8f6f2;
+  border: 1px solid #e8e0d4;
+}
+
+.attorney-created-credentials p {
+  margin: 0 0 10px;
+  font-size: 0.9rem;
+  color: #334155;
+}
+
+.attorney-created-credentials p:last-child {
+  margin-bottom: 0;
+}
+
+.attorney-created-credentials code {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.88rem;
+  color: #152238;
+}
+
+.attorney-email-sent-badge {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #ecfdf5;
+  border: 1px solid #86efac;
+  color: #166534;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.attorney-email-warn-badge {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  color: #92400e;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.modal-copy-feedback {
+  margin: 0 0 10px;
+  font-size: 0.82rem;
+  color: #166534;
+}
+
 .attorneys-success-message {
   margin: 0 0 16px;
   padding: 12px 16px;
