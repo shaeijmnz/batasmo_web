@@ -16,28 +16,16 @@ const getConsultationStatus = ({ appointmentStatus, isPaid, room }) => {
   return null;
 };
 
-const formatScheduleForUi = (scheduledAt, slotDate, slotTime) => {
+const formatScheduleForUi = (scheduledAt) => {
   const parsed = scheduledAt ? new Date(scheduledAt) : null;
-  if (parsed && !Number.isNaN(parsed.getTime())) {
-    return {
-      date: parsed.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }),
-      time: parsed.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', hour12: true }),
-    };
+  if (!parsed || Number.isNaN(parsed.getTime())) {
+    return { date: 'TBD', time: 'TBD' };
   }
 
-  if (slotDate) {
-    const dateOnly = new Date(`${slotDate}T00:00:00`);
-    const dateLabel = Number.isNaN(dateOnly.getTime())
-      ? String(slotDate)
-      : dateOnly.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
-    const timeLabel = String(slotTime || '').trim();
-    return {
-      date: dateLabel,
-      time: timeLabel || 'TBD',
-    };
-  }
-
-  return { date: 'TBD', time: 'TBD' };
+  return {
+    date: parsed.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }),
+    time: parsed.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', hour12: true }),
+  };
 };
 
 const formatDurationLabel = (minutes) => `${Number(minutes || 60)} min`;
@@ -80,7 +68,7 @@ const Consultations = ({ onNavigate }) => {
         const [appointmentsRes, feedbackRes, transactionsRes, roomsRes] = await Promise.all([
           supabase
             .from('appointments')
-            .select('id, title, notes, attorney_consultation_summary, scheduled_at, slot_date, slot_time, duration_minutes, status, client:client_id(full_name), attorney:attorney_id(full_name)')
+            .select('id, title, notes, attorney_consultation_summary, scheduled_at, duration_minutes, status, client:client_id(full_name), attorney:attorney_id(full_name)')
             .order('scheduled_at', { ascending: false }),
           supabase
             .from('consultation_feedback')
@@ -130,7 +118,7 @@ const Consultations = ({ onNavigate }) => {
             });
             if (!status) return null;
             const feedback = feedbackByAppointment.get(row.id);
-            const { date, time } = formatScheduleForUi(row.scheduled_at, row.slot_date, row.slot_time);
+            const { date, time } = formatScheduleForUi(row.scheduled_at);
             return {
               id: row.id,
               title: row.title || 'Consultation',
