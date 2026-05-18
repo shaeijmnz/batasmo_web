@@ -546,7 +546,7 @@ const Attorneys = ({ onNavigate }) => {
           variant="admin"
           onClose={closeAvailabilityManager}
         />
-      ) : null}      ) : null}
+      ) : null}
     </div>
   );
 };
