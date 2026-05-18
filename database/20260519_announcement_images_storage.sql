@@ -1,6 +1,6 @@
--- Announcement images for admin "Send Announcement" (public read, admin upload).
--- 1) Supabase Dashboard → Storage → New bucket: announcement-images (public)
--- 2) Run this script in SQL Editor.
+-- Announcement images for admin "Send Announcement"
+-- BEFORE running: Storage → New bucket → name: announcement-images → Public bucket ON
+-- Then paste this entire file in Supabase SQL Editor → Run
 
 begin;
 
@@ -19,8 +19,10 @@ to authenticated
 with check (
   bucket_id = 'announcement-images'
   and exists (
-    select 1 from public.profiles p
-    where p.id = auth.uid() and lower(trim(p.role)) = 'admin'
+    select 1
+    from public.profiles p
+    where p.id = auth.uid()
+      and p.role = 'Admin'::user_role
   )
 );
 
@@ -32,15 +34,19 @@ to authenticated
 using (
   bucket_id = 'announcement-images'
   and exists (
-    select 1 from public.profiles p
-    where p.id = auth.uid() and lower(trim(p.role)) = 'admin'
+    select 1
+    from public.profiles p
+    where p.id = auth.uid()
+      and p.role = 'Admin'::user_role
   )
 )
 with check (
   bucket_id = 'announcement-images'
   and exists (
-    select 1 from public.profiles p
-    where p.id = auth.uid() and lower(trim(p.role)) = 'admin'
+    select 1
+    from public.profiles p
+    where p.id = auth.uid()
+      and p.role = 'Admin'::user_role
   )
 );
 
@@ -52,8 +58,10 @@ to authenticated
 using (
   bucket_id = 'announcement-images'
   and exists (
-    select 1 from public.profiles p
-    where p.id = auth.uid() and lower(trim(p.role)) = 'admin'
+    select 1
+    from public.profiles p
+    where p.id = auth.uid()
+      and p.role = 'Admin'::user_role
   )
 );
 

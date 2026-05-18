@@ -15,7 +15,6 @@ import {
   TrendingUp,
   DollarSign,
   UserCheck,
-  Star,
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import {
@@ -92,9 +91,6 @@ const Reports = ({ onNavigate }) => {
     totalCompletedConsultations: 0,
     currentCompletedConsultations: 0,
     previousCompletedConsultations: 0,
-    averageRating: 0,
-    currentAverageRating: 0,
-    previousAverageRating: 0,
   });
 
   const navigate = (path) => {
@@ -135,7 +131,7 @@ const Reports = ({ onNavigate }) => {
         const months = getLastSixMonths();
         const monthMetricsMap = new Map(months.map((item) => [item.key, { revenue: 0, consultations: 0 }]));
 
-        const [transactionsRes, appointmentsRes, feedbackRes, notarialRes] = await Promise.all([
+        const [transactionsRes, appointmentsRes, notarialRes] = await Promise.all([
           supabase
             .from('transactions')
             .select('amount, payment_status, created_at, client_id, appointment_id')
@@ -146,17 +142,12 @@ const Reports = ({ onNavigate }) => {
             .select('id, title, status, scheduled_at, updated_at, attorney_id, attorney:attorney_id(full_name), client_id')
             .order('scheduled_at', { ascending: false }),
           supabase
-            .from('consultation_feedback')
-            .select('rating, created_at')
-            .order('created_at', { ascending: false }),
-          supabase
             .from('notarial_requests')
             .select('id, service_type, status, created_at, updated_at'),
         ]);
 
         if (transactionsRes.error) throw transactionsRes.error;
         if (appointmentsRes.error) throw appointmentsRes.error;
-        if (feedbackRes.error) throw feedbackRes.error;
         if (notarialRes.error) throw notarialRes.error;
 
         const transactions = transactionsRes.data || [];
@@ -164,7 +155,6 @@ const Reports = ({ onNavigate }) => {
           (item) => String(item.status || '').toLowerCase() !== 'cancelled',
         );
         const completedAppointments = appointments.filter((item) => String(item.status || '').toLowerCase() === 'completed');
-        const feedbackRows = feedbackRes.data || [];
         const notarialRequests = notarialRes.data || [];
 
         const now = new Date();
@@ -238,31 +228,6 @@ const Reports = ({ onNavigate }) => {
           .sort((a, b) => b.consultations - a.consultations)
           .slice(0, 6);
 
-        const ratingValues = feedbackRows.map((row) => Number(row.rating || 0)).filter((value) => value > 0);
-        const averageRating = ratingValues.length
-          ? ratingValues.reduce((sum, value) => sum + value, 0) / ratingValues.length
-          : 0;
-        const currentMonthRatings = feedbackRows
-          .filter((row) => {
-            const createdAt = row.created_at ? new Date(row.created_at) : null;
-            return createdAt && !Number.isNaN(createdAt.getTime()) && createdAt >= startCurrentMonth;
-          })
-          .map((row) => Number(row.rating || 0))
-          .filter((value) => value > 0);
-        const previousMonthRatings = feedbackRows
-          .filter((row) => {
-            const createdAt = row.created_at ? new Date(row.created_at) : null;
-            return createdAt && !Number.isNaN(createdAt.getTime()) && createdAt >= startPreviousMonth && createdAt < startCurrentMonth;
-          })
-          .map((row) => Number(row.rating || 0))
-          .filter((value) => value > 0);
-        const currentAverageRating = currentMonthRatings.length
-          ? currentMonthRatings.reduce((sum, value) => sum + value, 0) / currentMonthRatings.length
-          : 0;
-        const previousAverageRating = previousMonthRatings.length
-          ? previousMonthRatings.reduce((sum, value) => sum + value, 0) / previousMonthRatings.length
-          : 0;
-
         const notarialStatusMap = new Map([
           ['Pending', 0],
           ['In Progress', 0],
@@ -292,9 +257,6 @@ const Reports = ({ onNavigate }) => {
           totalCompletedConsultations: completedAppointments.length,
           currentCompletedConsultations,
           previousCompletedConsultations,
-          averageRating,
-          currentAverageRating,
-          previousAverageRating,
         });
         setLoadError('');
       } catch (error) {
@@ -427,14 +389,6 @@ const Reports = ({ onNavigate }) => {
       icon: <UserCheck />,
       color: '#22c55e',
     },
-    {
-      label: 'Avg. Rating',
-      value: reportMetrics.averageRating.toFixed(1),
-      change: (reportMetrics.currentAverageRating - reportMetrics.previousAverageRating).toFixed(1),
-      caption: 'current month rating delta',
-      icon: <Star />,
-      color: '#a855f7',
-    },
   ], [onlineClientIds.size, reportMetrics]);
 
   const downloadCsv = (filename, header, rows) => {
@@ -475,7 +429,6 @@ const Reports = ({ onNavigate }) => {
       `Total Revenue,${Math.round(reportMetrics.totalRevenue)}`,
       `Completed Consultations,${reportMetrics.totalCompletedConsultations}`,
       `Active Clients Online,${onlineClientIds.size}`,
-      `Average Rating,${reportMetrics.averageRating.toFixed(1)}`,
       '',
       'Monthly Trend',
       'Month,Revenue,Completed Consultations',
