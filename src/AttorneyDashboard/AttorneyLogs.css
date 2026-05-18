@@ -116,3 +116,14 @@
   .al-main { padding: 14px; }
   .al-item { flex-direction: column; align-items: stretch; }
 }
+
+/* Page-scoped override: make 'View summary' button dark text on light/beige background */
+.al-page .al-list .al-item .al-view-btn {
+  background: linear-gradient(145deg, #fff9f0, #f8ecdd) !important;
+  color: #1b2432 !important;
+  border: 1px solid #d9c8b1 !important;
+  box-shadow: 0 6px 14px rgba(36, 29, 20, 0.06) !important;
+}
+.al-page .al-list .al-item .al-view-btn:hover {
+  filter: brightness(0.98) !important;
+}

@@ -20,9 +20,9 @@
   z-index: 300;
   border-radius: 14px;
   overflow: hidden;
-  background: rgba(6, 13, 22, 0.97);
-  border: 1px solid rgba(147, 186, 240, 0.28);
-  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.45);
+  background: linear-gradient(180deg, #fff9f0 0%, #f7ead9 100%);
+  border: 1px solid #d9c8b1;
+  box-shadow: 0 18px 36px rgba(36, 29, 20, 0.14);
   backdrop-filter: blur(16px);
 }
 
@@ -31,7 +31,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 12px 14px;
-  border-bottom: 1px solid rgba(128, 176, 255, 0.18);
+  border-bottom: 1px solid #d9c8b1;
   flex-shrink: 0;
 }
 
@@ -39,7 +39,7 @@
   font-size: 0.92rem;
   font-weight: 800;
   letter-spacing: 0.02em;
-  color: #f4f8ff;
+  color: #1b2432;
 }
 
 .atty-notif-panel__header-actions {
@@ -49,9 +49,9 @@
 }
 
 .atty-notif-panel__mark-read {
-  border: 1px solid rgba(147, 197, 253, 0.38);
-  background: rgba(59, 130, 246, 0.16);
-  color: #cfe1ff;
+  border: 1px solid #d9c8b1;
+  background: #f3e5d3;
+  color: #5f6672;
   border-radius: 7px;
   padding: 4px 9px;
   font-size: 0.68rem;
@@ -62,9 +62,9 @@
 }
 
 .atty-notif-panel__mark-read:hover:not(:disabled) {
-  background: rgba(59, 130, 246, 0.3);
-  border-color: rgba(147, 197, 253, 0.52);
-  color: #f6fbff;
+  background: #e8d7c1;
+  border-color: #c8b49a;
+  color: #1b2432;
 }
 
 .atty-notif-panel__mark-read:disabled {
@@ -77,7 +77,7 @@
   padding: 4px 8px;
   border-radius: 8px;
   background: transparent;
-  color: #9cb7da;
+  color: #5f6672;
   font-size: 1rem;
   line-height: 1;
   cursor: pointer;
@@ -85,8 +85,8 @@
 }
 
 .atty-notif-panel__close:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.06);
+  color: #1b2432;
+  background: rgba(21, 34, 56, 0.08);
 }
 
 .atty-notif-panel__list {
@@ -113,26 +113,26 @@
   padding: 20px 12px;
   text-align: center;
   font-size: 0.82rem;
-  color: #9cb7da;
+  color: #5f6672;
 }
 
 .atty-notif-item {
   margin: 0;
   border-radius: 12px;
-  border: 1px solid rgba(128, 176, 255, 0.12);
-  background: rgba(8, 18, 34, 0.55);
+  border: 1px solid #d9c8b1;
+  background: rgba(255, 250, 242, 0.95);
   transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
 }
 
 .atty-notif-item:hover {
-  border-color: rgba(132, 181, 255, 0.32);
-  background: rgba(59, 130, 246, 0.1);
-  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.12);
+  border-color: #c8b49a;
+  background: #f3e5d3;
+  box-shadow: 0 0 0 1px rgba(21, 34, 56, 0.08);
 }
 
 .atty-notif-item--unread {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(20, 184, 166, 0.08));
-  border-color: rgba(132, 181, 255, 0.28);
+  background: linear-gradient(135deg, #f6ecdf, #f2e3d0);
+  border-color: #c8b49a;
 }
 
 .atty-notif-item__row {
@@ -150,31 +150,31 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #dce8ff;
+  color: #243652;
 }
 
 .atty-notif-item__glyph--booking {
-  background: rgba(59, 130, 246, 0.22);
-  color: #9ec5ff;
-  border: 1px solid rgba(96, 165, 250, 0.35);
+  background: rgba(21, 34, 56, 0.1);
+  color: #243652;
+  border: 1px solid #d9c8b1;
 }
 
 .atty-notif-item__glyph--payment {
-  background: rgba(16, 185, 129, 0.18);
-  color: #6ee7b7;
-  border: 1px solid rgba(52, 211, 153, 0.35);
+  background: rgba(21, 34, 56, 0.08);
+  color: #243652;
+  border: 1px solid #d9c8b1;
 }
 
 .atty-notif-item__glyph--consultation {
-  background: rgba(212, 175, 55, 0.15);
-  color: #ffd78a;
-  border: 1px solid rgba(245, 166, 35, 0.35);
+  background: rgba(216, 179, 122, 0.2);
+  color: #7d5d2f;
+  border: 1px solid #d0b083;
 }
 
 .atty-notif-item__glyph--default {
-  background: rgba(148, 163, 184, 0.12);
-  color: #cbd5e1;
-  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(21, 34, 56, 0.08);
+  color: #243652;
+  border: 1px solid #d9c8b1;
 }
 
 .atty-notif-item__body {
@@ -198,7 +198,7 @@
   font-weight: 800;
   line-height: 1.25;
   letter-spacing: 0.01em;
-  color: #f1f6ff;
+  color: #1b2432;
   flex: 1;
   min-width: 0;
 }
@@ -211,16 +211,16 @@
   text-transform: uppercase;
   padding: 3px 7px;
   border-radius: 6px;
-  background: rgba(59, 130, 246, 0.2);
-  color: #93c5fd;
-  border: 1px solid rgba(147, 197, 253, 0.35);
+  background: #e8dfd3;
+  color: #4f5a68;
+  border: 1px solid #d0c0aa;
 }
 
 .atty-notif-item__desc {
   margin: 0;
   font-size: 0.78rem;
   line-height: 1.5;
-  color: #b8cfe8;
+  color: #4f5a68;
 }
 
 .atty-notif-item__meta {
@@ -231,6 +231,6 @@
 
 .atty-notif-item__time {
   font-size: 0.68rem;
-  color: #7c9cbc;
+  color: #6c7684;
   font-variant-numeric: tabular-nums;
 }

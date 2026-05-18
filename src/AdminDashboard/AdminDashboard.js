@@ -2,8 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   LayoutDashboard, Users, Scale, FileText, MessageSquare,
   BarChart3, Settings, LogOut, Menu,
-  X, Send, Trash2, Eye, AlertCircle, CheckCircle, Calendar, Bell,
+  X, Send, Trash2, Eye, AlertCircle, CheckCircle, Calendar, Bell, Video,
 } from 'lucide-react';
+import {
+  countOngoingVideoCallRooms,
+  getQueueRequestDisplayStatus,
+  isOngoingVideoCallRoom,
+} from '../lib/consultationStatus';
 import { supabase } from '../lib/supabaseClient';
 import AttorneyNotificationDropdown from '../AttorneyDashboard/AttorneyNotificationDropdown';
 import './AdminNotificationDropdown.css';
@@ -143,20 +148,6 @@ const formatNotifBadgeCount = (count) => {
   return String(safeCount);
 };
 
-const normalizeRequestStatusForUi = (status) => {
-  const value = String(status || '').toLowerCase();
-  if (value === 'started' || value === 'in_progress' || value === 'in-progress' || value === 'active') {
-    return 'In Progress';
-  }
-  if (value === 'completed') {
-    return 'Completed';
-  }
-  if (value === 'confirmed' || value === 'rescheduled') {
-    return 'Scheduled';
-  }
-  return 'Pending';
-};
-
 const formatScheduleLabel = (value) => {
   const parsed = value ? new Date(value) : null;
   if (!parsed || Number.isNaN(parsed.getTime())) {
@@ -185,8 +176,10 @@ const isCountableConsultationStatus = (status) => {
   return Boolean(value) && !CANCELLED_APPOINTMENT_STATUSES.has(value);
 };
 
-/** Matches Admin Consultations: completed status, closed room, or started session. */
-const isFinishedConsultation = (status, closedRoomAppointmentIds, appointmentId) => {
+/** Matches Admin Consultations: completed status, closed room, or started session (not live video). */
+const isFinishedConsultation = (status, closedRoomAppointmentIds, appointmentId, roomByAppointment) => {
+  const room = roomByAppointment?.get?.(appointmentId);
+  if (isOngoingVideoCallRoom(room)) return false;
   const value = String(status || '').toLowerCase();
   if (value === 'completed') return true;
   if (appointmentId && closedRoomAppointmentIds?.has(appointmentId)) return true;
@@ -261,6 +254,9 @@ const Dashboard = ({ onNavigate }) => {
   );
   const [recentRequests, setRecentRequests] = useState(() => dashboardBoot?.recentRequests || []);
   const [topAttorneys, setTopAttorneys] = useState(() => dashboardBoot?.topAttorneys || []);
+  const [ongoingVideoCallCount, setOngoingVideoCallCount] = useState(
+    () => dashboardBoot?.ongoingVideoCallCount ?? 0,
+  );
 
   const [adminUserId, setAdminUserId] = useState('');
   const [adminNotifications, setAdminNotifications] = useState([]);
@@ -414,7 +410,9 @@ const Dashboard = ({ onNavigate }) => {
             .from('appointments')
             .select('id, attorney_id, status')
             .neq('status', 'cancelled'),
-          supabase.from('consultation_rooms').select('appointment_id, is_closed'),
+          supabase
+            .from('consultation_rooms')
+            .select('appointment_id, is_closed, video_meeting_id'),
         ]);
 
       if (profilesRes.error) {
@@ -435,8 +433,17 @@ const Dashboard = ({ onNavigate }) => {
         console.warn('[admin-dashboard] consultation rooms load failed', roomsRes.error);
       }
 
+      const rooms = roomsRes.data || [];
+      const roomByAppointment = new Map();
+      rooms.forEach((row) => {
+        if (row.appointment_id) roomByAppointment.set(row.appointment_id, row);
+      });
+
+      const nextOngoingVideoCallCount = countOngoingVideoCallRooms(rooms);
+      setOngoingVideoCallCount(nextOngoingVideoCallCount);
+
       const closedRoomAppointmentIds = new Set(
-        (roomsRes.data || [])
+        rooms
           .filter((row) => row.is_closed && row.appointment_id)
           .map((row) => row.appointment_id),
       );
@@ -480,7 +487,10 @@ const Dashboard = ({ onNavigate }) => {
           name: clientNameById.get(item.client_id) || 'Client',
           atty: attorneyNameById.get(item.attorney_id) || 'Attorney',
           law: item.title || 'Consultation',
-          status: normalizeRequestStatusForUi(item.status),
+          status: getQueueRequestDisplayStatus(
+            item.status,
+            roomByAppointment.get(item.id),
+          ),
           bookedLabel: `Booked ${formatScheduleLabel(item.created_at)}`,
           age: `Scheduled ${formatScheduleLabel(item.scheduled_at)}`,
         }));
@@ -500,7 +510,7 @@ const Dashboard = ({ onNavigate }) => {
           Number(totalConsultationsByAttorney.get(row.attorney_id) || 0) + 1,
         );
 
-        if (isFinishedConsultation(status, closedRoomAppointmentIds, row.id)) {
+        if (isFinishedConsultation(status, closedRoomAppointmentIds, row.id, roomByAppointment)) {
           finishedConsultationsByAttorney.set(
             row.attorney_id,
             Number(finishedConsultationsByAttorney.get(row.attorney_id) || 0) + 1,
@@ -543,6 +553,7 @@ const Dashboard = ({ onNavigate }) => {
       persistDashboardCache({
         recentRequests: nextRecentRequests,
         topAttorneys: nextTopAttorneys,
+        ongoingVideoCallCount: nextOngoingVideoCallCount,
       });
     };
 
@@ -1079,6 +1090,17 @@ const Dashboard = ({ onNavigate }) => {
   const stats = [
     { label: 'Total Clients', value: totalClients, color: '#1e3a8a', icon: <Users size={20}/>, page: '/clients' },
     { label: 'Total Attorneys', value: totalAttorneys, color: '#eab308', icon: <Scale size={20}/>, page: '/attorneys' },
+    {
+      label: 'In Progress',
+      value: ongoingVideoCallCount,
+      color: '#3b82f6',
+      icon: <Video size={20} />,
+      page: '/consultations',
+      alert: ongoingVideoCallCount > 0,
+      alertText: `${ongoingVideoCallCount} ongoing video ${
+        ongoingVideoCallCount === 1 ? 'call' : 'calls'
+      }`,
+    },
     {
       label: 'Pending Notary',
       value: pendingNotaryCount,

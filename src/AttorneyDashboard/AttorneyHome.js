@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import './AttorneyTheme.css';
 import './AttorneyHome.css';
+import './AttorneyTheme.css';
 import {
   fetchAttorneyHomeData,
   isConsultationChatWindowOpen,
@@ -292,7 +292,9 @@ function AttorneyHome({ onNavigate, profile }) {
       {/* Content */}
       <main className="att-main">
         <section className="att-hero-grid">
-          <div className="att-welcome">
+          <div className="att-welcome att-welcome--with-image">
+            <img src="/lady-justice/lady-justice.jpg" alt="Lady Justice" className="att-welcome__image" />
+            <div className="att-welcome__overlay" />
             <div className="att-welcome__text">
               <p className="att-kicker">LEGAL OPERATIONS OVERVIEW</p>
               <h1>Welcome back, {profile?.full_name || 'Attorney'}</h1>

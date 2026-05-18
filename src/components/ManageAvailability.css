@@ -135,7 +135,7 @@
 }
 
 .availability-weekdays span {
-  color: #64748b;
+  color: #4f5a68;
   font-size: 0.8rem;
   font-weight: 800;
   text-align: center;
@@ -147,7 +147,7 @@
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
-  color: #0f172a;
+  color: #1b2432;
   cursor: pointer;
   display: flex;
   font-weight: 800;
@@ -161,7 +161,8 @@
 }
 
 .availability-day--today {
-  border-color: #d4a017;
+  border-color: #b78949;
+  box-shadow: 0 0 0 2px rgba(183, 137, 73, 0.2);
 }
 
 .availability-day--selected {
@@ -170,7 +171,7 @@
 }
 
 .availability-dot {
-  background: #d4a017;
+  background: #b78949;
   border-radius: 999px;
   bottom: 8px;
   height: 6px;
@@ -185,7 +186,7 @@
 }
 
 .availability-save-btn {
-  background: #d4a017;
+  background: linear-gradient(135deg, #152238 0%, #243652 100%);
   border: none;
   border-radius: 12px;
   color: #ffffff;
@@ -197,6 +198,19 @@
 .availability-save-btn:disabled {
   cursor: wait;
   opacity: 0.7;
+}
+
+.availability-time-chip,
+.monthly-weekday-chip,
+.monthly-time-chip {
+  transition: transform 0.22s ease, box-shadow 0.22s ease, background 0.22s ease;
+}
+
+.availability-time-chip:hover,
+.monthly-weekday-chip:hover,
+.monthly-time-chip:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgba(36, 29, 20, 0.12);
 }
 
 .availability-save-modal-overlay {
@@ -438,16 +452,16 @@
 }
 
 .availability-page--attorney {
-  background: #0c1220;
-  border: 1px solid rgba(245, 166, 35, 0.22);
-  color: #e5e7eb;
+  background: linear-gradient(180deg, #fff9f0 0%, #f2e5d4 100%);
+  border: 1px solid #d9c8b1;
+  color: #1b2432;
 }
 
 .availability-page--attorney .availability-page__header h2,
 .availability-page--attorney .availability-calendar-head h3,
 .availability-page--attorney .availability-slots-head h3,
 .availability-page--attorney .monthly-template-head h4 {
-  color: #f9fafb;
+  color: #1b2432;
 }
 
 .availability-page--attorney .availability-page__header p,
@@ -455,70 +469,72 @@
 .availability-page--attorney .availability-slots-head p,
 .availability-page--attorney .monthly-template-head p,
 .availability-page--attorney .monthly-template-label {
-  color: #9ca3af;
+  color: #5f6672;
 }
 
 .availability-page--attorney .availability-card {
-  background: rgba(17, 24, 39, 0.92);
-  border-color: rgba(148, 163, 184, 0.2);
+  background: linear-gradient(180deg, #fff9f0 0%, #f7ead9 100%);
+  border-color: #d9c8b1;
 }
 
 .availability-page--attorney .availability-day {
-  background: #111827;
-  border-color: #374151;
-  color: #f3f4f6;
+  background: #fffaf2;
+  border-color: #d9c8b1;
+  color: #1b2432;
 }
 
 .availability-page--attorney .availability-day--selected {
-  background: #f5a623;
-  border-color: #f5a623;
-  color: #111827;
+  background: linear-gradient(135deg, #152238 0%, #243652 100%);
+  border-color: #152238;
+  color: #ffffff;
 }
 
 .availability-page--attorney .availability-time-chip {
-  background: #111827;
-  border-color: #374151;
-  color: #f3f4f6;
+  background: #fffaf2;
+  border-color: #d9c8b1;
+  color: #1b2432;
 }
 
 .availability-page--attorney .availability-time-chip span {
-  color: #9ca3af;
+  color: #5f6672;
 }
 
 .availability-page--attorney .availability-time-chip--active {
-  background: #f5a623;
-  border-color: #f5a623;
-  color: #111827;
+  background: linear-gradient(135deg, #152238 0%, #243652 100%);
+  border-color: #152238;
+  color: #ffffff;
+  box-shadow: 0 10px 22px rgba(21, 34, 56, 0.24);
 }
 
 .availability-page--attorney .availability-time-chip--active span {
-  color: #422006;
+  color: #e7edf8;
 }
 
 .availability-page--attorney .monthly-template-card {
-  background: rgba(17, 24, 39, 0.7);
-  border-color: rgba(148, 163, 184, 0.25);
+  background: #fffaf2;
+  border-color: #d9c8b1;
 }
 
 .availability-page--attorney .monthly-weekday-chip,
 .availability-page--attorney .monthly-time-chip {
-  background: #111827;
-  border-color: #374151;
-  color: #f3f4f6;
+  background: #fffaf2;
+  border-color: #d9c8b1;
+  color: #1b2432;
 }
 
 .availability-page--attorney .monthly-weekday-chip--active,
 .availability-page--attorney .monthly-time-chip--active,
 .availability-page--attorney .availability-save-btn,
 .availability-page--attorney .monthly-apply-btn {
-  background: #f5a623;
-  border-color: #f5a623;
-  color: #111827;
+  background: linear-gradient(135deg, #152238 0%, #243652 100%);
+  border-color: #152238;
+  color: #ffffff;
 }
 
 .availability-page--attorney .availability-calendar-head button {
-  background: #1f2937;
-  color: #f5a623;
+  background: #fffaf2;
+  color: #152238;
+  border: 1px solid #d9c8b1;
 }
 
 @media (max-width: 900px) {

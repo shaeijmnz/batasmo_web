@@ -4,7 +4,6 @@ import './ClientTheme.css';
 import ConsultationWaitingPopup from '../components/ConsultationWaitingPopup';
 import { attachConsultationChatPresence } from '../lib/consultationChatPresence';
 import {
-  deleteAppointmentMessage,
   fetchAppointmentMessages,
   fetchClientNotifications,
   fetchClientChatEligibleAppointments,
@@ -62,7 +61,6 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
   const [activeAppointmentId, setActiveAppointmentId] = useState('');
   const [messages, setMessages] = useState([]);
   const [inputMsg, setInputMsg] = useState('');
-  const [deletingMessageId, setDeletingMessageId] = useState('');
   const [sending, setSending] = useState(false);
   const [isClosed, setIsClosed] = useState(false);
   const [loadError, setLoadError] = useState('');
@@ -510,29 +508,6 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
     }
   };
 
-  const handleDeleteMessage = async (messageId) => {
-    if (!activeAppointmentId || !messageId || deletingMessageId) return;
-    const shouldDelete = window.confirm('Delete this message/photo?');
-    if (!shouldDelete) return;
-
-    try {
-      setDeletingMessageId(String(messageId));
-      await deleteAppointmentMessage({ appointmentId: activeAppointmentId, messageId });
-      setMessages((previous) => previous.filter((item) => String(item.id) !== String(messageId)));
-      setSignedUrlsByMessageId((previous) => {
-        const next = { ...previous };
-        delete next[messageId];
-        delete next[String(messageId)];
-        return next;
-      });
-      setLoadError('');
-    } catch (error) {
-      setLoadError(error.message || 'Unable to delete message.');
-    } finally {
-      setDeletingMessageId('');
-    }
-  };
-
   const renderMessageBody = (msg, isClient) => {
     const hasResolvedUrl = Object.prototype.hasOwnProperty.call(signedUrlsByMessageId, msg.id);
     const signedUrl = signedUrlsByMessageId[msg.id];
@@ -756,28 +731,7 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
                     {!isClient ? <span className="cr-msg__sender">{msg.senderName || 'Attorney'}</span> : null}
                     {renderMessageBody(msg, isClient)}
                   </div>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <span className="cr-msg__time">{msg.time}</span>
-                    {isClient ? (
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteMessage(msg.id)}
-                        disabled={deletingMessageId === String(msg.id)}
-                        style={{
-                          border: '1px solid rgba(239, 68, 68, 0.5)',
-                          background: 'rgba(239, 68, 68, 0.12)',
-                          color: '#ef4444',
-                          cursor: 'pointer',
-                          fontSize: 12,
-                          fontWeight: 700,
-                          borderRadius: 8,
-                          padding: '2px 8px',
-                        }}
-                      >
-                        {deletingMessageId === String(msg.id) ? 'Deleting...' : 'Delete'}
-                      </button>
-                    ) : null}
-                  </div>
+                  <span className="cr-msg__time">{msg.time}</span>
                 </div>
               </div>
             );

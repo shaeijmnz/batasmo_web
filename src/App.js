@@ -227,6 +227,16 @@ function PageLifecycleTrace({ page, profile, children }) {
 function App() {
   const [page, setPage] = useState(() => resolveInitialPage());
   const [pageParams, setPageParams] = useState({});
+
+  useEffect(() => {
+    const isAttorneyShell = ATTORNEY_PAGES.includes(page);
+    document.documentElement.classList.toggle('attorney-ui-active', isAttorneyShell);
+    document.body.classList.toggle('attorney-ui-active', isAttorneyShell);
+    return () => {
+      document.documentElement.classList.remove('attorney-ui-active');
+      document.body.classList.remove('attorney-ui-active');
+    };
+  }, [page]);
   const [showNotaryModal, setShowNotaryModal] = useState(false);
   const [signupContext, setSignupContext] = useState({ email: '', role: 'Client', otpChannel: 'email' });
   const [currentProfile, setCurrentProfile] = useState(null);

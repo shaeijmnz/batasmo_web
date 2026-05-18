@@ -1,36 +1,25 @@
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&family=Playfair+Display:wght@600;700&family=Poppins:wght@700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap");
+@import url('../ClientDashboard/ClientTheme.css');
 
+/* Map attorney theme tokens to the global client dashboard palette so
+   existing attorney classes keep their names but adopt the new colors. */
 :root {
-  --bg-deep: #010811;
-  --bg-card: rgba(9, 19, 31, 0.78);
-  --bg-card-hover: rgba(12, 30, 48, 0.85);
-  --accent-gold: #f2c879;
-  --accent-blue: #357ad9;
-  --accent-blue-deep: #1d5bc0;
-  --text-main: #f5f9ff;
-  --text-muted: #9cb7da;
-  --border-glass: rgba(169, 199, 235, 0.26);
-  --grad-main: linear-gradient(145deg, #357ad9, #1d5bc0);
-  --grad-surface: linear-gradient(170deg, rgba(8, 17, 28, 0.86), rgba(12, 30, 48, 0.8));
-  --shadow-glow: 0 8px 32px rgba(2, 9, 19, 0.5);
-
-  --atd-bg-0: var(--bg-deep);
-  --atd-bg-1: #081829;
-  --atd-bg-2: #0f2843;
-  --atd-surface: var(--bg-card);
-  --atd-surface-soft: var(--bg-card-hover);
-  --atd-line: var(--border-glass);
-  --atd-text: var(--text-main);
-  --atd-muted: var(--text-muted);
-  --atd-gold: var(--accent-gold);
-  --atd-gold-soft: #f2cf7f;
-  --atd-blue: var(--accent-blue);
-  --atd-blue-soft: #8ab7ff;
-  --atd-ok: #18b58e;
-  --atd-danger: #f17373;
-  --atd-shadow: var(--shadow-glow);
-  --atd-sidebar-width: 262px;
+  --atd-bg-0: var(--ui-bg-dark);
+  --atd-bg-1: var(--ui-bg-dark);
+  --atd-bg-2: var(--ui-bg-dark);
+  --atd-surface: var(--ui-bg-card);
+  --atd-surface-soft: var(--ui-bg-card-hover);
+  --atd-line: var(--ui-glass-border);
+  --atd-text: var(--ui-text-primary);
+  --atd-muted: var(--ui-text-muted);
   --atd-header-font: "Poppins", "Space Grotesk", "Segoe UI", Tahoma, sans-serif;
+  --atd-accent: var(--ui-accent);
+  --atd-accent-hover: var(--ui-accent-hover);
+  --atd-accent-light: var(--ui-accent-light);
+  --atd-accent-dark: var(--ui-accent-dark);
+  --atd-accent-glow: var(--ui-accent-glow);
+  --atd-shadow: var(--ui-shadow-md);
+  --atd-sidebar-width: 262px;
 }
 
 .atty-container {
@@ -203,6 +192,8 @@
   }
 }
 
+@import './AttorneyPalette.css';
+
 .att-page,
 .cr-page,
 .am-page,
@@ -216,12 +207,7 @@
   min-height: 100vh;
   color: var(--atd-text);
   font-family: "Space Grotesk", "Segoe UI", Tahoma, sans-serif;
-  background-color: var(--atd-bg-1) !important;
-  background:
-    radial-gradient(1400px circle at -10% -20%, rgba(47, 123, 240, 0.22), transparent 44%),
-    radial-gradient(900px circle at 110% -10%, rgba(9, 71, 138, 0.3), transparent 45%),
-    radial-gradient(920px circle at 100% 120%, rgba(212, 175, 55, 0.11), transparent 48%),
-    linear-gradient(165deg, var(--atd-bg-0), var(--atd-bg-1) 54%, var(--atd-bg-2)) !important;
+  background-color: var(--ui-bg-dark) !important;
   animation: atd-page-fade .22s ease;
 }
 
@@ -1252,6 +1238,282 @@
   position: relative;
 }
 
+/* Final unified attorney palette override (must remain last). */
+.att-page,
+.ua-page,
+.cr-page,
+.nra-page,
+.am-page,
+.aa-page,
+.al-page,
+.ap-page,
+.ma-page,
+.ae-page {
+  background: linear-gradient(180deg, #f7f0e6 0%, #efe4d4 100%) !important;
+  color: #1b2432 !important;
+}
+
+.att-sidebar,
+.ua-sidebar,
+.cr-sidebar,
+.nra-sidebar,
+.am-sidebar,
+.aa-sidebar,
+.al-sidebar,
+.ap-sidebar,
+.ma-sidebar,
+.ae-sidebar {
+  background: linear-gradient(180deg, #f9f1e5 0%, #efe2cf 100%) !important;
+  border-right: 1px solid #d9c8b1 !important;
+  box-shadow: 0 8px 24px rgba(36, 29, 20, 0.08) !important;
+}
+
+.att-sidebar__logo,
+.ua-sidebar__logo,
+.cr-sidebar__logo,
+.nra-sidebar__logo,
+.am-sidebar__logo,
+.aa-sidebar__logo,
+.al-sidebar__logo,
+.ap-sidebar__logo,
+.ma-sidebar__logo,
+.ae-sidebar__logo {
+  color: #152238 !important;
+  border-bottom: 1px solid #d9c8b1 !important;
+}
+
+.att-sidebar__item,
+.ua-sidebar__item,
+.cr-sidebar__item,
+.nra-sidebar__item,
+.am-sidebar__item,
+.aa-sidebar__item,
+.al-sidebar__item,
+.ap-sidebar__item,
+.ma-sidebar__item,
+.ae-sidebar__item {
+  color: #6f6a62 !important;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+.att-sidebar__item:hover,
+.ua-sidebar__item:hover,
+.cr-sidebar__item:hover,
+.nra-sidebar__item:hover,
+.am-sidebar__item:hover,
+.aa-sidebar__item:hover,
+.al-sidebar__item:hover,
+.ap-sidebar__item:hover,
+.ma-sidebar__item:hover,
+.ae-sidebar__item:hover {
+  color: #152238 !important;
+  background: rgba(21, 34, 56, 0.08) !important;
+  transform: none !important;
+}
+
+.att-sidebar__item--active,
+.ua-sidebar__item--active,
+.cr-sidebar__item--active,
+.nra-sidebar__item--active,
+.am-sidebar__item--active,
+.aa-sidebar__item--active,
+.al-sidebar__item--active,
+.ap-sidebar__item--active,
+.ma-sidebar__item--active,
+.ae-sidebar__item--active {
+  color: #fff !important;
+  background: linear-gradient(135deg, #152238 0%, #243652 100%) !important;
+  border-color: transparent !important;
+}
+
+.att-topbar,
+.ua-topbar,
+.cr-topbar,
+.nra-topbar,
+.am-topbar,
+.aa-topbar,
+.al-topbar,
+.ap-topbar,
+.ma-topbar,
+.ae-topbar {
+  background: linear-gradient(90deg, #fff9f0 0%, #f3e6d6 100%) !important;
+  border-bottom: 1px solid #d9c8b1 !important;
+  box-shadow: 0 3px 12px rgba(36, 29, 20, 0.05) !important;
+}
+
+.att-main,
+.ua-main,
+.cr-main,
+.nra-main,
+.am-main,
+.aa-main,
+.al-main,
+.ap-main,
+.ma-main,
+.ae-main {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.att-welcome,
+.ua-summary,
+.ua-section,
+.ua-card,
+.ua-empty-state,
+.cr-card,
+.nra-card,
+.aa-card,
+.al-item,
+.al-empty,
+.al-modal,
+.ap-profile-card,
+.ap-stat,
+.ap-details-card,
+.am-chat-container,
+.am-chat-header,
+.am-input-bar,
+.am-bubble--admin,
+.am-bubble--attorney,
+.ua-notif-panel,
+.atty-notif-panel {
+  background: linear-gradient(180deg, #fff9f0 0%, #f8ecdd 100%) !important;
+  color: #1b2432 !important;
+  border: 1px solid #d9c8b1 !important;
+  box-shadow: 0 8px 24px rgba(36, 29, 20, 0.08) !important;
+}
+
+.ua-summary__refresh,
+.ua-btn--enter-live,
+.att-manage-btn,
+.att-enter-room-btn,
+.cr-enter-btn,
+.nra-btn--accept,
+.ap-edit-btn,
+.ap-btn--save,
+.am-video-call-btn,
+.am-input-bar__send {
+  background: linear-gradient(135deg, #152238 0%, #243652 100%) !important;
+  color: #fff !important;
+  border: 1px solid transparent !important;
+}
+
+/* Ultimate attorney UI polish: remove dark remnants, increase contrast, elegant motion */
+.att-spotlight-card,
+.att-queue-card,
+.att-queue-item,
+.ap-detail,
+.ap-details-card,
+.ap-stat,
+.ap-profile-card,
+.ua-summary,
+.ua-card,
+.ua-empty-state,
+.availability-page--attorney,
+.availability-page--attorney .availability-card,
+.availability-page--attorney .monthly-template-card,
+.availability-page--attorney .availability-time-chip,
+.availability-page--attorney .availability-day,
+.availability-page--attorney .monthly-weekday-chip,
+.availability-page--attorney .monthly-time-chip {
+  background: linear-gradient(180deg, #fff9f0 0%, #f7ead9 100%) !important;
+  color: #1b2432 !important;
+  border-color: #d9c8b1 !important;
+  box-shadow: 0 10px 28px rgba(36, 29, 20, 0.1) !important;
+}
+
+.att-spotlight-head h3,
+.att-spotlight-name,
+.att-queue-card__header h2,
+.att-queue-item__name,
+.ap-details-card h2,
+.ap-detail__value,
+.ap-profile-card__info h1,
+.ap-stat__value,
+.ua-section__title,
+.ua-summary__count,
+.availability-page--attorney .availability-page__header h2,
+.availability-page--attorney .availability-calendar-head h3,
+.availability-page--attorney .availability-slots-head h3 {
+  color: #1b2432 !important;
+}
+
+.att-spotlight-meta,
+.att-queue-subtitle,
+.att-queue-item__time,
+.att-queue-item__area,
+.att-queue-item__status-text,
+.ap-detail__label,
+.ap-bio,
+.ap-stat__label,
+.ua-summary__meta,
+.ua-empty-state__text,
+.availability-page--attorney .availability-page__header p,
+.availability-page--attorney .availability-muted,
+.availability-page--attorney .availability-slots-head p,
+.availability-page--attorney .monthly-template-head p,
+.availability-page--attorney .monthly-template-label {
+  color: #5f6672 !important;
+}
+
+.att-view-all {
+  background: linear-gradient(135deg, #d8b37a 0%, #c79a5a 100%) !important;
+  color: #1b2432 !important;
+  border: 1px solid #b78949 !important;
+  box-shadow: 0 10px 22px rgba(183, 137, 73, 0.3) !important;
+}
+
+.att-view-all:hover {
+  filter: brightness(1.03) !important;
+  transform: translateY(-2px) scale(1.03) !important;
+}
+
+.att-spotlight-card,
+.att-queue-item,
+.ap-stat,
+.ap-detail,
+.ua-card,
+.ua-summary,
+.availability-card,
+.monthly-template-card {
+  animation: attyElegantFloat 0.9s ease-out both;
+}
+
+.att-manage-btn,
+.att-enter-room-btn,
+.ua-summary__refresh,
+.cr-enter-btn,
+.ap-edit-btn,
+.ap-btn--save,
+.availability-save-btn,
+.monthly-apply-btn {
+  animation: attyGlowPulse 2.2s ease-in-out infinite;
+  transition: transform 0.22s ease, box-shadow 0.22s ease, filter 0.22s ease !important;
+}
+
+.att-manage-btn:hover,
+.att-enter-room-btn:hover,
+.ua-summary__refresh:hover,
+.cr-enter-btn:hover,
+.ap-edit-btn:hover,
+.ap-btn--save:hover,
+.availability-save-btn:hover,
+.monthly-apply-btn:hover {
+  transform: translateY(-2px) scale(1.02) !important;
+  box-shadow: 0 14px 30px rgba(21, 34, 56, 0.2) !important;
+}
+
+@keyframes attyElegantFloat {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes attyGlowPulse {
+  0%, 100% { box-shadow: 0 8px 18px rgba(21, 34, 56, 0.14); }
+  50% { box-shadow: 0 12px 30px rgba(21, 34, 56, 0.24); }
+}
+
 .al-item::before {
   content: "";
   position: absolute;
@@ -1386,3 +1648,189 @@
     opacity: 1;
   }
 }
+
+/* Absolute final override: keep last for attorney UI consistency and readability */
+.att-page,
+.ua-page,
+.cr-page,
+.nra-page,
+.am-page,
+.aa-page,
+.al-page,
+.ap-page,
+.ma-page,
+.ae-page {
+  background: linear-gradient(180deg, #f7f0e6 0%, #efe4d4 100%) !important;
+  color: #1b2432 !important;
+}
+
+.att-sidebar,
+.ua-sidebar,
+.cr-sidebar,
+.nra-sidebar,
+.am-sidebar,
+.aa-sidebar,
+.al-sidebar,
+.ap-sidebar,
+.ma-sidebar,
+.ae-sidebar {
+  background: linear-gradient(180deg, #f9f1e5 0%, #efe2cf 100%) !important;
+  border-right: 1px solid #d9c8b1 !important;
+}
+
+.ap-page .ap-details-card h2,
+.ap-page .ap-profile-card__info h1,
+.ap-page .ap-detail__value,
+.ap-page .ap-stat__value,
+.att-page .att-spotlight-name,
+.att-page .att-queue-item__name,
+.att-page .att-queue-card__header h2,
+.ua-page .ua-section__title,
+.ua-page .ua-summary__count {
+  color: #1b2432 !important;
+}
+
+.ap-page .ap-detail__label,
+.ap-page .ap-bio,
+.ap-page .ap-stat__label,
+.att-page .att-spotlight-meta,
+.att-page .att-queue-item__time,
+.att-page .att-queue-item__area,
+.att-page .att-queue-subtitle,
+.ua-page .ua-summary__meta,
+.ua-page .ua-empty-state__text,
+.ua-page .ua-card__area,
+.ua-page .ua-card__time,
+.ua-page .ua-card__live-badge {
+  color: #5f6672 !important;
+}
+
+.att-page .att-spotlight-card,
+.att-page .att-queue-card,
+.att-page .att-queue-item,
+.ap-page .ap-details-card,
+.ap-page .ap-detail,
+.ap-page .ap-stat,
+.ap-page .ap-profile-card,
+.ua-page .ua-summary,
+.ua-page .ua-card,
+.ua-page .ua-empty-state,
+.availability-page--attorney,
+.availability-page--attorney .availability-card,
+.availability-page--attorney .monthly-template-card,
+.availability-page--attorney .availability-time-chip,
+.availability-page--attorney .availability-day,
+.availability-page--attorney .monthly-weekday-chip,
+.availability-page--attorney .monthly-time-chip {
+  background: linear-gradient(180deg, #fff9f0 0%, #f7ead9 100%) !important;
+  border-color: #d9c8b1 !important;
+}
+
+.availability-page--attorney .availability-day--selected,
+.availability-page--attorney .availability-time-chip--active,
+.availability-page--attorney .monthly-weekday-chip--active,
+.availability-page--attorney .monthly-time-chip--active,
+.availability-page--attorney .availability-save-btn,
+.availability-page--attorney .monthly-apply-btn {
+  background: linear-gradient(135deg, #152238 0%, #243652 100%) !important;
+  border-color: #152238 !important;
+  color: #ffffff !important;
+}
+
+.att-page .att-view-all {
+  background: linear-gradient(135deg, #d8b37a 0%, #c79a5a 100%) !important;
+  color: #1b2432 !important;
+  border: 1px solid #b78949 !important;
+}
+
+.att-page .att-view-all:hover {
+  transform: translateY(-2px) scale(1.03) !important;
+  box-shadow: 0 12px 24px rgba(183, 137, 73, 0.35) !important;
+}
+
+/* Final readability/cohesion hotfix block */
+.att-sidebar__logo span,
+.ua-sidebar__logo span,
+.cr-sidebar__logo span,
+.nra-sidebar__logo span,
+.aa-sidebar__logo span,
+.al-sidebar__logo span,
+.ap-sidebar__logo span,
+.am-sidebar__logo span {
+  color: #8da6cd !important;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.att-stat-card,
+.att-stat-card__icon,
+.att-stat-card__label,
+.att-stat-card__value {
+  color: #1b2432 !important;
+}
+
+.att-stat-card {
+  background: linear-gradient(180deg, #fff9f0 0%, #f7ead9 100%) !important;
+  border: 1px solid #d9c8b1 !important;
+  box-shadow: 0 10px 26px rgba(36, 29, 20, 0.09) !important;
+}
+
+.al-page .al-header h1,
+.al-page .al-item__meta h3,
+.al-page .al-item__meta p,
+.al-page .al-item__meta span,
+.al-page .al-modal__header h2,
+.al-page .al-modal__header-meta,
+.al-page .al-summary-panel__help,
+.al-page .al-summary-panel__loading,
+.al-page .al-summary-panel__label,
+.al-page .al-summary-panel__select,
+.al-page .al-summary-panel__textarea {
+  color: #1b2432 !important;
+}
+
+.al-page .al-item,
+.al-page .al-modal,
+.al-page .al-summary-panel__select,
+.al-page .al-summary-panel__textarea {
+  background: linear-gradient(180deg, #fff9f0 0%, #f7ead9 100%) !important;
+  border-color: #d9c8b1 !important;
+}
+
+.am-page,
+.am-chat-container,
+.am-chat-header,
+.am-chat-actions,
+.am-input-bar,
+.am-messages,
+.am-bubble--admin,
+.am-bubble--attorney,
+.am-timer-chip,
+.am-confirm-modal {
+  background: linear-gradient(180deg, #fff9f0 0%, #f7ead9 100%) !important;
+  color: #1b2432 !important;
+  border-color: #d9c8b1 !important;
+}
+
+.am-chat-header__name,
+.am-chat-header__status,
+.am-bubble__text,
+.am-bubble__time,
+.am-date-divider span,
+.am-thread-select,
+.am-input-bar__textarea,
+.am-input-bar__textarea::placeholder,
+.am-confirm-modal h3,
+.am-confirm-modal p,
+.am-video-error {
+  color: #1b2432 !important;
+}
+
+.am-bubble--attorney,
+.am-input-bar__send,
+.am-video-call-btn,
+.am-end-session-btn--top {
+  background: linear-gradient(135deg, #152238 0%, #243652 100%) !important;
+  color: #fff !important;
+}
+
+@import './AttorneyUiFinalize.css';

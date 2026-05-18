@@ -1,0 +1,114 @@
+/**
+ * Final cream UI overrides — loaded last via AttorneyTheme.css.
+ * Fixes dark-theme rules that load after AttorneyPalette.css.
+ */
+
+html.attorney-ui-active,
+html.attorney-ui-active body,
+html.attorney-ui-active #root {
+  background: #f7f0e6 !important;
+}
+
+.att-page,
+.cr-page,
+.am-page,
+.ap-page,
+.ua-page,
+.nra-page,
+.ae-page,
+.aa-page,
+.al-page {
+  min-height: 100vh;
+  color: var(--at-ui-text, #1b2432) !important;
+  font-family: 'Poppins', 'Space Grotesk', 'Segoe UI', Tahoma, sans-serif;
+  background: linear-gradient(180deg, var(--at-ui-page, #f7f0e6) 0%, var(--at-ui-page-soft, #efe4d4) 100%) !important;
+}
+
+.att-sidebar,
+.cr-sidebar,
+.am-sidebar,
+.ap-sidebar,
+.ua-sidebar,
+.nra-sidebar,
+.ae-sidebar,
+.aa-sidebar,
+.al-sidebar {
+  background: var(--at-ui-sidebar) !important;
+  border-right: 1px solid var(--at-ui-border) !important;
+  box-shadow: var(--at-ui-shadow) !important;
+}
+
+.aa-page {
+  background: linear-gradient(180deg, var(--at-ui-page, #f7f0e6) 0%, var(--at-ui-page-soft, #efe4d4) 100%) !important;
+}
+
+.aa-sidebar {
+  background: var(--at-ui-sidebar) !important;
+  box-shadow: var(--at-ui-shadow) !important;
+}
+
+.aa-drawer-overlay,
+.att-sidebar-overlay,
+.ua-drawer-overlay,
+.cr-sidebar-overlay,
+.am-sidebar-overlay,
+.nra-sidebar-overlay,
+.al-modal-overlay {
+  background: rgba(27, 36, 50, 0.18) !important;
+}
+
+/* Manage Availability panel inside attorney pages */
+.aa-page .availability-page,
+.aa-main .availability-page {
+  background: linear-gradient(180deg, var(--at-ui-surface, #fff9f0) 0%, var(--at-ui-surface-2, #f8ecdd) 100%) !important;
+  color: var(--at-ui-text, #1b2432) !important;
+  border: 1px solid var(--at-ui-border, #d9c8b1) !important;
+  box-shadow: var(--at-ui-shadow) !important;
+}
+
+.aa-page .availability-page__header h1,
+.aa-page .availability-kicker,
+.aa-page .ma-day-card__name {
+  color: var(--at-ui-text, #1b2432) !important;
+}
+
+/* Analytics page base (shares aa-page class with availability) */
+.aa-page .ae-summary-card,
+.aa-page .ae-table-card,
+.aa-page .ae-chart-card {
+  background: linear-gradient(180deg, var(--at-ui-surface, #fff9f0) 0%, var(--at-ui-surface-2, #f8ecdd) 100%) !important;
+  border: 1px solid var(--at-ui-border, #d9c8b1) !important;
+  color: var(--at-ui-text, #1b2432) !important;
+}
+
+/* Animated background on all attorney shells */
+.ua-page::before,
+.am-page::before,
+.cr-page::before,
+.nra-page::before,
+.aa-page::before,
+.al-page::before,
+.ap-page::before,
+.ae-page::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(1200px 400px at 10% 10%, rgba(243, 230, 215, 0.06), transparent 12%),
+    radial-gradient(800px 300px at 90% 80%, rgba(220, 200, 180, 0.04), transparent 12%);
+}
+
+.ua-main,
+.cr-main,
+.am-main,
+.nra-main,
+.aa-main,
+.al-main,
+.ap-main,
+.att-main,
+.ae-main {
+  position: relative;
+  z-index: 1;
+}

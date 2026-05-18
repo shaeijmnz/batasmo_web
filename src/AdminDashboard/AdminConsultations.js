@@ -5,16 +5,9 @@ import {
   Video, Phone, MessageCircle, Star
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import { getConsultationSessionStatus } from '../lib/consultationStatus';
 import './AdminTheme.css';
 import './consultations.css';
-
-const getConsultationStatus = ({ appointmentStatus, isPaid, room }) => {
-  const value = String(appointmentStatus || '').toLowerCase();
-  if (value === 'completed' || room?.is_closed) return 'Completed';
-  if (room?.video_meeting_id && !room?.is_closed) return 'In Progress';
-  if (isPaid) return 'Scheduled';
-  return null;
-};
 
 const formatScheduleForUi = (scheduledAt) => {
   const parsed = scheduledAt ? new Date(scheduledAt) : null;
@@ -111,7 +104,7 @@ const Consultations = ({ onNavigate }) => {
           .filter((row) => String(row.status || '').toLowerCase() !== 'cancelled')
           .map((row) => {
             const room = roomByAppointment.get(row.id);
-            const status = getConsultationStatus({
+            const status = getConsultationSessionStatus({
               appointmentStatus: row.status,
               isPaid: paidAppointmentIds.has(row.id),
               room,
