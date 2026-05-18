@@ -12,6 +12,7 @@ import {
   verifySignUpOtp,
   verifySignupSmsOtp,
 } from '../lib/authApi';
+import { markSignupOtpCompleted } from '../lib/signupVerification';
 import { getCurrentSessionProfile, pageFromRole } from '../lib/userApi';
 import { isValidPhoneNumber, maskPhilippinePhone, sanitizePhoneInput, VALID_PHONE_MESSAGE } from '../lib/validators';
 
@@ -230,6 +231,7 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
           email: resume.email || pendingEmail,
           password: resume.password,
         });
+        await markSignupOtpCompleted();
       }
 
       localStorage.removeItem('batasmo_pending_otp_email');

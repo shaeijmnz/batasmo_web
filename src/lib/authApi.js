@@ -1,5 +1,10 @@
 import { supabase } from './supabaseClient'
 import {
+  isSignupVerificationComplete,
+  markSignupOtpCompleted,
+  signOutIfSignupIncomplete,
+} from './signupVerification'
+import {
   isGmailEmail,
   isPhilippineMobile,
   isStrongPassword,
@@ -93,6 +98,7 @@ export async function signUpWithEmail({
       data: {
         full_name: fullName,
         role: normalizedRole,
+        signup_otp_completed: false,
       },
     },
   })
@@ -144,14 +150,11 @@ export async function signUpWithEmail({
     data.user.phone = phone
     data.user.address = address
 
-    // If Supabase returns a session before email is confirmed, end the session so the user
-    // must complete email or SMS OTP before reaching the dashboard.
-    if (!data.user.email_confirmed_at) {
-      await supabase.auth.signOut()
-    }
+    // Never keep an active session after signup — user must verify OTP first.
+    await supabase.auth.signOut()
   }
 
-  return { token: data?.session?.access_token, user: data?.user, preferredOtpChannel: otpChannel }
+  return { user: data?.user, preferredOtpChannel: otpChannel }
 }
 
 /**
@@ -292,6 +295,14 @@ export async function signInWithEmail({ email, password }) {
   ).catch(() => {})
 
   if (data?.user) {
+    if (!isSignupVerificationComplete(data.user)) {
+      await supabase.auth.signOut()
+      const err = new Error('SIGNUP_OTP_REQUIRED')
+      err.code = 'SIGNUP_OTP_REQUIRED'
+      err.email = normalizedEmail
+      throw err
+    }
+
     const meta = data.user.user_metadata || {}
     let dbRole = normalizeRole(meta.role || 'Client')
     let dbName = meta.full_name || normalizedEmail
@@ -343,6 +354,8 @@ export async function verifySignUpOtp({ email, token }) {
   if (error) {
     throw new Error(error.message)
   }
+
+  await markSignupOtpCompleted()
 
   const {
     data: { user },

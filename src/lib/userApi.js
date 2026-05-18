@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient'
+import { isSignupVerificationComplete, signOutIfSignupIncomplete } from './signupVerification'
 import {
   getConsultationBranchesForAttorney,
   parseConsultationBranchFromTitle,
@@ -1242,6 +1243,13 @@ export async function getCurrentSessionProfile() {
     throw sessionError
   }
   if (!session?.user) {
+    sessionProfileCache = { session: null, profile: null }
+    lastSessionProfileTime = now
+    return sessionProfileCache
+  }
+
+  if (!isSignupVerificationComplete(session.user)) {
+    await signOutIfSignupIncomplete(session.user)
     sessionProfileCache = { session: null, profile: null }
     lastSessionProfileTime = now
     return sessionProfileCache

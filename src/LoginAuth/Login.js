@@ -118,6 +118,24 @@ function Login({ onNavigate, onAuthSuccess }) {
         }
       }
 
+      if (error?.code === 'SIGNUP_OTP_REQUIRED' || error?.message === 'SIGNUP_OTP_REQUIRED') {
+        const email = String(error?.email || form.email || '').trim().toLowerCase();
+        localStorage.setItem('batasmo_pending_otp_email', email);
+        localStorage.setItem('batasmo_pending_otp_role', 'Client');
+        localStorage.setItem(PENDING_OTP_CHANNEL_KEY, 'email');
+        try {
+          sessionStorage.setItem(
+            OTP_RESUME_LOGIN_KEY,
+            JSON.stringify({ email, password: form.password }),
+          );
+        } catch {
+          /* ignore */
+        }
+        setErrorText('Please verify your account with the OTP sent to your email or phone first.');
+        onNavigate('otp');
+        return;
+      }
+
       const normalized = String(error?.message || '').toLowerCase();
       if (normalized.includes('email not confirmed') || normalized.includes('email not verified')) {
         localStorage.setItem('batasmo_pending_otp_email', form.email.trim());
