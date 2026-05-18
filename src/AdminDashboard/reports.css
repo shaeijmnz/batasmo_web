@@ -55,7 +55,7 @@
 }
 
 .sidebar.closed ~ .main-content .stats-grid {
-  grid-template-columns: repeat(4, 1fr) !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
 }
 
 .sidebar.closed ~ .main-content .bottom-grid {
@@ -342,12 +342,17 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
   margin-bottom: 28px;
+  align-items: stretch;
 }
 
 .report-stat-card {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 128px;
   background: var(--ui-bg-card);
-  padding: 16px 18px;
+  padding: 18px 20px;
   border-radius: 14px;
   border: 1px solid var(--ui-glass-border);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06);
@@ -358,6 +363,7 @@
               border-color 0.3s ease,
               background 0.3s ease;
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 /* Inline border-left from JS provides the accent color; we add
@@ -379,13 +385,22 @@
 
 .stat-main {
   display: flex;
+  flex: 1;
   justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
+  align-items: stretch;
+  gap: 14px;
   position: relative;
+  width: 100%;
+  min-height: 0;
 }
 
-.stat-text { min-width: 0; }
+.stat-text {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
 
 .stat-label {
   color: var(--rep-eyebrow);
@@ -399,22 +414,24 @@
 .stat-value {
   font-size: 1.35rem;
   font-weight: 700;
-  margin: 6px 0 8px;
+  margin: 8px 0 10px;
   color: var(--ui-text-primary);
-  line-height: 1.15;
+  line-height: 1.2;
   letter-spacing: -0.015em;
 }
 
 .stat-change {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
+  min-height: 28px;
   color: var(--rep-chip-up-fg);
   font-size: 0.74rem;
   font-weight: 700;
   letter-spacing: 0.01em;
   margin: 0;
+  margin-top: auto;
 }
 
 /* Render the delta value as a subtle green chip (positive sentiment).
@@ -443,6 +460,8 @@
   width: 44px;
   height: 44px;
   min-width: 44px;
+  flex-shrink: 0;
+  align-self: center;
   border-radius: 12px;
   display: inline-flex;
   align-items: center;
