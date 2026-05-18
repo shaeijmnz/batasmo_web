@@ -178,6 +178,29 @@ const formatAttorneySpecialty = (value) => {
   return text || 'Legal Practice';
 };
 
+const CANCELLED_APPOINTMENT_STATUSES = new Set(['cancelled', 'rejected']);
+
+const isCountableConsultationStatus = (status) => {
+  const value = String(status || '').toLowerCase();
+  return Boolean(value) && !CANCELLED_APPOINTMENT_STATUSES.has(value);
+};
+
+/** Matches Admin Consultations: completed status, closed room, or started session. */
+const isFinishedConsultation = (status, closedRoomAppointmentIds, appointmentId) => {
+  const value = String(status || '').toLowerCase();
+  if (value === 'completed') return true;
+  if (appointmentId && closedRoomAppointmentIds?.has(appointmentId)) return true;
+  if (value === 'started') return true;
+  return false;
+};
+
+const parseNotesFeedbackRating = (notes) => {
+  const match = String(notes || '').match(/\[CLIENT_FEEDBACK:(\d)\]/);
+  if (!match) return null;
+  const rating = Number(match[1]);
+  return rating >= 1 && rating <= 5 ? rating : null;
+};
+
 const resolveAttorneyImage = (name) => {
   const normalized = String(name || '')
     .toLowerCase()
@@ -381,9 +404,7 @@ const Dashboard = ({ onNavigate }) => {
     const loadQueueAndTopAttorneys = async () => {
       if (!isMounted) return;
 
-      const appointmentStatsStatuses = ['completed', ...ACTIVE_QUEUE_STATUSES];
-
-      const [profilesRes, attorneyProfilesRes, queueAppointmentsRes, statsAppointmentsRes, feedbackRes] =
+      const [profilesRes, attorneyProfilesRes, queueAppointmentsRes, statsAppointmentsRes, feedbackRes, roomsRes] =
         await Promise.all([
           supabase
             .from('profiles')
@@ -399,9 +420,10 @@ const Dashboard = ({ onNavigate }) => {
             .limit(8),
           supabase
             .from('appointments')
-            .select('attorney_id, status')
-            .in('status', appointmentStatsStatuses),
-          supabase.from('consultation_feedback').select('attorney_id, rating'),
+            .select('id, attorney_id, status, notes')
+            .neq('status', 'cancelled'),
+          supabase.from('consultation_feedback').select('attorney_id, rating, appointment_id'),
+          supabase.from('consultation_rooms').select('appointment_id, is_closed'),
         ]);
 
       if (profilesRes.error) {
@@ -421,6 +443,15 @@ const Dashboard = ({ onNavigate }) => {
       if (feedbackRes.error) {
         console.warn('[admin-dashboard] feedback load failed', feedbackRes.error);
       }
+      if (roomsRes.error) {
+        console.warn('[admin-dashboard] consultation rooms load failed', roomsRes.error);
+      }
+
+      const closedRoomAppointmentIds = new Set(
+        (roomsRes.data || [])
+          .filter((row) => row.is_closed && row.appointment_id)
+          .map((row) => row.appointment_id),
+      );
 
       const attorneyNameById = new Map(
         (profilesRes.data || []).map((row) => [row.id, row.full_name || 'Attorney']),
@@ -468,17 +499,26 @@ const Dashboard = ({ onNavigate }) => {
         setRecentRequests(nextRecentRequests);
       }
 
-      const completedCountByAttorney = new Map();
+      const totalConsultationsByAttorney = new Map();
+      const finishedConsultationsByAttorney = new Map();
       const activeQueueCountByAttorney = new Map();
       appointmentRows.forEach((row) => {
         if (!row.attorney_id) return;
         const status = String(row.status || '').toLowerCase();
-        if (status === 'completed') {
-          completedCountByAttorney.set(
+        if (!isCountableConsultationStatus(status)) return;
+
+        totalConsultationsByAttorney.set(
+          row.attorney_id,
+          Number(totalConsultationsByAttorney.get(row.attorney_id) || 0) + 1,
+        );
+
+        if (isFinishedConsultation(status, closedRoomAppointmentIds, row.id)) {
+          finishedConsultationsByAttorney.set(
             row.attorney_id,
-            Number(completedCountByAttorney.get(row.attorney_id) || 0) + 1,
+            Number(finishedConsultationsByAttorney.get(row.attorney_id) || 0) + 1,
           );
         }
+
         if (ACTIVE_QUEUE_STATUSES.includes(status)) {
           activeQueueCountByAttorney.set(
             row.attorney_id,
@@ -487,13 +527,27 @@ const Dashboard = ({ onNavigate }) => {
         }
       });
 
+      const feedbackAppointmentIds = new Set(
+        (feedbackRes.data || []).map((row) => row.appointment_id).filter(Boolean),
+      );
+
       const ratingByAttorney = new Map();
-      (feedbackRes.data || []).forEach((row) => {
-        if (!row.attorney_id) return;
-        const existing = ratingByAttorney.get(row.attorney_id) || { total: 0, count: 0 };
-        existing.total += Number(row.rating || 0);
+      const addAttorneyRating = (attorneyId, rating) => {
+        if (!attorneyId || !rating) return;
+        const existing = ratingByAttorney.get(attorneyId) || { total: 0, count: 0 };
+        existing.total += rating;
         existing.count += 1;
-        ratingByAttorney.set(row.attorney_id, existing);
+        ratingByAttorney.set(attorneyId, existing);
+      };
+
+      (feedbackRes.data || []).forEach((row) => {
+        addAttorneyRating(row.attorney_id, Number(row.rating || 0));
+      });
+
+      appointmentRows.forEach((row) => {
+        if (!row.attorney_id || feedbackAppointmentIds.has(row.id)) return;
+        const notesRating = parseNotesFeedbackRating(row.notes);
+        if (notesRating) addAttorneyRating(row.attorney_id, notesRating);
       });
 
       const nextTopAttorneys = (profilesRes.data || [])
@@ -503,7 +557,8 @@ const Dashboard = ({ onNavigate }) => {
             ratingMeta && ratingMeta.count > 0
               ? Number((ratingMeta.total / ratingMeta.count).toFixed(1))
               : null;
-          const completed = Number(completedCountByAttorney.get(profile.id) || 0);
+          const totalConsultations = Number(totalConsultationsByAttorney.get(profile.id) || 0);
+          const finishedConsultations = Number(finishedConsultationsByAttorney.get(profile.id) || 0);
           const inQueue = Number(activeQueueCountByAttorney.get(profile.id) || 0);
           const displayName = profile.full_name || 'Attorney';
           return {
@@ -511,12 +566,14 @@ const Dashboard = ({ onNavigate }) => {
             name: displayName,
             imageUrl: resolveAttorneyImage(displayName),
             law: formatAttorneySpecialty(specialtyByAttorney.get(profile.id)),
-            consultations: completed,
+            consultations: totalConsultations,
+            finished: finishedConsultations,
             inQueue,
             rating: avgRating,
           };
         })
         .sort((a, b) => {
+          if (b.finished !== a.finished) return b.finished - a.finished;
           if (b.consultations !== a.consultations) return b.consultations - a.consultations;
           if (b.inQueue !== a.inQueue) return b.inQueue - a.inQueue;
           return (b.rating || 0) - (a.rating || 0);
@@ -558,9 +615,19 @@ const Dashboard = ({ onNavigate }) => {
           )
           .subscribe();
 
+        const roomsChannel = supabase
+          .channel('admin-dashboard-consultation-rooms')
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'consultation_rooms' },
+            () => onChange(),
+          )
+          .subscribe();
+
         return () => {
           supabase.removeChannel(appointmentsChannel);
           supabase.removeChannel(feedbackChannel);
+          supabase.removeChannel(roomsChannel);
         };
       },
     });
@@ -1582,7 +1649,7 @@ const RequestItem = ({ queuePosition, name, atty, law, status, bookedLabel, age 
   </div>
 );
 
-const AttorneyItem = ({ rank, name, imageUrl, law, consultations, inQueue = 0, rating }) => (
+const AttorneyItem = ({ rank, name, imageUrl, law, consultations, finished = 0, inQueue = 0, rating }) => (
   <div className="item-row">
     <div className="attorney-rank-avatar">
       <img src={imageUrl} alt="" />
@@ -1593,7 +1660,14 @@ const AttorneyItem = ({ rank, name, imageUrl, law, consultations, inQueue = 0, r
       <p className="item-subtitle">{law}</p>
     </div>
     <div className="item-meta-right">
-      <p className="item-title">{consultations} completed</p>
+      <p className="item-title">
+        {consultations} consultation{consultations === 1 ? '' : 's'}
+      </p>
+      {finished > 0 ? (
+        <p className="item-subtitle">{finished} finished</p>
+      ) : consultations > 0 ? (
+        <p className="item-subtitle">Scheduled / in progress</p>
+      ) : null}
       {inQueue > 0 ? <p className="item-subtitle">{inQueue} in queue now</p> : null}
       <div className="rating-star">
         {rating != null ? (
