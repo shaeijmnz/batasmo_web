@@ -294,6 +294,8 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
       setWaitingPopup(null);
       detachPresence();
     };
+    // Display name is stable enough via ref on subscribe; avoid re-subscribing on every profile field change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeAppointmentId, profile?.id, isClosed]);
 
   const handleWaitingGoToChatroom = () => {

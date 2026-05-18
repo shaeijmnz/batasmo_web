@@ -449,6 +449,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
       setWaitingPopup(null);
       detachPresence();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- presence channel only when appointment changes
   }, [activeAppointmentId, profile?.id, isClosed]);
 
   const handleWaitingGoToChatroom = () => {
