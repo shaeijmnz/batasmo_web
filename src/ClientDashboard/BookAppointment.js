@@ -167,7 +167,7 @@ function BookAppointment({ onNavigate, profile }) {
   const [availableSlots, setAvailableSlots] = useState([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [hiddenPastSlotsCount, setHiddenPastSlotsCount] = useState(0);
-  const [paymentMethod, setPaymentMethod] = useState('GCash');
+  const [paymentMethod] = useState('QRPh');
   const [isPaying, setIsPaying] = useState(false);
   const [confirmedSlot, setConfirmedSlot] = useState(null);
   const [loadError, setLoadError] = useState('');
@@ -297,7 +297,6 @@ function BookAppointment({ onNavigate, profile }) {
     if (attachmentInputRef.current) attachmentInputRef.current.value = '';
     setAvailableSlots([]);
     setHiddenPastSlotsCount(0);
-    setPaymentMethod('GCash');
     setShowBooking(true);
   };
 
@@ -319,7 +318,6 @@ function BookAppointment({ onNavigate, profile }) {
       if (attachmentInputRef.current) attachmentInputRef.current.value = '';
       setAvailableSlots([]);
       setHiddenPastSlotsCount(0);
-      setPaymentMethod('GCash');
       setConfirmedSlot(null);
     });
   };
@@ -903,15 +901,18 @@ function BookAppointment({ onNavigate, profile }) {
                   <>
                     <div className="ba-form-group">
                       <label className="ba-form-label">💳 Payment Method</label>
-                      <select
+                      <div
                         className="ba-form-input"
-                        value={paymentMethod}
-                        onChange={(e) => setPaymentMethod(e.target.value)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          cursor: 'default',
+                        }}
                       >
-                        <option value="GCash">GCash</option>
-                        <option value="Maya">Maya</option>
-                        <option value="QRPh">QR Ph</option>
-                      </select>
+                        <span aria-hidden="true">Q</span>
+                        <span>QR Ph — pay via any QR Ph–enabled bank or e-wallet</span>
+                      </div>
                     </div>
 
                     <div className="ba-form-group">
