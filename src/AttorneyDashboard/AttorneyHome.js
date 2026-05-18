@@ -229,6 +229,7 @@ function AttorneyHome({ onNavigate, profile }) {
           {[
             { label: 'Dashboard',     icon: <DashboardIcon />, nav: 'attorney-home' },
             { label: 'Consultation Management',   icon: <MyApptIcon />,    nav: 'upcoming-appointments' },
+            { label: 'My Availability', icon: <MyApptIcon />, nav: 'attorney-availability' },
             { label: 'Logs',          icon: <LogsIcon />,      nav: 'attorney-logs' },
             { label: 'Announcement',  icon: <AnnouncementIcon />, nav: 'attorney-announcements' },
             { label: 'Profile',       icon: <ProfileIcon />,   nav: 'attorney-profile' },
