@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   LayoutDashboard, Users, Scale, FileText, MessageSquare,
-  BarChart3, Settings, LogOut, Menu, Star,
+  BarChart3, Settings, LogOut, Menu,
   X, Send, Trash2, Eye, AlertCircle, CheckCircle, Calendar, Bell,
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
@@ -194,13 +194,6 @@ const isFinishedConsultation = (status, closedRoomAppointmentIds, appointmentId)
   return false;
 };
 
-const parseNotesFeedbackRating = (notes) => {
-  const match = String(notes || '').match(/\[CLIENT_FEEDBACK:(\d)\]/);
-  if (!match) return null;
-  const rating = Number(match[1]);
-  return rating >= 1 && rating <= 5 ? rating : null;
-};
-
 const resolveAttorneyImage = (name) => {
   const normalized = String(name || '')
     .toLowerCase()
@@ -361,7 +354,6 @@ const Dashboard = ({ onNavigate }) => {
           name: attorney.full_name || 'Unnamed Attorney',
           specialty: 'Not set',
           consultations: 0,
-          rating: null,
           email: attorney.email || 'No email',
         }));
 
@@ -404,7 +396,7 @@ const Dashboard = ({ onNavigate }) => {
     const loadQueueAndTopAttorneys = async () => {
       if (!isMounted) return;
 
-      const [profilesRes, attorneyProfilesRes, queueAppointmentsRes, statsAppointmentsRes, feedbackRes, roomsRes] =
+      const [profilesRes, attorneyProfilesRes, queueAppointmentsRes, statsAppointmentsRes, roomsRes] =
         await Promise.all([
           supabase
             .from('profiles')
@@ -420,9 +412,8 @@ const Dashboard = ({ onNavigate }) => {
             .limit(8),
           supabase
             .from('appointments')
-            .select('id, attorney_id, status, notes')
+            .select('id, attorney_id, status')
             .neq('status', 'cancelled'),
-          supabase.from('consultation_feedback').select('attorney_id, rating, appointment_id'),
           supabase.from('consultation_rooms').select('appointment_id, is_closed'),
         ]);
 
@@ -439,9 +430,6 @@ const Dashboard = ({ onNavigate }) => {
       }
       if (statsAppointmentsRes.error) {
         console.warn('[admin-dashboard] appointment stats load failed', statsAppointmentsRes.error);
-      }
-      if (feedbackRes.error) {
-        console.warn('[admin-dashboard] feedback load failed', feedbackRes.error);
       }
       if (roomsRes.error) {
         console.warn('[admin-dashboard] consultation rooms load failed', roomsRes.error);
@@ -527,36 +515,8 @@ const Dashboard = ({ onNavigate }) => {
         }
       });
 
-      const feedbackAppointmentIds = new Set(
-        (feedbackRes.data || []).map((row) => row.appointment_id).filter(Boolean),
-      );
-
-      const ratingByAttorney = new Map();
-      const addAttorneyRating = (attorneyId, rating) => {
-        if (!attorneyId || !rating) return;
-        const existing = ratingByAttorney.get(attorneyId) || { total: 0, count: 0 };
-        existing.total += rating;
-        existing.count += 1;
-        ratingByAttorney.set(attorneyId, existing);
-      };
-
-      (feedbackRes.data || []).forEach((row) => {
-        addAttorneyRating(row.attorney_id, Number(row.rating || 0));
-      });
-
-      appointmentRows.forEach((row) => {
-        if (!row.attorney_id || feedbackAppointmentIds.has(row.id)) return;
-        const notesRating = parseNotesFeedbackRating(row.notes);
-        if (notesRating) addAttorneyRating(row.attorney_id, notesRating);
-      });
-
       const nextTopAttorneys = (profilesRes.data || [])
         .map((profile) => {
-          const ratingMeta = ratingByAttorney.get(profile.id);
-          const avgRating =
-            ratingMeta && ratingMeta.count > 0
-              ? Number((ratingMeta.total / ratingMeta.count).toFixed(1))
-              : null;
           const totalConsultations = Number(totalConsultationsByAttorney.get(profile.id) || 0);
           const finishedConsultations = Number(finishedConsultationsByAttorney.get(profile.id) || 0);
           const inQueue = Number(activeQueueCountByAttorney.get(profile.id) || 0);
@@ -569,14 +529,12 @@ const Dashboard = ({ onNavigate }) => {
             consultations: totalConsultations,
             finished: finishedConsultations,
             inQueue,
-            rating: avgRating,
           };
         })
         .sort((a, b) => {
           if (b.finished !== a.finished) return b.finished - a.finished;
           if (b.consultations !== a.consultations) return b.consultations - a.consultations;
-          if (b.inQueue !== a.inQueue) return b.inQueue - a.inQueue;
-          return (b.rating || 0) - (a.rating || 0);
+          return b.inQueue - a.inQueue;
         })
         .slice(0, 4)
         .map((item, index) => ({ ...item, rank: index + 1 }));
@@ -606,15 +564,6 @@ const Dashboard = ({ onNavigate }) => {
           )
           .subscribe();
 
-        const feedbackChannel = supabase
-          .channel('admin-dashboard-feedback')
-          .on(
-            'postgres_changes',
-            { event: '*', schema: 'public', table: 'consultation_feedback' },
-            () => onChange(),
-          )
-          .subscribe();
-
         const roomsChannel = supabase
           .channel('admin-dashboard-consultation-rooms')
           .on(
@@ -626,7 +575,6 @@ const Dashboard = ({ onNavigate }) => {
 
         return () => {
           supabase.removeChannel(appointmentsChannel);
-          supabase.removeChannel(feedbackChannel);
           supabase.removeChannel(roomsChannel);
         };
       },
@@ -1460,10 +1408,7 @@ const AttorneysModal = ({ attorneys, onClose, onMessage }) => (
               <div className="attorney-info">
                 <h4>{attorney.name}</h4>
                 <p>{attorney.specialty || 'No specialty yet'}</p>
-                <p>
-                  {(attorney.consultations ?? 0)} consultations
-                  {attorney.rating ? ` â€¢ ${attorney.rating}â­` : ''}
-                </p>
+                <p>{(attorney.consultations ?? 0)} consultations</p>
               </div>
               <button className="btn-message" onClick={() => onMessage(attorney)}>
                 <MessageSquare size={16} /> Message
@@ -1649,7 +1594,7 @@ const RequestItem = ({ queuePosition, name, atty, law, status, bookedLabel, age 
   </div>
 );
 
-const AttorneyItem = ({ rank, name, imageUrl, law, consultations, finished = 0, inQueue = 0, rating }) => (
+const AttorneyItem = ({ rank, name, imageUrl, law, consultations, finished = 0, inQueue = 0 }) => (
   <div className="item-row">
     <div className="attorney-rank-avatar">
       <img src={imageUrl} alt="" />
@@ -1669,15 +1614,6 @@ const AttorneyItem = ({ rank, name, imageUrl, law, consultations, finished = 0, 
         <p className="item-subtitle">Scheduled / in progress</p>
       ) : null}
       {inQueue > 0 ? <p className="item-subtitle">{inQueue} in queue now</p> : null}
-      <div className="rating-star">
-        {rating != null ? (
-          <>
-            <Star size={12} fill="#eab308" color="#eab308" /> {rating}
-          </>
-        ) : (
-          <span className="item-subtitle">No ratings yet</span>
-        )}
-      </div>
     </div>
   </div>
 );

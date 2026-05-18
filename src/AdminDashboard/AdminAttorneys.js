@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { 
   LayoutDashboard, Users, Scale,
   BarChart3, Settings, LogOut, Menu, Plus, Search, 
-  Filter, Download, Mail, Phone, Star, Calendar, X
+  Filter, Download, Mail, Phone, Calendar, X
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { adminCreateWalkInAttorney } from '../lib/userApi';
@@ -95,7 +95,7 @@ const Attorneys = ({ onNavigate }) => {
 
   const loadAttorneys = useCallback(async () => {
     try {
-      const [profilesRes, attorneyProfilesRes, appointmentsRes, feedbackRes] = await Promise.all([
+      const [profilesRes, attorneyProfilesRes, appointmentsRes] = await Promise.all([
           supabase
             .from('profiles')
             .select('id, full_name, email, phone')
@@ -109,21 +109,15 @@ const Attorneys = ({ onNavigate }) => {
             .from('appointments')
             .select('id, attorney_id, status')
             .order('created_at', { ascending: false }),
-          supabase
-            .from('consultation_feedback')
-            .select('attorney_id, rating')
-            .order('created_at', { ascending: false }),
         ]);
 
         if (profilesRes.error) throw profilesRes.error;
         if (attorneyProfilesRes.error) throw attorneyProfilesRes.error;
         if (appointmentsRes.error) throw appointmentsRes.error;
-        if (feedbackRes.error) throw feedbackRes.error;
 
         const profileRows = profilesRes.data || [];
         const attorneyProfileRows = attorneyProfilesRes.data || [];
         const appointmentRows = appointmentsRes.data || [];
-        const feedbackRows = feedbackRes.data || [];
 
         const attorneyProfileById = new Map(attorneyProfileRows.map((row) => [row.user_id, row]));
 
@@ -152,27 +146,14 @@ const Attorneys = ({ onNavigate }) => {
           }
         });
 
-        const ratingAggregateByAttorney = new Map();
-        feedbackRows.forEach((row) => {
-          const attorneyId = row.attorney_id;
-          if (!attorneyId) return;
-          const current = ratingAggregateByAttorney.get(attorneyId) || { total: 0, count: 0 };
-          current.total += Number(row.rating || 0);
-          current.count += 1;
-          ratingAggregateByAttorney.set(attorneyId, current);
-        });
-
         const normalized = profileRows.map((row) => {
           const extra = attorneyProfileById.get(row.id);
-          const ratingData = ratingAggregateByAttorney.get(row.id) || { total: 0, count: 0 };
-          const rating = ratingData.count > 0 ? (ratingData.total / ratingData.count) : 0;
           const activeCount = Number(activeByAttorney.get(row.id) || 0);
           return {
             id: row.id,
             name: row.full_name || 'Attorney',
             imageUrl: resolveAttorneyImage(row.full_name || 'Attorney'),
             status: computeAvailability(activeCount),
-            rating: rating.toFixed(1),
             specialty: formatSpecialty(extra?.specialties),
             experience: formatExperience(extra?.years_experience),
             email: row.email || 'No email',
@@ -218,16 +199,10 @@ const Attorneys = ({ onNavigate }) => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => loadAttorneys())
       .subscribe();
 
-    const feedbackChannel = supabase
-      .channel('admin-attorneys-feedback')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'consultation_feedback' }, () => loadAttorneys())
-      .subscribe();
-
     return () => {
       supabase.removeChannel(profilesChannel);
       supabase.removeChannel(attorneyProfilesChannel);
       supabase.removeChannel(appointmentsChannel);
-      supabase.removeChannel(feedbackChannel);
     };
   }, [loadAttorneys]);
 
@@ -403,7 +378,6 @@ const Attorneys = ({ onNavigate }) => {
                       <div className="name-wrapper">
                         <span className="attorney-name">{attorney.name}</span>
                         <span className={`status-badge ${attorney.status.toLowerCase()}`}>{attorney.status}</span>
-                        <span className="rating-tag"><Star size={14} fill="#eab308" color="#eab308" /> {attorney.rating}</span>
                       </div>
                       <div className="specialty-row">
                         <span className="specialty-badge">{attorney.specialty}</span>
