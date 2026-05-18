@@ -8,6 +8,7 @@ import {
   OTP_RESUME_SIGNUP_KEY,
   requestSignupSmsOtp,
   resendSignUpOtp,
+  sendSignupVerificationEmail,
   signInWithEmail,
   verifySignUpOtp,
   verifySignupSmsOtp,
@@ -60,10 +61,13 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
   });
   const [optionalPhone, setOptionalPhone] = useState(() => localStorage.getItem(PENDING_SMS_PHONE_KEY) || '');
   const [smsInitDone, setSmsInitDone] = useState(false);
+  const [emailInitDone, setEmailInitDone] = useState(false);
   const [smsSending, setSmsSending] = useState(false);
+  const [emailSending, setEmailSending] = useState(false);
   const [needsPhone, setNeedsPhone] = useState(false);
   const inputs = useRef([]);
   const smsAutoTriedRef = useRef(false);
+  const emailAutoTriedRef = useRef(false);
 
   const pendingEmail = String(email || localStorage.getItem('batasmo_pending_otp_email') || '').trim();
   const pendingRole = String(role || localStorage.getItem('batasmo_pending_otp_role') || 'Client');
@@ -127,6 +131,25 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
     return () => clearTimeout(t);
   }, [timer]);
 
+  const readSignupResumePassword = useCallback(() => {
+    try {
+      const raw = sessionStorage.getItem(OTP_RESUME_SIGNUP_KEY);
+      if (!raw) return '';
+      return String(JSON.parse(raw)?.password || '');
+    } catch {
+      return '';
+    }
+  }, []);
+
+  const sendEmailOtp = useCallback(async () => {
+    await sendSignupVerificationEmail({
+      email: pendingEmail,
+      userId: pendingUserId || undefined,
+      password: readSignupResumePassword() || undefined,
+    });
+    setEmailInitDone(true);
+  }, [pendingEmail, pendingUserId, readSignupResumePassword]);
+
   const sendSmsOtp = useCallback(
     async (otpPhoneOverride) => {
       const body = {
@@ -149,6 +172,28 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
       setTimer(59);
     }
   }, [smsInitDone, delivery]);
+
+  useEffect(() => {
+    if (emailInitDone && delivery === 'email') {
+      setTimer(59);
+    }
+  }, [emailInitDone, delivery]);
+
+  useEffect(() => {
+    if (delivery !== 'email' || !pendingEmail || emailAutoTriedRef.current) return;
+    emailAutoTriedRef.current = true;
+    setErrorText('');
+    setEmailSending(true);
+    sendEmailOtp()
+      .catch((err) => {
+        setErrorText(
+          getErrorMessage(err, 'Could not send verification email. Tap Resend or check spam.'),
+        );
+      })
+      .finally(() => {
+        setEmailSending(false);
+      });
+  }, [delivery, pendingEmail, sendEmailOtp]);
 
   useEffect(() => {
     if (delivery !== 'sms' || !pendingEmail || smsAutoTriedRef.current) return;
@@ -200,7 +245,11 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
     };
 
     if (delivery === 'email') {
-      resendSignUpOtp({ email: pendingEmail })
+      resendSignUpOtp({
+        email: pendingEmail,
+        userId: pendingUserId || undefined,
+        password: readSignupResumePassword() || undefined,
+      })
         .then(done)
         .catch((error) => {
           setErrorText(getErrorMessage(error, 'Failed to resend OTP.'));
@@ -393,6 +442,10 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
             </label>
           </div>
 
+          {delivery === 'email' && emailSending ? (
+            <p className="otp-sms-status">Sending verification code to your Gmail...</p>
+          ) : null}
+
           {delivery === 'sms' && smsSending ? (
             <p className="otp-sms-status">Sending SMS...</p>
           ) : null}
@@ -444,7 +497,7 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
 
           {errorText ? <p className="otp-error">{errorText}</p> : null}
 
-          {(delivery === 'email' || smsInitDone) && !smsSending ? (
+          {(delivery === 'email' || smsInitDone) && !smsSending && !emailSending ? (
             <>
               <p className="otp-resend-timer">
                 Resend code in <span>00:{String(timer).padStart(2, '0')}</span>

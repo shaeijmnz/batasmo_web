@@ -5,6 +5,8 @@ import dotenv from 'dotenv'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import jwt from 'jsonwebtoken'
 import { isWelcomeEmailConfigured, sendAttorneyWelcomeEmail } from './lib/welcomeEmail.js'
+import { isSignupOtpEmailConfigured } from './lib/signupOtpEmail.js'
+import { dispatchSignupEmailOtp } from './lib/signupOtpDispatch.js'
 
 dotenv.config()
 
@@ -2306,6 +2308,42 @@ app.post('/verify-identity', async (req, res) => {
   }
 })
 
+app.post('/auth/signup-email-otp', async (req, res) => {
+  try {
+    requireSupabaseServiceConfig()
+    const email = String(req.body?.email || '').trim()
+    const userId = String(req.body?.userId || '').trim()
+    const password = req.body?.password != null ? String(req.body.password) : ''
+
+    if (!isGmailAddress(email)) {
+      return res.status(400).json({ error: 'A valid Gmail address is required.' })
+    }
+
+    const result = await dispatchSignupEmailOtp({
+      supabaseUrl: SUPABASE_URL,
+      serviceKey: SUPABASE_SERVICE_ROLE_KEY,
+      email,
+      userId,
+      password,
+    })
+    return res.status(200).json(result)
+  } catch (error) {
+    const msg = error?.message || 'Unable to send verification email.'
+    const lower = msg.toLowerCase()
+    const status =
+      lower.includes('wait') || lower.includes('limit')
+        ? 429
+        : lower.includes('configured') ||
+            lower.includes('required') ||
+            lower.includes('already verified') ||
+            lower.includes('unable')
+          ? 400
+          : 500
+    console.error('[signup-email-otp]', msg)
+    return res.status(status).json({ error: msg })
+  }
+})
+
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -2315,6 +2353,7 @@ app.get('/health', (req, res) => {
     hasGeminiKey,
     modelCandidates: GEMINI_MODEL_CANDIDATES,
     welcomeEmailConfigured: isWelcomeEmailConfigured(),
+    signupOtpEmailConfigured: isSignupOtpEmailConfigured(),
   })
 })
 

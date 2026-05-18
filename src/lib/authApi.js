@@ -21,6 +21,15 @@ export const PENDING_SMS_PHONE_KEY = 'batasmo_pending_sms_phone'
 export const OTP_RESUME_LOGIN_KEY = 'batasmo_otp_resume_login'
 export const OTP_RESUME_SIGNUP_KEY = 'batasmo_otp_resume_signup'
 
+const getBackendApiBase = () =>
+  String(
+    process.env.REACT_APP_PAYMENT_API_URL ||
+      process.env.REACT_APP_CHATBOT_API_URL ||
+      '',
+  )
+    .trim()
+    .replace(/\/+$/, '')
+
 const normalizeRole = (role) => {
   const value = String(role || '').trim().toLowerCase()
   if (value === 'admin') return 'Admin'
@@ -155,9 +164,61 @@ export async function signUpWithEmail({
       // Never keep an active session after signup — user must verify OTP first.
       await supabase.auth.signOut()
     }
+
+    if (otpChannel === 'email') {
+      try {
+        await sendSignupVerificationEmail({
+          email: normalizedEmail,
+          userId: createdUser.id,
+          password,
+        })
+      } catch (emailErr) {
+        console.warn('[signup] verification email', emailErr?.message || emailErr)
+      }
+    }
   }
 
   return { user: createdUser, preferredOtpChannel: otpChannel }
+}
+
+/**
+ * Send 6-digit signup verification code to Gmail.
+ * Uses Render SMTP when configured; falls back to Supabase resend.
+ */
+export async function sendSignupVerificationEmail({ email, userId, password }) {
+  const normalizedEmail = normalizeAuthEmail(email)
+  if (!normalizedEmail) throw new Error('Email is required.')
+
+  const base = getBackendApiBase()
+  if (base) {
+    const body = { email: normalizedEmail }
+    if (userId) body.userId = String(userId).trim()
+    if (password) body.password = String(password)
+
+    const response = await fetch(`${base}/auth/signup-email-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (response.ok) return payload
+    const backendMsg = payload?.error
+    if (backendMsg && !String(backendMsg).toLowerCase().includes('configured')) {
+      throw new Error(backendMsg)
+    }
+  }
+
+  const { error } = await supabase.auth.resend({
+    type: 'signup',
+    email: normalizedEmail,
+  })
+  if (error) {
+    throw new Error(
+      error.message ||
+        'Failed to send verification email. Ask admin to set Gmail SMTP on Render.',
+    )
+  }
+  return { ok: true, source: 'supabase' }
 }
 
 /**
@@ -348,15 +409,21 @@ export async function signInWithEmail({ email, password }) {
 }
 
 export async function verifySignUpOtp({ email, token }) {
-  const { error } = await supabase.auth.verifyOtp({
-    email,
-    token: String(token || '').replace(/\D/g, ''),
-    type: 'signup',
-  })
-
-  if (error) {
-    throw new Error(error.message)
+  const normalizedToken = String(token || '').replace(/\D/g, '')
+  let lastError = null
+  for (const type of ['signup', 'email']) {
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token: normalizedToken,
+      type,
+    })
+    if (!error) {
+      lastError = null
+      break
+    }
+    lastError = error
   }
+  if (lastError) throw new Error(lastError.message)
 
   await markSignupOtpCompleted()
 
@@ -383,18 +450,8 @@ export async function verifySignUpOtp({ email, token }) {
   return { success: true }
 }
 
-export async function resendSignUpOtp({ email }) {
-  const normalizedEmail = String(email || '').trim().toLowerCase()
-  const { error } = await supabase.auth.resend({
-    type: 'signup',
-    email: normalizedEmail,
-  })
-
-  if (error) {
-    throw new Error(error.message)
-  }
-
-  return { success: true }
+export async function resendSignUpOtp({ email, userId, password }) {
+  return sendSignupVerificationEmail({ email, userId, password })
 }
 
 export async function startPasswordRecovery({ email }) {
