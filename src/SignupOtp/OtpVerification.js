@@ -13,7 +13,12 @@ import {
   verifySignupSmsOtp,
 } from '../lib/authApi';
 import { markSignupOtpCompleted } from '../lib/signupVerification';
+import { supabase } from '../lib/supabaseClient';
 import { getCurrentSessionProfile, pageFromRole } from '../lib/userApi';
+import {
+  isSignupVerificationComplete,
+  signOutIfSignupIncomplete,
+} from '../lib/signupVerification';
 import { isValidPhoneNumber, maskPhilippinePhone, sanitizePhoneInput, VALID_PHONE_MESSAGE } from '../lib/validators';
 
 const ScalesIcon = ({ size = 24, color = '#f5a623' }) => (
@@ -78,6 +83,43 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
     setDelivery(v);
     localStorage.setItem(PENDING_OTP_CHANNEL_KEY, v);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const guardOtpPage = async () => {
+      if (!pendingEmail) {
+        onNavigate('signup');
+        return;
+      }
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (cancelled) return;
+
+      if (user && isSignupVerificationComplete(user)) {
+        try {
+          const { profile } = await getCurrentSessionProfile();
+          onNavigate(pageFromRole(profile?.role || pendingRole));
+        } catch {
+          onNavigate(pageFromRole(pendingRole));
+        }
+        return;
+      }
+
+      if (user) {
+        await signOutIfSignupIncomplete(user);
+      }
+    };
+
+    guardOtpPage();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingEmail, pendingRole, onNavigate]);
 
   useEffect(() => {
     if (timer <= 0) return;

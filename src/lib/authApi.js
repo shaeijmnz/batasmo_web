@@ -296,7 +296,7 @@ export async function signInWithEmail({ email, password }) {
 
   if (data?.user) {
     if (!isSignupVerificationComplete(data.user)) {
-      await supabase.auth.signOut()
+      await signOutIfSignupIncomplete(data.user)
       const err = new Error('SIGNUP_OTP_REQUIRED')
       err.code = 'SIGNUP_OTP_REQUIRED'
       err.email = normalizedEmail
