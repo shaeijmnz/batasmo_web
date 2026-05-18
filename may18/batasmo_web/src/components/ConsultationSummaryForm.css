@@ -1,0 +1,141 @@
+.csf-form {
+  margin-top: 12px;
+  display: grid;
+  gap: 16px;
+  max-height: min(52vh, 460px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.csf-form__intro {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: #94a3b8;
+}
+
+.csf-section {
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.4);
+  padding: 12px 14px 14px;
+}
+
+.csf-section__header {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.csf-section__subheader {
+  margin: 4px 0 10px;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: #94a3b8;
+}
+
+.csf-section__body {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  background: rgba(2, 6, 23, 0.55);
+  color: #f1f5f9;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  padding: 10px 12px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 80px;
+}
+
+.csf-section__body:focus {
+  outline: none;
+  border-color: rgba(96, 165, 250, 0.65);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+
+.csf-section__body:disabled {
+  opacity: 0.65;
+}
+
+.csf-section__body::placeholder {
+  color: rgba(148, 163, 184, 0.55);
+}
+
+/* Attorney Logs modal */
+.al-summary-panel .csf-form__intro {
+  color: rgba(203, 220, 245, 0.82);
+}
+
+.al-summary-panel .csf-section {
+  border-color: rgba(128, 176, 255, 0.28);
+  background: rgba(4, 12, 24, 0.55);
+}
+
+.al-summary-panel .csf-section__header {
+  color: #f0f6ff;
+}
+
+.al-summary-panel .csf-section__subheader {
+  color: rgba(156, 183, 218, 0.9);
+}
+
+.al-summary-panel .csf-section__body {
+  border-color: rgba(128, 176, 255, 0.28);
+  background: rgba(4, 12, 24, 0.65);
+  color: #f0f6ff;
+}
+
+/* Client read view */
+.csf-view {
+  display: grid;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.csf-view__block {
+  padding: 0;
+}
+
+.csf-view__header {
+  margin: 0 0 4px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.csf-view__subheader {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
+.csf-view__body {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: #334155;
+  white-space: pre-wrap;
+}
+
+.clogs-attorney-summary--standalone .csf-view__header {
+  color: #1e3a5f;
+}
+
+.clogs-attorney-summary--standalone .csf-view__body {
+  color: #475569;
+}
+
+.cr-feedback-summary .csf-view__header {
+  color: #e2e8f0;
+}
+
+.cr-feedback-summary .csf-view__subheader {
+  color: #94a3b8;
+}
+
+.cr-feedback-summary .csf-view__body {
+  color: #cbd5e1;
+}

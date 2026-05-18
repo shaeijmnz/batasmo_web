@@ -1,0 +1,749 @@
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  LayoutDashboard, Users, Scale,
+  BarChart3, Settings, LogOut, Menu, Search,
+  Filter, Download, Mail, Phone, Calendar, Plus, X, Shield, UserMinus
+} from 'lucide-react';
+import { supabase } from '../lib/supabaseClient';
+import { readAdminPageCache, writeAdminPageCache } from '../lib/adminPageCache';
+import { adminCreateWalkInClient, adminDemoteAdminToClient, adminPromoteClientToAdmin } from '../lib/userApi';
+import { GMAIL_REQUIRED_MESSAGE, isGmailEmail } from '../lib/validators';
+import './AdminTheme.css';
+import './clients.css';
+
+const CLIENTS_CACHE_KEY = 'clients';
+
+const formatJoinedDate = (value) => {
+  const parsed = value ? new Date(value) : null;
+  if (!parsed || Number.isNaN(parsed.getTime())) return 'Unknown';
+  return parsed.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const initialsFromName = (name) => {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return 'CL';
+  return parts.slice(0, 2).map((part) => part[0].toUpperCase()).join('');
+};
+
+const Clients = ({ onNavigate }) => {
+  const clientsBoot = useMemo(() => readAdminPageCache(CLIENTS_CACHE_KEY), []);
+  const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [clients, setClients] = useState(() => clientsBoot?.clients || []);
+  const [clientMetrics, setClientMetrics] = useState(
+    () => clientsBoot?.clientMetrics || { total: 0, newThisMonth: 0, totalConsultations: 0 },
+  );
+  const [onlineClientIds, setOnlineClientIds] = useState(new Set());
+  const [loading, setLoading] = useState(!clientsBoot);
+  const [loadError, setLoadError] = useState('');
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [addEmail, setAddEmail] = useState('');
+  const [addFullName, setAddFullName] = useState('');
+  const [addSubmitting, setAddSubmitting] = useState(false);
+  const [addFormError, setAddFormError] = useState('');
+  const [createdCredentials, setCreatedCredentials] = useState(null);
+  const [copyFeedback, setCopyFeedback] = useState('');
+  const [promoteTarget, setPromoteTarget] = useState(null);
+  const [promoteSubmitting, setPromoteSubmitting] = useState(false);
+  const [promoteError, setPromoteError] = useState('');
+  const [roleActionSuccess, setRoleActionSuccess] = useState('');
+  const [admins, setAdmins] = useState(() => clientsBoot?.admins || []);
+  const [currentAdminId, setCurrentAdminId] = useState('');
+  const [demoteTarget, setDemoteTarget] = useState(null);
+  const [demoteSubmitting, setDemoteSubmitting] = useState(false);
+  const [demoteError, setDemoteError] = useState('');
+
+  const navigate = (path) => {
+    const pageMap = {
+      '/': 'admin-home',
+      '/clients': 'admin-clients',
+      '/attorneys': 'admin-attorneys',
+      '/requests': 'admin-requests',
+      '/consultations': 'admin-consultations',
+      '/reports': 'admin-reports',
+      '/settings': 'admin-settings',
+    };
+    onNavigate?.(pageMap[path] || 'admin-home');
+  };
+  const handleQuickAction = (message) => window.alert(message);
+
+  const navItems = [
+    { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/' },
+    { label: 'Clients', icon: <Users size={20} />, path: '/clients' },
+    { label: 'Attorneys', icon: <Scale size={20} />, path: '/attorneys' },
+    { label: 'Reports', icon: <BarChart3 size={20} />, path: '/reports' },
+    { label: 'Settings', icon: <Settings size={20} />, path: '/settings' },
+  ];
+
+  const loadClients = useCallback(async () => {
+    try {
+      const [profilesRes, appointmentsRes, adminsRes] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id, full_name, email, phone, address, created_at')
+          .eq('role', 'Client')
+          .order('created_at', { ascending: false }),
+        supabase.from('appointments').select('client_id, status'),
+        supabase
+          .from('profiles')
+          .select('id, full_name, email, created_at')
+          .eq('role', 'Admin')
+          .order('full_name', { ascending: true }),
+      ]);
+
+      if (profilesRes.error) throw profilesRes.error;
+      if (appointmentsRes.error) throw appointmentsRes.error;
+      if (adminsRes.error) throw adminsRes.error;
+
+      const profileRows = profilesRes.data || [];
+      const appointmentRows = appointmentsRes.data || [];
+      const validConsultations = appointmentRows.filter(
+        (row) => String(row.status || '').toLowerCase() !== 'cancelled',
+      );
+
+      const consultationsByClient = new Map();
+      validConsultations.forEach((row) => {
+        if (!row.client_id) return;
+        consultationsByClient.set(
+          row.client_id,
+          Number(consultationsByClient.get(row.client_id) || 0) + 1,
+        );
+      });
+
+      const currentMonth = new Date().getMonth();
+      const currentYear = new Date().getFullYear();
+      const newThisMonth = profileRows.filter((row) => {
+        const created = row.created_at ? new Date(row.created_at) : null;
+        if (!created || Number.isNaN(created.getTime())) return false;
+        return created.getMonth() === currentMonth && created.getFullYear() === currentYear;
+      }).length;
+
+      const normalizedClients = profileRows.map((row) => ({
+        id: row.id,
+        avatar: initialsFromName(row.full_name),
+        name: row.full_name || 'Unnamed Client',
+        email: row.email || 'No email',
+        phone: row.phone || 'No phone',
+        joined: formatJoinedDate(row.created_at),
+        consultations: Number(consultationsByClient.get(row.id) || 0),
+      }));
+
+      const nextMetrics = {
+        total: profileRows.length,
+        newThisMonth,
+        totalConsultations: validConsultations.length,
+      };
+
+      const normalizedAdmins = (adminsRes.data || []).map((row) => ({
+        id: row.id,
+        avatar: initialsFromName(row.full_name),
+        name: row.full_name || 'Admin',
+        email: row.email || 'No email',
+        joined: formatJoinedDate(row.created_at),
+      }));
+
+      setClients(normalizedClients);
+      setAdmins(normalizedAdmins);
+      setClientMetrics(nextMetrics);
+      writeAdminPageCache(CLIENTS_CACHE_KEY, {
+        clients: normalizedClients,
+        clientMetrics: nextMetrics,
+        admins: normalizedAdmins,
+      });
+      setLoadError('');
+    } catch (error) {
+      setLoadError(error.message || 'Failed to load clients.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadClients();
+
+    const profilesChannel = supabase
+      .channel('admin-clients-profiles')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => loadClients())
+      .subscribe();
+
+    const appointmentsChannel = supabase
+      .channel('admin-clients-appointments')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => loadClients())
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(profilesChannel);
+      supabase.removeChannel(appointmentsChannel);
+    };
+  }, [loadClients]);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setCurrentAdminId(String(data?.user?.id || ''));
+    });
+  }, []);
+
+  useEffect(() => {
+    const syncOnlineClients = (channel) => {
+      const state = channel.presenceState();
+      const nextOnlineIds = new Set();
+
+      Object.values(state || {}).forEach((presences) => {
+        (presences || []).forEach((presence) => {
+          if (presence?.role === 'Client' && presence?.user_id) {
+            nextOnlineIds.add(String(presence.user_id));
+          }
+        });
+      });
+
+      setOnlineClientIds(nextOnlineIds);
+    };
+
+    const presenceChannel = supabase
+      .channel('online-clients')
+      .on('presence', { event: 'sync' }, () => syncOnlineClients(presenceChannel))
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(presenceChannel);
+    };
+  }, []);
+
+  const clientStats = useMemo(() => [
+    { label: 'Total Clients', value: clientMetrics.total.toLocaleString(), color: '#1e3a8a' },
+    { label: 'Active Clients', value: onlineClientIds.size.toLocaleString(), color: '#22c55e' },
+    { label: 'New This Month', value: clientMetrics.newThisMonth.toLocaleString(), color: '#eab308' },
+    { label: 'Total Consultations', value: clientMetrics.totalConsultations.toLocaleString(), color: '#64748b' },
+  ], [clientMetrics, onlineClientIds.size]);
+
+  const filteredClients = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return clients;
+    return clients.filter((client) =>
+      [client.name, client.email].some((value) =>
+        String(value || '').toLowerCase().includes(term),
+      ),
+    );
+  }, [clients, searchTerm]);
+
+  const closeAddModal = () => {
+    if (addSubmitting) return;
+    setAddModalOpen(false);
+    setAddFormError('');
+    setCreatedCredentials(null);
+    setCopyFeedback('');
+  };
+
+  const openAddClientModal = () => {
+    setAddFormError('');
+    setCreatedCredentials(null);
+    setCopyFeedback('');
+    setAddModalOpen(true);
+  };
+
+  const copyCredentials = async () => {
+    if (!createdCredentials) return;
+    const text = `Email: ${createdCredentials.email}\nPassword: ${createdCredentials.password}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyFeedback('Copied to clipboard');
+    } catch {
+      setCopyFeedback('Could not copy — select and copy manually');
+    }
+  };
+
+  const closePromoteModal = () => {
+    if (promoteSubmitting) return;
+    setPromoteTarget(null);
+    setPromoteError('');
+  };
+
+  const closeDemoteModal = () => {
+    if (demoteSubmitting) return;
+    setDemoteTarget(null);
+    setDemoteError('');
+  };
+
+  const handlePromoteToAdmin = async () => {
+    if (!promoteTarget?.id || promoteSubmitting) return;
+    setPromoteSubmitting(true);
+    setPromoteError('');
+    try {
+      const result = await adminPromoteClientToAdmin({ userId: promoteTarget.id });
+      setPromoteTarget(null);
+      setRoleActionSuccess(
+        `${result?.fullName || promoteTarget.name} now has Admin access. They should sign out and sign in again.`,
+      );
+      await loadClients();
+    } catch (err) {
+      setPromoteError(err?.message || 'Could not promote user to Admin.');
+    } finally {
+      setPromoteSubmitting(false);
+    }
+  };
+
+  const handleDemoteToClient = async () => {
+    if (!demoteTarget?.id || demoteSubmitting) return;
+    setDemoteSubmitting(true);
+    setDemoteError('');
+    try {
+      const result = await adminDemoteAdminToClient({ userId: demoteTarget.id });
+      setDemoteTarget(null);
+      setRoleActionSuccess(
+        `${result?.fullName || demoteTarget.name} is now a Client again. They should sign out and sign in again.`,
+      );
+      await loadClients();
+    } catch (err) {
+      setDemoteError(err?.message || 'Could not demote user to Client.');
+    } finally {
+      setDemoteSubmitting(false);
+    }
+  };
+
+  const handleAddWalkInClient = async (event) => {
+    event.preventDefault();
+    setAddFormError('');
+    const email = addEmail.trim().toLowerCase();
+    if (!email) {
+      setAddFormError('Email is required.');
+      return;
+    }
+    if (!isGmailEmail(email)) {
+      setAddFormError(GMAIL_REQUIRED_MESSAGE);
+      return;
+    }
+    setAddSubmitting(true);
+    try {
+      const result = await adminCreateWalkInClient({
+        email,
+        fullName: addFullName.trim() || undefined,
+      });
+      const generatedPassword = result?.generatedPassword;
+      if (!generatedPassword) {
+        throw new Error('Account created but no password was returned. Check the backend deployment.');
+      }
+      setCreatedCredentials({
+        email: result.email || email,
+        password: generatedPassword,
+        fullName: result.fullName || addFullName.trim() || 'Walk-in Client',
+      });
+      setAddEmail('');
+      setAddFullName('');
+      await loadClients();
+    } catch (err) {
+      setAddFormError(err?.message || 'Could not create account.');
+    } finally {
+      setAddSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="app-container">
+      {/* SIDEBAR */}
+      <aside className={`sidebar ${isSidebarOpen ? 'open' : 'closed'}`}>
+        <div className="sidebar-header">
+          <button className="sidebar-toggle" onClick={() => setSidebarOpen(!isSidebarOpen)}>
+            <Menu size={24} />
+          </button>
+          {isSidebarOpen && <img src="/logo/logo.jpg" alt="BatasMo logo" className="brand-logo" />}
+          {isSidebarOpen && <span className="logo-text">BatasMo</span>}
+        </div>
+
+        <nav className="sidebar-nav">
+          {navItems.map((item) => (
+            <NavItem
+              key={item.label}
+              icon={item.icon}
+              label={item.label}
+              active={item.path === '/clients'}
+              open={isSidebarOpen}
+              onClick={() => navigate(item.path)}
+            />
+          ))}
+        </nav>
+
+        <div className="sidebar-footer">
+          <div className="profile-section">
+            <div className="profile-avatar">AD</div>
+            {isSidebarOpen && (
+              <div className="profile-info">
+                <p className="name">Admin User</p>
+                <p className="email">admin@batasmo.com</p>
+              </div>
+            )}
+          </div>
+          <button className="logout-btn" onClick={() => handleQuickAction('Logout clicked')}>
+            <LogOut size={18} />
+            {isSidebarOpen && <span>Logout</span>}
+          </button>
+        </div>
+      </aside>
+
+      {/* MAIN CONTENT */}
+      <main className="main-content">
+        <div className="content-wrapper">
+          <div className="page-header">
+            <div>
+              <h2 className="title">Clients Management</h2>
+              <p className="subtitle">Manage and view all registered clients</p>
+            </div>
+            <button
+              type="button"
+              className="add-btn"
+              onClick={openAddClientModal}
+            >
+              <Plus size={18} />
+              Add Client
+            </button>
+          </div>
+
+          {addModalOpen ? (
+            <div
+              className="clients-modal-overlay"
+              role="presentation"
+              onMouseDown={(e) => {
+                if (e.target === e.currentTarget) closeAddModal();
+              }}
+            >
+              <div
+                className="clients-modal"
+                role="dialog"
+                aria-labelledby="walk-in-client-title"
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <div className="clients-modal__header">
+                  <h3 id="walk-in-client-title">Add walk-in client</h3>
+                  <button
+                    type="button"
+                    className="clients-modal__close"
+                    disabled={addSubmitting}
+                    onClick={closeAddModal}
+                    aria-label="Close"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+                {createdCredentials ? (
+                  <>
+                    <p className="clients-modal__hint">
+                      Account created. Give the client these login details — they will be asked to set a new password on first sign-in.
+                    </p>
+                    <div className="clients-modal__credentials">
+                      <p><strong>Email</strong> {createdCredentials.email}</p>
+                      <p><strong>Password</strong> <code>{createdCredentials.password}</code></p>
+                    </div>
+                    {copyFeedback ? <p className="clients-modal__copy-feedback">{copyFeedback}</p> : null}
+                    <div className="clients-modal__actions">
+                      <button type="button" className="btn-secondary" onClick={copyCredentials}>
+                        Copy email &amp; password
+                      </button>
+                      <button type="button" className="add-btn" onClick={closeAddModal}>
+                        Done
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="clients-modal__hint">
+                      Creates a client login for the web or mobile app. The system generates a temporary password — share it with the walk-in client.
+                    </p>
+                    <form className="clients-modal__form" onSubmit={handleAddWalkInClient}>
+                      <label className="clients-modal__label" htmlFor="walk-in-email">
+                        Email
+                      </label>
+                      <input
+                        id="walk-in-email"
+                        className="clients-modal__input"
+                        type="email"
+                        autoComplete="off"
+                        value={addEmail}
+                        onChange={(e) => setAddEmail(e.target.value)}
+                        disabled={addSubmitting}
+                        required
+                      />
+                      <label className="clients-modal__label" htmlFor="walk-in-name">
+                        Display name <span className="clients-modal__optional">(optional)</span>
+                      </label>
+                      <input
+                        id="walk-in-name"
+                        className="clients-modal__input"
+                        type="text"
+                        placeholder="Walk-in Client"
+                        value={addFullName}
+                        onChange={(e) => setAddFullName(e.target.value)}
+                        disabled={addSubmitting}
+                      />
+                      {addFormError ? <p className="clients-modal__error">{addFormError}</p> : null}
+                      <div className="clients-modal__actions">
+                        <button type="button" className="btn-secondary" disabled={addSubmitting} onClick={closeAddModal}>
+                          Cancel
+                        </button>
+                        <button type="submit" className="add-btn" disabled={addSubmitting}>
+                          {addSubmitting ? 'Creating…' : 'Create account'}
+                        </button>
+                      </div>
+                    </form>
+                  </>
+                )}
+              </div>
+            </div>
+          ) : null}
+
+          {promoteTarget ? (
+            <div
+              className="clients-modal-overlay"
+              role="presentation"
+              onMouseDown={(e) => {
+                if (e.target === e.currentTarget) closePromoteModal();
+              }}
+            >
+              <div
+                className="clients-modal clients-modal--promote"
+                role="dialog"
+                aria-labelledby="promote-admin-title"
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <div className="clients-modal__header">
+                  <h3 id="promote-admin-title">Promote to Admin</h3>
+                  <button
+                    type="button"
+                    className="clients-modal__close"
+                    disabled={promoteSubmitting}
+                    onClick={closePromoteModal}
+                    aria-label="Close"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+                <p className="clients-modal__hint">
+                  <strong>{promoteTarget.name}</strong> ({promoteTarget.email}) will get full Admin Dashboard access.
+                  They will no longer appear in the Clients list. Ask them to sign out and sign in after promotion.
+                </p>
+                {promoteError ? <p className="clients-modal__error">{promoteError}</p> : null}
+                <div className="clients-modal__actions">
+                  <button type="button" className="btn-secondary" disabled={promoteSubmitting} onClick={closePromoteModal}>
+                    Cancel
+                  </button>
+                  <button type="button" className="add-btn clients-promote-confirm" disabled={promoteSubmitting} onClick={handlePromoteToAdmin}>
+                    {promoteSubmitting ? 'Promoting…' : 'Confirm promotion'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {demoteTarget ? (
+            <div
+              className="clients-modal-overlay"
+              role="presentation"
+              onMouseDown={(e) => {
+                if (e.target === e.currentTarget) closeDemoteModal();
+              }}
+            >
+              <div
+                className="clients-modal clients-modal--demote"
+                role="dialog"
+                aria-labelledby="demote-client-title"
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <div className="clients-modal__header">
+                  <h3 id="demote-client-title">Demote to Client</h3>
+                  <button
+                    type="button"
+                    className="clients-modal__close"
+                    disabled={demoteSubmitting}
+                    onClick={closeDemoteModal}
+                    aria-label="Close"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+                <p className="clients-modal__hint">
+                  <strong>{demoteTarget.name}</strong> ({demoteTarget.email}) will lose Admin Dashboard access and
+                  return to the Clients list. For testing only — they must sign out and sign in again.
+                </p>
+                {demoteError ? <p className="clients-modal__error">{demoteError}</p> : null}
+                <div className="clients-modal__actions">
+                  <button type="button" className="btn-secondary" disabled={demoteSubmitting} onClick={closeDemoteModal}>
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="clients-demote-confirm"
+                    disabled={demoteSubmitting}
+                    onClick={handleDemoteToClient}
+                  >
+                    {demoteSubmitting ? 'Demoting…' : 'Confirm demotion'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Stats Grid */}
+          <div className="stats-grid">
+            {clientStats.map((stat, index) => (
+              <div key={index} className="stat-card" style={{ borderLeft: `4px solid ${stat.color}` }}>
+                <h3 className="stat-value">{stat.value}</h3>
+                <p className="stat-label">{stat.label}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Filters Bar */}
+          <div className="filter-bar">
+            <div className="search-box">
+              <Search size={18} className="search-icon" />
+              <input
+                type="text"
+                placeholder="Search clients by name or email..."
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+              />
+            </div>
+            <div className="filter-actions">
+              <button className="btn-secondary" onClick={() => handleQuickAction('Client filters opened')}><Filter size={18} /> Filter</button>
+              <button className="btn-secondary" onClick={() => handleQuickAction('Client export started')}><Download size={18} /> Export</button>
+            </div>
+          </div>
+
+          {/* Clients List */}
+          <div className="clients-container">
+            <div className="list-header">
+              <h3>All Clients ({filteredClients.length})</h3>
+            </div>
+            {roleActionSuccess ? (
+              <p className="clients-success-message">
+                {roleActionSuccess}
+                <button type="button" className="clients-success-dismiss" onClick={() => setRoleActionSuccess('')}>
+                  Dismiss
+                </button>
+              </p>
+            ) : null}
+            {loadError ? <p className="clients-info-message">{loadError}</p> : null}
+            {loading ? <p className="clients-info-message">Loading clients...</p> : null}
+            <div className="client-stack">
+              {filteredClients.map((client) => (
+                <div key={client.id} className="client-row">
+                  <div className="client-identity">
+                    <div className="client-avatar">{client.avatar}</div>
+                    <div className="client-details">
+                      <div className="name-wrapper">
+                        <span className="client-name">{client.name}</span>
+                        <span className={`status-badge ${onlineClientIds.has(String(client.id)) ? 'online' : 'offline'}`}>
+                          {onlineClientIds.has(String(client.id)) ? 'Online' : 'Offline'}
+                        </span>
+                      </div>
+                      <div className="contact-info">
+                        <span><Mail size={14} /> {client.email}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="client-meta">
+                    <div className="meta-info">
+                      <span><Phone size={14} /> {client.phone}</span>
+                      <span><Calendar size={14} /> Joined: {client.joined}</span>
+                    </div>
+                    <div className="consult-info">
+                      <div className="count-group">
+                        <span className="count">{client.consultations}</span>
+                        <span className="label">Consultations</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="clients-promote-btn"
+                        title="Promote to Admin"
+                        disabled={Boolean(promoteSubmitting || demoteSubmitting)}
+                        onClick={() => {
+                          setPromoteError('');
+                          setPromoteTarget(client);
+                        }}
+                      >
+                        <Shield size={16} />
+                        Promote to Admin
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {!loading && !loadError && filteredClients.length === 0 ? (
+                <p className="clients-info-message">No clients found.</p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="clients-container clients-container--admins">
+            <div className="list-header">
+              <div>
+                <h3>Admin users ({admins.length})</h3>
+                <p className="clients-admin-subtitle">
+                  Demote back to Client for testing. You cannot demote yourself or the last admin.
+                </p>
+              </div>
+            </div>
+            <div className="client-stack">
+              {admins.map((adminUser) => {
+                const isSelf = String(adminUser.id) === String(currentAdminId);
+                const isLastAdmin = admins.length <= 1;
+                const demoteDisabled = demoteSubmitting || promoteSubmitting || isSelf || isLastAdmin;
+                let demoteTitle = 'Demote to Client';
+                if (isSelf) demoteTitle = 'You cannot demote your own account';
+                else if (isLastAdmin) demoteTitle = 'At least one Admin must remain';
+
+                return (
+                  <div key={adminUser.id} className="client-row client-row--admin">
+                    <div className="client-identity">
+                      <div className="client-avatar client-avatar--admin">{adminUser.avatar}</div>
+                      <div className="client-details">
+                        <div className="name-wrapper">
+                          <span className="client-name">{adminUser.name}</span>
+                          <span className="status-badge status-badge--admin">Admin</span>
+                          {isSelf ? <span className="status-badge status-badge--you">You</span> : null}
+                        </div>
+                        <div className="contact-info">
+                          <span><Mail size={14} /> {adminUser.email}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="client-meta">
+                      <div className="meta-info">
+                        <span><Calendar size={14} /> Joined: {adminUser.joined}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="clients-demote-btn"
+                        title={demoteTitle}
+                        disabled={demoteDisabled}
+                        onClick={() => {
+                          setDemoteError('');
+                          setDemoteTarget(adminUser);
+                        }}
+                      >
+                        <UserMinus size={16} />
+                        Demote to Client
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+              {!loading && admins.length === 0 ? (
+                <p className="clients-info-message">No admin users found.</p>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+};
+
+const NavItem = ({ icon, label, active, open, onClick }) => (
+  <div className={`nav-item ${active ? 'active' : ''}`} onClick={onClick}>
+    {icon}
+    {open && <span>{label}</span>}
+  </div>
+);
+
+export default Clients;

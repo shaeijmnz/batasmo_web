@@ -1,0 +1,30 @@
+.adm-messages-main {
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+  min-height: 100vh;
+  background: #f7f5f1;
+}
+
+.adm-messages-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+  overflow: hidden;
+  background: #f5f1eb;
+}
+
+/* The AdminSupportDrawer in page mode fills the entire page-card area. */
+.adm-messages-page > aside {
+  flex: 1;
+  min-height: 0;
+}
+
+@media (max-width: 768px) {
+  .adm-messages-main {
+    padding: 12px;
+  }
+}

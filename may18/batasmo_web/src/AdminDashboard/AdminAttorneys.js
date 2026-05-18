@@ -175,7 +175,6 @@ const Attorneys = ({ onNavigate }) => {
   const [availabilitySaving, setAvailabilitySaving] = useState(false);
   const [availabilityError, setAvailabilityError] = useState('');
   const [availabilitySaved, setAvailabilitySaved] = useState(false);
-  const [availabilitySaveSuccess, setAvailabilitySaveSuccess] = useState(null);
   const [monthlyTemplateTimes, setMonthlyTemplateTimes] = useState(['14:00', '15:00', '16:00']);
   const [monthlyTemplateWeekdays, setMonthlyTemplateWeekdays] = useState([1, 2, 3, 4, 5]);
   const [monthlyApplyMessage, setMonthlyApplyMessage] = useState('');
@@ -406,14 +405,12 @@ const Attorneys = ({ onNavigate }) => {
     setAvailabilityByDate({});
     setAvailabilityError('');
     setAvailabilitySaved(false);
-    setAvailabilitySaveSuccess(null);
     setMonthlyApplyMessage('');
   };
 
   const changeMonth = (offset) => {
     setMonthCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() + offset, 1));
     setAvailabilitySaved(false);
-    setAvailabilitySaveSuccess(null);
     setMonthlyApplyMessage('');
   };
 
@@ -447,7 +444,6 @@ const Attorneys = ({ onNavigate }) => {
       return next;
     });
     setAvailabilitySaved(false);
-    setAvailabilitySaveSuccess(null);
     setMonthlyApplyMessage('');
   };
 
@@ -462,7 +458,6 @@ const Attorneys = ({ onNavigate }) => {
       return Array.from(current).sort();
     });
     setAvailabilitySaved(false);
-    setAvailabilitySaveSuccess(null);
     setMonthlyApplyMessage('');
   };
 
@@ -477,7 +472,6 @@ const Attorneys = ({ onNavigate }) => {
       return Array.from(current).sort((a, b) => a - b);
     });
     setAvailabilitySaved(false);
-    setAvailabilitySaveSuccess(null);
     setMonthlyApplyMessage('');
   };
 
@@ -522,7 +516,6 @@ const Attorneys = ({ onNavigate }) => {
     });
 
     setAvailabilitySaved(false);
-    setAvailabilitySaveSuccess(null);
     setAvailabilityError('');
     const appliedDateCount = monthAssignments.filter((item) => item.futureTimes.length > 0).length;
     setMonthlyApplyMessage(`Monthly template applied to ${appliedDateCount} date(s). Click Save Schedule to sync it to clients.`);
@@ -546,24 +539,15 @@ const Attorneys = ({ onNavigate }) => {
       )
       .filter(Boolean);
 
-    const dateCount = Object.values(availabilityByDate).filter((times) => (times || []).length > 0).length;
-
     setAvailabilitySaving(true);
     setAvailabilityError('');
-    setAvailabilitySaveSuccess(null);
     try {
       await saveAttorneyAvailabilitySlots({ attorneyId: availabilityAttorney.id, slots: prepared });
       await loadAvailabilityForAttorney(availabilityAttorney.id);
       setAvailabilitySaved(true);
-      setAvailabilitySaveSuccess({
-        attorneyName: availabilityAttorney.name,
-        slotCount: prepared.length,
-        dateCount,
-      });
     } catch (error) {
       setAvailabilityError(error.message || 'Failed to save attorney availability.');
       setAvailabilitySaved(false);
-      setAvailabilitySaveSuccess(null);
     } finally {
       setAvailabilitySaving(false);
     }
@@ -880,7 +864,7 @@ const Attorneys = ({ onNavigate }) => {
             </div>
 
             {availabilityError ? <p className="availability-error">{availabilityError}</p> : null}
-            {availabilitySaved && !availabilitySaveSuccess ? (
+            {availabilitySaved ? (
               <p className="availability-success">
                 <CheckCircle size={16} /> Availability saved and synced to clients.
               </p>
@@ -1013,51 +997,6 @@ const Attorneys = ({ onNavigate }) => {
               </section>
             </div>
           </section>
-        </div>
-      ) : null}
-
-      {availabilitySaveSuccess ? (
-        <div
-          className="availability-save-modal-overlay"
-          role="presentation"
-          onClick={() => setAvailabilitySaveSuccess(null)}
-        >
-          <div
-            className="availability-save-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="availability-save-success-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="availability-save-modal__icon" aria-hidden="true">
-              <CheckCircle size={40} strokeWidth={2} />
-            </div>
-            <h3 id="availability-save-success-title">Schedule saved</h3>
-            <p className="availability-save-modal__lead">
-              <strong>{availabilitySaveSuccess.attorneyName}</strong>&apos;s availability is now live on the
-              client booking page.
-            </p>
-            <ul className="availability-save-modal__stats">
-              <li>
-                <strong>{availabilitySaveSuccess.slotCount}</strong> bookable time slot
-                {availabilitySaveSuccess.slotCount === 1 ? '' : 's'} saved
-              </li>
-              <li>
-                Across <strong>{availabilitySaveSuccess.dateCount}</strong> date
-                {availabilitySaveSuccess.dateCount === 1 ? '' : 's'}
-              </li>
-            </ul>
-            <p className="availability-save-modal__hint">
-              Clients can book these times immediately when they choose this attorney.
-            </p>
-            <button
-              type="button"
-              className="availability-save-modal__btn"
-              onClick={() => setAvailabilitySaveSuccess(null)}
-            >
-              Got it
-            </button>
-          </div>
         </div>
       ) : null}
     </div>

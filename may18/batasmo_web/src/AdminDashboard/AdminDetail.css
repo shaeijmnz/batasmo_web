@@ -1,0 +1,376 @@
+/* Shared layout primitives used by Admin "detail" pages (e.g. AdminRequests).
+ * These were referenced by AdminRequests.css via @import but the source file
+ * was missing on this branch. Styling here is intentionally conservative so
+ * pages render correctly until a designer revisits the page.
+ */
+
+.adm-detail-page {
+	display: flex;
+	flex-direction: column;
+	min-height: 100vh;
+	background: #f5f1eb;
+	color: #0b0f19;
+	font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.adm-detail-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 18px 28px;
+	background: #fff;
+	border-bottom: 1px solid #e5e7eb;
+	position: sticky;
+	top: 0;
+	z-index: 10;
+}
+
+.adm-detail-header__left {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	min-width: 0;
+}
+
+.adm-detail-back-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 36px;
+	height: 36px;
+	border-radius: 8px;
+	border: 1px solid #e5e7eb;
+	background: #fff;
+	color: #374151;
+	cursor: pointer;
+	transition: all 0.15s ease;
+}
+
+.adm-detail-back-btn:hover {
+	background: #f3f4f6;
+	border-color: #d1d5db;
+}
+
+.adm-detail-title {
+	font-size: 1.25rem;
+	font-weight: 700;
+	margin: 0;
+	color: #111827;
+}
+
+.adm-detail-count {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 28px;
+	height: 24px;
+	padding: 0 8px;
+	border-radius: 999px;
+	background: #152238;
+	color: #fff;
+	font-size: 0.75rem;
+	font-weight: 700;
+}
+
+.adm-detail-main {
+	flex: 1;
+	padding: 24px 28px 48px;
+	max-width: 1400px;
+	width: 100%;
+	margin: 0 auto;
+	box-sizing: border-box;
+}
+
+.adm-detail-card {
+	background: #fff;
+	border-radius: 12px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+	padding: 20px;
+	border: 1px solid #e5e7eb;
+}
+
+.adm-detail-search {
+	margin-bottom: 16px;
+}
+
+.adm-detail-input {
+	width: 100%;
+	padding: 10px 14px;
+	border: 1px solid #e5e7eb;
+	border-radius: 8px;
+	font-size: 0.9rem;
+	color: #1f2937;
+	background: #fff;
+	box-sizing: border-box;
+	transition: border-color 0.15s ease;
+}
+
+.adm-detail-input:focus {
+	outline: none;
+	border-color: #152238;
+	box-shadow: 0 0 0 3px rgba(21, 34, 56, 0.12);
+}
+
+.adm-detail-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.875rem;
+}
+
+.adm-detail-table thead th {
+	text-align: left;
+	padding: 10px 12px;
+	background: #f9fafb;
+	color: #6b7280;
+	font-weight: 600;
+	font-size: 0.75rem;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	border-bottom: 1px solid #e5e7eb;
+}
+
+.adm-detail-table tbody td {
+	padding: 12px;
+	border-bottom: 1px solid #f3f4f6;
+	color: #1f2937;
+	vertical-align: middle;
+}
+
+.adm-detail-table__row--clickable {
+	cursor: pointer;
+	transition: background 0.15s ease;
+}
+
+.adm-detail-table__row--clickable:hover {
+	background: #f9fafb;
+}
+
+.adm-detail-row-btn {
+	border: none;
+	border-radius: 6px;
+	padding: 6px 12px;
+	font-size: 0.8rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.adm-detail-modal-overlay {
+	position: fixed;
+	inset: 0;
+	background: rgba(15, 23, 42, 0.5);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 16px;
+	z-index: 100;
+}
+
+.adm-detail-modal {
+	background: #fff;
+	border-radius: 12px;
+	width: 100%;
+	max-width: 640px;
+	max-height: 90vh;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+	box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+}
+
+.adm-detail-modal__header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 16px 20px;
+	border-bottom: 1px solid #e5e7eb;
+	font-weight: 700;
+	color: #111827;
+}
+
+.adm-detail-modal__header h2 {
+	margin: 0;
+	font-size: 1.125rem;
+	font-weight: 700;
+	color: #111827;
+}
+
+.adm-detail-modal__close {
+	background: none;
+	border: none;
+	font-size: 1.5rem;
+	color: #6b7280;
+	cursor: pointer;
+	line-height: 1;
+	padding: 4px 8px;
+	border-radius: 6px;
+}
+
+.adm-detail-modal__close:hover {
+	background: #f3f4f6;
+	color: #111827;
+}
+
+.adm-detail-modal__content {
+	padding: 20px;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+
+.adm-detail-modal__row {
+	display: flex;
+	gap: 12px;
+	font-size: 0.9rem;
+	color: #374151;
+	align-items: flex-start;
+}
+
+.adm-detail-modal__row label {
+	flex: 0 0 140px;
+	color: #6b7280;
+	font-weight: 600;
+	font-size: 0.8rem;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+}
+
+.adm-detail-modal__row p {
+	margin: 0;
+	flex: 1;
+	min-width: 0;
+	word-break: break-word;
+	line-height: 1.5;
+}
+
+.adm-detail-modal__actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	justify-content: flex-end;
+	align-items: center;
+	padding: 16px 20px;
+	border-top: 1px solid #e5e7eb;
+	background: #f9fafb;
+	flex-shrink: 0;
+}
+
+.adm-detail-modal__btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 40px;
+	padding: 10px 20px;
+	border: none;
+	border-radius: 8px;
+	font-size: 0.875rem;
+	font-weight: 600;
+	font-family: inherit;
+	cursor: pointer;
+	transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+
+.adm-detail-modal__btn:disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+}
+
+.adm-detail-modal__btn--approve {
+	background: #152238;
+	color: #fff;
+}
+
+.adm-detail-modal__btn--approve:hover:not(:disabled) {
+	background: #1e2d45;
+}
+
+.adm-detail-modal__btn--pickup {
+	background: #2a3a55;
+	color: #fff;
+}
+
+.adm-detail-modal__btn--pickup:hover:not(:disabled) {
+	background: #1e2d45;
+}
+
+.adm-detail-modal__btn--dismiss {
+	background: #fff;
+	color: #374151;
+	border: 1px solid #d1d5db;
+}
+
+.adm-detail-modal__btn--dismiss:hover:not(:disabled) {
+	background: #f3f4f6;
+	border-color: #9ca3af;
+}
+
+.adm-detail-badge {
+	display: inline-block;
+	padding: 4px 12px;
+	border-radius: 999px;
+	font-size: 0.75rem;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+}
+
+.adm-detail-badge--pending {
+	background: rgba(21, 34, 56, 0.08);
+	color: #152238;
+}
+
+.adm-detail-badge--in-progress {
+	background: rgba(21, 34, 56, 0.12);
+	color: #1e2d45;
+}
+
+.adm-detail-badge--active {
+	background: rgba(21, 34, 56, 0.16);
+	color: #152238;
+}
+
+.adm-detail-badge--inactive {
+	background: rgba(107, 114, 128, 0.12);
+	color: #4b5563;
+}
+
+.adm-detail-badge--completed {
+	background: linear-gradient(135deg, #152238 0%, #1e2d45 100%);
+	color: #fff;
+}
+
+.adm-detail-modal__btn--picked-up {
+	background: #152238;
+	color: #fff;
+}
+
+.adm-detail-modal__btn--picked-up:hover:not(:disabled) {
+	background: #1e2d45;
+}
+
+@media (max-width: 640px) {
+	.adm-detail-header,
+	.adm-detail-main {
+		padding-left: 16px;
+		padding-right: 16px;
+	}
+
+	.adm-detail-modal__row {
+		flex-direction: column;
+		gap: 4px;
+	}
+
+	.adm-detail-modal__row label {
+		flex: none;
+	}
+
+	.adm-detail-modal__actions {
+		flex-direction: column-reverse;
+		align-items: stretch;
+	}
+
+	.adm-detail-modal__btn {
+		width: 100%;
+	}
+}

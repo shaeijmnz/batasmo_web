@@ -1,0 +1,132 @@
+.vs-page {
+  min-height: 100vh;
+  background: #f3f4f6;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Navbar */
+.vs-nav {
+  background: #1c1f2e;
+  box-shadow: 0 2px 10px rgba(0,0,0,.3);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.vs-nav__inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 24px;
+  height: 62px;
+  display: flex;
+  align-items: center;
+  gap: 40px;
+}
+.vs-nav__logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+  font-size: 1.2rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.vs-nav__links {
+  display: flex;
+  gap: 28px;
+  flex: 1;
+  justify-content: center;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.vs-nav__links a {
+  color: #d1d5db;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: color .2s;
+}
+.vs-nav__links a:hover { color: #fff; }
+
+/* Main */
+.vs-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+}
+
+/* Card */
+.vs-card {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 4px 32px rgba(0,0,0,.08);
+  padding: 56px 40px;
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+/* Green check icon */
+.vs-card__icon-wrap {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  background: #10b981;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 16px rgba(16,185,129,.3);
+}
+
+.vs-card__title {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #1a1a2e;
+  margin-bottom: 12px;
+}
+.vs-card__sub {
+  font-size: 0.92rem;
+  color: #6b7280;
+  line-height: 1.65;
+  margin-bottom: 32px;
+}
+
+/* Buttons */
+.vs-btn {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity .2s, transform .15s;
+}
+.vs-btn:hover { opacity: .88; transform: translateY(-1px); }
+.vs-btn--primary {
+  background: #1e3a8a;
+  color: #fff;
+  margin-bottom: 16px;
+}
+
+.vs-link {
+  background: none;
+  border: none;
+  color: #6b7280;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: color .2s;
+}
+.vs-link:hover { color: #1e3a8a; }
+
+@media (max-width: 600px) {
+  .vs-card { padding: 40px 20px; }
+  .vs-nav__links { display: none; }
+}
