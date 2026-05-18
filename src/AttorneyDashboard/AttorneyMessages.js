@@ -1,6 +1,8 @@
 import { Suspense, lazy, useState, useRef, useEffect, useMemo } from 'react';
 import './AttorneyMessages.css';
 import './AttorneyTheme.css';
+import ConsultationWaitingPopup from '../components/ConsultationWaitingPopup';
+import { attachConsultationChatPresence } from '../lib/consultationChatPresence';
 import {
   deleteAppointmentMessage,
   endConsultationSession,
@@ -124,6 +126,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
   const filePickerRef = useRef(null);
   const timerStartedAtByAppointmentRef = useRef({});
   const tenMinuteReminderSentByAppointmentRef = useRef({});
+  const [waitingPopup, setWaitingPopup] = useState(null);
 
   const mergeRealtimeMessage = (incoming) => {
     setMessages((previous) => {
@@ -421,6 +424,30 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
       window.clearInterval(intervalId);
     };
   }, [activeAppointmentId, isClosed]);
+
+  useEffect(() => {
+    if (!activeAppointmentId || !profile?.id || isClosed) {
+      setWaitingPopup(null);
+      return undefined;
+    }
+
+    const activeRow = appointments.find((item) => String(item.id) === String(activeAppointmentId));
+    const otherPartyName = activeRow?.name || 'Client';
+
+    const detachPresence = attachConsultationChatPresence({
+      appointmentId: activeAppointmentId,
+      role: 'attorney',
+      userId: profile.id,
+      displayName: profile.full_name || profile.name || profile.email || 'Attorney',
+      otherPartyName,
+      onWaitingPopup: (payload) => setWaitingPopup(payload),
+    });
+
+    return () => {
+      setWaitingPopup(null);
+      detachPresence();
+    };
+  }, [activeAppointmentId, appointments, profile?.id, profile?.full_name, profile?.name, profile?.email, isClosed]);
 
   useEffect(() => {
     if (!activeAppointmentId) return undefined;
@@ -1109,6 +1136,14 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
             </div>
           </div>
         </div>
+      ) : null}
+
+      {waitingPopup ? (
+        <ConsultationWaitingPopup
+          title={waitingPopup.title}
+          body={waitingPopup.body}
+          onClose={() => setWaitingPopup(null)}
+        />
       ) : null}
 
       {videoCall ? (

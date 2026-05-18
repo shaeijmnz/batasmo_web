@@ -1,6 +1,8 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import './ChatRoom.css';
 import './ClientTheme.css';
+import ConsultationWaitingPopup from '../components/ConsultationWaitingPopup';
+import { attachConsultationChatPresence } from '../lib/consultationChatPresence';
 import {
   deleteAppointmentMessage,
   fetchAppointmentMessages,
@@ -66,6 +68,7 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
   const [loadError, setLoadError] = useState('');
   const [signedUrlsByMessageId, setSignedUrlsByMessageId] = useState({});
   const [timeWarningPopup, setTimeWarningPopup] = useState(null);
+  const [waitingPopup, setWaitingPopup] = useState(null);
   const [videoCall, setVideoCall] = useState(null);
   const [videoCallLoading, setVideoCallLoading] = useState(false);
   const [videoCallError, setVideoCallError] = useState('');
@@ -268,6 +271,30 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
       unsubscribe();
     };
   }, [activeAppointmentId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!activeAppointmentId || !profile?.id || isClosed) {
+      setWaitingPopup(null);
+      return undefined;
+    }
+
+    const detachPresence = attachConsultationChatPresence({
+      appointmentId: activeAppointmentId,
+      role: 'client',
+      userId: profile.id,
+      displayName: profile.full_name || profile.email || 'Client',
+      otherPartyName: activeThread?.name || 'Attorney',
+      onWaitingPopup: (payload) => {
+        playTimeWarningCue();
+        setWaitingPopup(payload);
+      },
+    });
+
+    return () => {
+      setWaitingPopup(null);
+      detachPresence();
+    };
+  }, [activeAppointmentId, profile?.id, profile?.full_name, profile?.email, isClosed, activeThread?.name]);
 
   useEffect(() => {
     if (!profile?.id) return undefined;
@@ -817,6 +844,14 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
           )}
         </form>
       </div>
+
+      {waitingPopup ? (
+        <ConsultationWaitingPopup
+          title={waitingPopup.title}
+          body={waitingPopup.body}
+          onClose={() => setWaitingPopup(null)}
+        />
+      ) : null}
 
       {timeWarningPopup ? (
         <div className="cr-time-warning-overlay" onClick={() => setTimeWarningPopup(null)}>
