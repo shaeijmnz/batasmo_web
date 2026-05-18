@@ -71,6 +71,7 @@ const Attorneys = ({ onNavigate }) => {
   const [addSpecialty, setAddSpecialty] = useState('');
   const [addSubmitting, setAddSubmitting] = useState(false);
   const [addFormError, setAddFormError] = useState('');
+  const [addSuccessNotice, setAddSuccessNotice] = useState('');
   const navigate = (path) => {
     const pageMap = {
       '/': 'admin-home',
@@ -232,6 +233,7 @@ const Attorneys = ({ onNavigate }) => {
 
   const openAddAttorneyModal = () => {
     setAddFormError('');
+    setAddSuccessNotice('');
     setAddModalOpen(true);
   };
 
@@ -260,7 +262,7 @@ const Attorneys = ({ onNavigate }) => {
 
     try {
       setAddSubmitting(true);
-      await adminCreateWalkInAttorney({
+      const result = await adminCreateWalkInAttorney({
         email,
         password,
         fullName,
@@ -271,6 +273,15 @@ const Attorneys = ({ onNavigate }) => {
       setAddFullName('');
       setAddSpecialty('');
       setAddModalOpen(false);
+      if (result?.welcomeEmailSent) {
+        setAddSuccessNotice(`Welcome email sent to ${email} with login credentials.`);
+      } else {
+        setAddSuccessNotice(
+          `Account created for ${email}. Welcome email was not sent${
+            result?.welcomeEmailError ? ` (${result.welcomeEmailError})` : ' — configure email on the backend (Resend or Gmail SMTP).'
+          }`,
+        );
+      }
       setLoading(true);
       await loadAttorneys();
     } catch (error) {
@@ -334,6 +345,10 @@ const Attorneys = ({ onNavigate }) => {
               <Plus size={18} /> Add New Attorney
             </button>
           </div>
+
+          {addSuccessNotice ? (
+            <p className="attorneys-success-message" role="status">{addSuccessNotice}</p>
+          ) : null}
 
           {/* Stats Grid */}
           <div className="stats-grid">

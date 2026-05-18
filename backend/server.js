@@ -4,6 +4,7 @@ import crypto from 'crypto'
 import dotenv from 'dotenv'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import jwt from 'jsonwebtoken'
+import { sendAttorneyWelcomeEmail } from './lib/welcomeEmail.js'
 
 dotenv.config()
 
@@ -985,7 +986,13 @@ const supabaseAdminCreateWalkInAttorney = async ({ email, password, fullName, sp
     )
   }
 
-  return { userId, email: normalizedEmail, fullName: displayName, specialties }
+  return {
+    userId,
+    email: normalizedEmail,
+    fullName: displayName,
+    specialties,
+    password: safePassword,
+  }
 }
 
 /**
@@ -2043,7 +2050,26 @@ app.post('/admin/attorneys/walk-in', async (req, res) => {
       fullName,
       specialty,
     })
-    return res.status(201).json(result)
+
+    const loginBase = String(process.env.APP_LOGIN_URL || '').trim()
+    const loginUrl =
+      loginBase ||
+      `${ALLOWED_ORIGIN_BASE}/login`
+
+    const emailResult = await sendAttorneyWelcomeEmail({
+      email: result.email,
+      fullName: result.fullName,
+      password: result.password,
+      loginUrl,
+    })
+
+    const { password: _omitPassword, ...safeResult } = result
+    return res.status(201).json({
+      ...safeResult,
+      welcomeEmailSent: Boolean(emailResult.sent),
+      welcomeEmailSkipped: Boolean(emailResult.skipped),
+      welcomeEmailError: emailResult.sent ? undefined : emailResult.error,
+    })
   } catch (error) {
     const msg = error?.message || 'Unable to create attorney account.'
     const lower = msg.toLowerCase()

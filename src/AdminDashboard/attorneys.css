@@ -65,6 +65,17 @@
 /* Attorney Card Styles */
 .attorneys-container { background: white; border-radius: 12px; border: 1px solid var(--border); overflow: visible; }
 .list-header { padding: 20px; border-bottom: 1px solid var(--border); }
+.attorneys-success-message {
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: #ecfdf5;
+  border: 1px solid #86efac;
+  color: #166534;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
 .attorneys-info-message {
   padding: 16px 20px;
   color: var(--text-secondary);
