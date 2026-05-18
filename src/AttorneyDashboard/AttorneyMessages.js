@@ -121,6 +121,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
   const [videoCallError, setVideoCallError] = useState('');
   const videoCallRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const otherPartyNameRef = useRef('Client');
   const imagePickerRef = useRef(null);
   const filePickerRef = useRef(null);
   const timerStartedAtByAppointmentRef = useRef({});
@@ -425,20 +426,22 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
   }, [activeAppointmentId, isClosed]);
 
   useEffect(() => {
+    const activeRow = appointments.find((item) => String(item.id) === String(activeAppointmentId));
+    otherPartyNameRef.current = activeRow?.name || 'Client';
+  }, [activeAppointmentId, appointments]);
+
+  useEffect(() => {
     if (!activeAppointmentId || !profile?.id || isClosed) {
       setWaitingPopup(null);
       return undefined;
     }
-
-    const activeRow = appointments.find((item) => String(item.id) === String(activeAppointmentId));
-    const otherPartyName = activeRow?.name || 'Client';
 
     const detachPresence = attachConsultationChatPresence({
       appointmentId: activeAppointmentId,
       role: 'attorney',
       userId: profile.id,
       displayName: profile.full_name || profile.name || profile.email || 'Attorney',
-      otherPartyName,
+      otherPartyName: otherPartyNameRef.current,
       onWaitingPopup: (payload) => setWaitingPopup(payload),
     });
 
@@ -446,7 +449,14 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
       setWaitingPopup(null);
       detachPresence();
     };
-  }, [activeAppointmentId, appointments, profile?.id, profile?.full_name, profile?.name, profile?.email, isClosed]);
+  }, [activeAppointmentId, profile?.id, isClosed]);
+
+  const handleWaitingGoToChatroom = () => {
+    setWaitingPopup(null);
+    window.setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 50);
+  };
 
   useEffect(() => {
     if (!activeAppointmentId) return undefined;
@@ -1098,6 +1108,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
           title={waitingPopup.title}
           body={waitingPopup.body}
           onClose={() => setWaitingPopup(null)}
+          onGoToChatroom={handleWaitingGoToChatroom}
         />
       ) : null}
 

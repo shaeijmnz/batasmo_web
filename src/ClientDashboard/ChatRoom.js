@@ -75,6 +75,7 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
   const sessionWasActiveRef = useRef(false);
   const lastAppointmentRef = useRef('');
   const messagesEndRef = useRef(null);
+  const otherPartyNameRef = useRef('Attorney');
   const imagePickerRef = useRef(null);
   const filePickerRef = useRef(null);
   const shownTimeWarningIdsRef = useRef(new Set());
@@ -271,6 +272,10 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
   }, [activeAppointmentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    otherPartyNameRef.current = activeThread?.name || 'Attorney';
+  }, [activeThread?.name]);
+
+  useEffect(() => {
     if (!activeAppointmentId || !profile?.id || isClosed) {
       setWaitingPopup(null);
       return undefined;
@@ -281,18 +286,22 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
       role: 'client',
       userId: profile.id,
       displayName: profile.full_name || profile.email || 'Client',
-      otherPartyName: activeThread?.name || 'Attorney',
-      onWaitingPopup: (payload) => {
-        playTimeWarningCue();
-        setWaitingPopup(payload);
-      },
+      otherPartyName: otherPartyNameRef.current,
+      onWaitingPopup: (payload) => setWaitingPopup(payload),
     });
 
     return () => {
       setWaitingPopup(null);
       detachPresence();
     };
-  }, [activeAppointmentId, profile?.id, profile?.full_name, profile?.email, isClosed, activeThread?.name]);
+  }, [activeAppointmentId, profile?.id, isClosed]);
+
+  const handleWaitingGoToChatroom = () => {
+    setWaitingPopup(null);
+    window.setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 50);
+  };
 
   useEffect(() => {
     if (!profile?.id) return undefined;
@@ -804,6 +813,7 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
           title={waitingPopup.title}
           body={waitingPopup.body}
           onClose={() => setWaitingPopup(null)}
+          onGoToChatroom={handleWaitingGoToChatroom}
         />
       ) : null}
 
