@@ -16,10 +16,28 @@ const getConsultationStatus = ({ appointmentStatus, isPaid, room }) => {
   return null;
 };
 
-const formatDateLabel = (value) => {
-  const parsed = value ? new Date(value) : null;
-  if (!parsed || Number.isNaN(parsed.getTime())) return 'TBD';
-  return parsed.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+const formatScheduleForUi = (scheduledAt, slotDate, slotTime) => {
+  const parsed = scheduledAt ? new Date(scheduledAt) : null;
+  if (parsed && !Number.isNaN(parsed.getTime())) {
+    return {
+      date: parsed.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }),
+      time: parsed.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', hour12: true }),
+    };
+  }
+
+  if (slotDate) {
+    const dateOnly = new Date(`${slotDate}T00:00:00`);
+    const dateLabel = Number.isNaN(dateOnly.getTime())
+      ? String(slotDate)
+      : dateOnly.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+    const timeLabel = String(slotTime || '').trim();
+    return {
+      date: dateLabel,
+      time: timeLabel || 'TBD',
+    };
+  }
+
+  return { date: 'TBD', time: 'TBD' };
 };
 
 const formatDurationLabel = (minutes) => `${Number(minutes || 60)} min`;
@@ -62,7 +80,7 @@ const Consultations = ({ onNavigate }) => {
         const [appointmentsRes, feedbackRes, transactionsRes, roomsRes] = await Promise.all([
           supabase
             .from('appointments')
-            .select('id, title, notes, attorney_consultation_summary, scheduled_at, duration_minutes, status, client:client_id(full_name), attorney:attorney_id(full_name)')
+            .select('id, title, notes, attorney_consultation_summary, scheduled_at, slot_date, slot_time, duration_minutes, status, client:client_id(full_name), attorney:attorney_id(full_name)')
             .order('scheduled_at', { ascending: false }),
           supabase
             .from('consultation_feedback')
@@ -112,6 +130,7 @@ const Consultations = ({ onNavigate }) => {
             });
             if (!status) return null;
             const feedback = feedbackByAppointment.get(row.id);
+            const { date, time } = formatScheduleForUi(row.scheduled_at, row.slot_date, row.slot_time);
             return {
               id: row.id,
               title: row.title || 'Consultation',
@@ -120,7 +139,8 @@ const Consultations = ({ onNavigate }) => {
               status,
               client: row.client?.full_name || 'Client',
               attorney: row.attorney?.full_name || 'Attorney',
-              date: formatDateLabel(row.scheduled_at),
+              date,
+              time,
               duration: formatDurationLabel(row.duration_minutes),
               rating: feedback?.rating || 0,
               notes: feedback?.comment || row.notes || '',
@@ -275,14 +295,15 @@ const Consultations = ({ onNavigate }) => {
                     </div>
                     <div className="client-info">
                       <p>Client: <strong>{s.client}</strong></p>
-                      <p>Date: {s.date}</p>
-                      {s.rating && (
+                      <p>Date: <strong>{s.date}</strong></p>
+                      <p>Time: <strong>{s.time}</strong></p>
+                      {s.rating > 0 ? (
                         <div className="rating">
                           Rating: {[...Array(5)].map((_, i) => (
                             <Star key={i} size={14} fill={i < s.rating ? "#eab308" : "none"} color={i < s.rating ? "#eab308" : "#cbd5e1"} />
                           ))}
                         </div>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                   <div className="session-right">
