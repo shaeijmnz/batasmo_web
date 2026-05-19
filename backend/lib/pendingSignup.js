@@ -334,33 +334,10 @@ export async function startPendingClientSignup({
   await checkSendRateLimit({ supabaseUrl, serviceKey, pendingId: pending.id })
 
   let otpSent = false
-  let emailSendError = null
 
   if (channel === 'email') {
-    const emailResult = await sendEmailOtpForPending({ pending, otp })
-    otpSent = Boolean(emailResult?.sent)
-    if (!otpSent) {
-      emailSendError = emailResult?.error || 'Failed to send verification email.'
-      console.warn('[signup] OTP email not sent:', emailSendError)
-    } else {
-      try {
-        const patchRes = await fetchWithTimeout(
-          `${supabaseUrl}/rest/v1/pending_client_signups?id=eq.${encodeURIComponent(pending.id)}`,
-          {
-            method: 'PATCH',
-            headers: restHeaders(serviceKey),
-            body: JSON.stringify({
-              otp_sent_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            }),
-          },
-          10_000,
-        )
-        if (!patchRes.ok) console.warn('[signup] could not update otp_sent_at')
-      } catch (error) {
-        console.warn('[signup] otp_sent_at patch failed:', error?.message || error)
-      }
-    }
+    // Email is sent from the OTP screen (signup-resend-otp) so signup-start stays fast.
+    otpSent = false
   } else {
     if (!iprogApiKey) throw new Error('SMS verification is not configured (IPROG_API_KEY).')
     if (!phone) throw new Error('A valid Philippine mobile number is required for SMS OTP.')
@@ -377,14 +354,11 @@ export async function startPendingClientSignup({
     )
   }
 
-  void logSend({ supabaseUrl, serviceKey, pendingId: pending.id }).catch(() => {})
-
   return {
     pendingId: pending.id,
     email,
     preferredOtpChannel: channel,
     otpSent,
-    emailSendError: emailSendError || undefined,
   }
 }
 
