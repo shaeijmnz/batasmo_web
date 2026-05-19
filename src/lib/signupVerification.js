@@ -40,15 +40,6 @@ export async function signOutIfSignupIncomplete(user) {
   if (!user || isSignupVerificationComplete(user)) {
     return false
   }
-  try {
-    await Promise.race([
-      supabase.auth.signOut(),
-      new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('signOut timeout')), 8000)
-      }),
-    ])
-  } catch {
-    // Do not block login/OTP redirect if sign-out is slow.
-  }
+  void supabase.auth.signOut().catch(() => {})
   return true
 }

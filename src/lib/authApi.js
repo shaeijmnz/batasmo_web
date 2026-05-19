@@ -1,9 +1,5 @@
 import { supabase } from './supabaseClient'
-import {
-  isSignupVerificationComplete,
-  markSignupOtpCompleted,
-  signOutIfSignupIncomplete,
-} from './signupVerification'
+import { markSignupOtpCompleted } from './signupVerification'
 import {
   isGmailEmail,
   isPhilippineMobile,
@@ -68,26 +64,9 @@ const normalizeRole = (role) => {
   return 'Client'
 }
 
-const withAuthTimeout = async (promise, ms = 12_000) => {
-  let timerId
-  try {
-    return await Promise.race([
-      promise,
-      new Promise((_, reject) => {
-        timerId = setTimeout(() => reject(new Error('AUTH_TIMEOUT')), ms)
-      }),
-    ])
-  } finally {
-    if (timerId) clearTimeout(timerId)
-  }
-}
-
 export async function checkEmailLockout(email) {
   try {
-    const { data } = await withAuthTimeout(
-      supabase.rpc('check_login_lockout', { user_email: email }),
-      8000,
-    )
+    const { data } = await supabase.rpc('check_login_lockout', { user_email: email })
     if (typeof data === 'boolean') {
       return data ? 600 : 0
     }
@@ -527,13 +506,10 @@ export async function signInWithEmail({ email, password }) {
     throw new Error(`LOCKOUT:${lockoutBefore}`)
   }
 
-  const { data, error } = await withAuthTimeout(
-    supabase.auth.signInWithPassword({
-      email: normalizedEmail,
-      password,
-    }),
-    20_000,
-  )
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: normalizedEmail,
+    password,
+  })
 
   if (error) {
     const normalized = String(error.message || '').toLowerCase()
@@ -560,29 +536,16 @@ export async function signInWithEmail({ email, password }) {
   ).catch(() => {})
 
   if (data?.user) {
-    if (!isSignupVerificationComplete(data.user)) {
-      await signOutIfSignupIncomplete(data.user)
-      const err = new Error('SIGNUP_OTP_REQUIRED')
-      err.code = 'SIGNUP_OTP_REQUIRED'
-      err.email = normalizedEmail
-      throw err
-    }
-
     const meta = data.user.user_metadata || {}
     let dbRole = normalizeRole(meta.role || 'Client')
     let dbName = meta.full_name || normalizedEmail
 
     // Prefer `profiles.role` so Admin (and other roles) stay correct even if auth metadata is stale.
-    let profileRow = null
-    try {
-      const result = await withAuthTimeout(
-        supabase.from('profiles').select('role, full_name').eq('id', data.user.id).maybeSingle(),
-        10_000,
-      )
-      profileRow = result?.data || null
-    } catch {
-      profileRow = null
-    }
+    const { data: profileRow } = await supabase
+      .from('profiles')
+      .select('role, full_name')
+      .eq('id', data.user.id)
+      .maybeSingle()
 
     if (profileRow?.role) {
       dbRole = normalizeRole(profileRow.role)

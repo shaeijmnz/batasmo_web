@@ -10,7 +10,6 @@ import {
   signOutUser,
   subscribeToAppConfigChanges,
 } from './lib/userApi';
-import { isSignupVerificationComplete, signOutIfSignupIncomplete } from './lib/signupVerification';
 
 /* ── LandingPage ── */
 import LandingPage from './LandingPage/LandingPage';
@@ -386,23 +385,6 @@ function App() {
         if (!session?.user) {
           clearTransientAuthState({ includeRecovery: true });
           setCurrentProfile(null);
-          return;
-        }
-
-        if (!isSignupVerificationComplete(session.user)) {
-          const pendingEmail =
-            localStorage.getItem('batasmo_pending_otp_email') || session.user.email || '';
-          if (pendingEmail) {
-            localStorage.setItem('batasmo_pending_otp_email', pendingEmail);
-          }
-          await signOutIfSignupIncomplete(session.user);
-          setCurrentProfile(null);
-          setSignupContext((prev) => ({
-            ...prev,
-            email: pendingEmail,
-            role: normalizeRole(session.user.user_metadata?.role || 'Client'),
-          }));
-          setPage('otp');
           return;
         }
 
