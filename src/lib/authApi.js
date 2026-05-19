@@ -189,13 +189,34 @@ export async function sendSignupVerificationEmail({ email, pendingId }) {
   if (normalizedEmail) body.email = normalizedEmail
   if (pendingId) body.pendingId = String(pendingId).trim()
 
-  const response = await fetch(`${base}/auth/signup-resend-otp`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 90_000)
+
+  let response
+  try {
+    response = await fetch(`${base}/auth/signup-resend-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    })
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error('Sending the code took too long. Wait a moment, then tap Resend.')
+    }
+    throw error
+  } finally {
+    clearTimeout(timeoutId)
+  }
+
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) {
+    const raw = String(payload?.error || '')
+    if (/connection timeout/i.test(raw)) {
+      throw new Error(
+        'Mail server was slow to connect. Tap Resend — we increased the wait time on the server.',
+      )
+    }
     throw new Error(payload?.error || 'Failed to send verification email.')
   }
   return payload

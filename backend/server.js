@@ -2339,7 +2339,9 @@ const signupErrorStatus = (msg) => {
     lower.includes('not found') ||
     lower.includes('invalid') ||
     lower.includes('expired') ||
-    lower.includes('mismatch')
+    lower.includes('mismatch') ||
+    lower.includes('timeout') ||
+    lower.includes('connection')
   ) {
     return 400
   }

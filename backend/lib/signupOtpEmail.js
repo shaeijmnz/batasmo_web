@@ -115,21 +115,36 @@ const buildSignupOtpText = ({ otp, fullName }) =>
     'If you did not create an account, you can ignore this email.',
   ].join('\n')
 
+const RESEND_FETCH_MS = 25_000
+
 const sendViaResend = async ({ to, subject, html, text }) => {
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: WELCOME_EMAIL_FROM,
-      to: [to],
-      subject,
-      html,
-      text,
-    }),
-  })
+  const controller = new AbortController()
+  const tid = setTimeout(() => controller.abort(), RESEND_FETCH_MS)
+  let response
+  try {
+    response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: WELCOME_EMAIL_FROM,
+        to: [to],
+        subject,
+        html,
+        text,
+      }),
+    })
+  } catch (e) {
+    if (e?.name === 'AbortError') {
+      throw new Error('Resend request timed out. Please tap Resend.')
+    }
+    throw e
+  } finally {
+    clearTimeout(tid)
+  }
 
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) {
@@ -139,13 +154,16 @@ const sendViaResend = async ({ to, subject, html, text }) => {
   return payload
 }
 
-const SMTP_SEND_MS = 12_000
+/** Gmail from Render can be slow; short timeouts surface as "Connection timeout" in the UI. */
+const SMTP_CONNECTION_MS = Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 45_000)
+const SMTP_GREETING_MS = Number(process.env.SMTP_GREETING_TIMEOUT_MS || 30_000)
+const SMTP_SOCKET_MS = Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 55_000)
 
-const withSendTimeout = async (promise, ms = SMTP_SEND_MS) => {
+const withSendTimeout = async (promise, ms) => {
   let timeoutId
   const timeout = new Promise((_, reject) => {
     timeoutId = setTimeout(
-      () => reject(new Error('Email send timed out. Tap Resend on the next screen.')),
+      () => reject(new Error('Email send timed out. Tap Resend or check spam in a minute.')),
       ms,
     )
   })
@@ -162,9 +180,9 @@ const sendViaSmtp = async ({ to, subject, html, text }) => {
     host: SMTP_HOST,
     port: SMTP_PORT,
     secure: SMTP_PORT === 465,
-    connectionTimeout: 10_000,
-    greetingTimeout: 10_000,
-    socketTimeout: SMTP_SEND_MS,
+    connectionTimeout: SMTP_CONNECTION_MS,
+    greetingTimeout: SMTP_GREETING_MS,
+    socketTimeout: SMTP_SOCKET_MS,
     auth: {
       user: SMTP_USER,
       pass: SMTP_PASS,
@@ -216,11 +234,24 @@ export async function sendSignupOtpEmail({ email, otp, fullName }) {
     }
   }
 
+  const smtpCapMs = SMTP_SOCKET_MS + 5_000
+
   try {
     if (smtpReady) {
-      await withSendTimeout(sendViaSmtp({ to, subject, html, text }))
-    } else if (RESEND_API_KEY) {
-      await withSendTimeout(sendViaResend({ to, subject, html, text }))
+      try {
+        await withSendTimeout(sendViaSmtp({ to, subject, html, text }), smtpCapMs)
+        return { sent: true }
+      } catch (smtpError) {
+        console.warn('[signup-otp-email] SMTP failed:', smtpError?.message || smtpError)
+        if (RESEND_API_KEY) {
+          await withSendTimeout(sendViaResend({ to, subject, html, text }), RESEND_FETCH_MS + 5_000)
+          return { sent: true }
+        }
+        throw smtpError
+      }
+    }
+    if (RESEND_API_KEY) {
+      await withSendTimeout(sendViaResend({ to, subject, html, text }), RESEND_FETCH_MS + 5_000)
     } else {
       return { sent: false, skipped: true, error: 'Verification email is not configured on the server.' }
     }
