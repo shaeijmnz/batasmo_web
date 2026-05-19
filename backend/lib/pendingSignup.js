@@ -333,7 +333,12 @@ export async function startPendingClientSignup({
 
   await logSend({ supabaseUrl, serviceKey, pendingId: pending.id })
 
-  return { pendingId: pending.id, email, preferredOtpChannel: channel }
+  return {
+    pendingId: pending.id,
+    email,
+    preferredOtpChannel: channel,
+    otpSent: channel === 'email' || channel === 'sms',
+  }
 }
 
 export async function resendPendingSignupOtp({

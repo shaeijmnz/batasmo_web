@@ -68,6 +68,23 @@ const buildSignupOtpText = ({ otp, fullName }) =>
     'This code expires in 10 minutes.',
   ].join('\n')
 
+const formatResendError = (payload, status) => {
+  const raw = String(payload?.message || payload?.error || `Resend error (${status})`)
+  const lower = raw.toLowerCase()
+  if (
+    lower.includes('only send') ||
+    lower.includes('verify a domain') ||
+    lower.includes('testing emails') ||
+    lower.includes('onboarding@resend.dev')
+  ) {
+    return (
+      'Email could not be delivered to this address. On Render, configure Gmail SMTP (SMTP_HOST, SMTP_USER, SMTP_PASS) ' +
+      'or verify your domain in Resend — the test sender only delivers to one inbox.'
+    )
+  }
+  return raw
+}
+
 const sendViaResend = async ({ to, subject, html, text }) => {
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -79,7 +96,7 @@ const sendViaResend = async ({ to, subject, html, text }) => {
   })
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) {
-    throw new Error(String(payload?.message || payload?.error || `Resend error (${response.status})`))
+    throw new Error(formatResendError(payload, response.status))
   }
 }
 
@@ -110,10 +127,15 @@ export async function sendSignupOtpEmail({ email, otp, fullName }) {
   const smtpReady = Boolean(SMTP_HOST && SMTP_USER && SMTP_PASS && WELCOME_EMAIL_FROM)
 
   try {
-    if (smtpReady) await sendViaSmtp({ to, subject, html, text })
-    else if (RESEND_API_KEY) await sendViaResend({ to, subject, html, text })
-    else return { sent: false, skipped: true, error: 'Email not configured on server.' }
-    return { sent: true }
+    // Prefer SMTP — delivers to any Gmail. Resend test sender only reaches the Resend account inbox.
+    if (smtpReady) {
+      await sendViaSmtp({ to, subject, html, text })
+    } else if (RESEND_API_KEY) {
+      await sendViaResend({ to, subject, html, text })
+    } else {
+      return { sent: false, skipped: true, error: 'Email not configured on server.' }
+    }
+    return { sent: true, sentTo: to }
   } catch (error) {
     return { sent: false, error: error?.message || 'Failed to send verification email.' }
   }

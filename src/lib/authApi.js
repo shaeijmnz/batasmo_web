@@ -21,6 +21,7 @@ export const PENDING_SIGNUP_ID_KEY = 'batasmo_pending_signup_id'
 export const PENDING_SMS_PHONE_KEY = 'batasmo_pending_sms_phone'
 export const OTP_RESUME_LOGIN_KEY = 'batasmo_otp_resume_login'
 export const OTP_RESUME_SIGNUP_KEY = 'batasmo_otp_resume_signup'
+export const SIGNUP_OTP_SENT_KEY = 'batasmo_signup_otp_sent'
 
 const getBackendApiBase = () =>
   String(
@@ -136,6 +137,7 @@ export async function signUpWithEmail({
     pendingId: payload?.pendingId,
     email: payload?.email || normalizedEmail,
     preferredOtpChannel: payload?.preferredOtpChannel || otpChannel,
+    otpSent: payload?.otpSent !== false,
   }
 }
 

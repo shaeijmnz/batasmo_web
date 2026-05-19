@@ -7,6 +7,7 @@ import {
   PENDING_SMS_PHONE_KEY,
   OTP_RESUME_LOGIN_KEY,
   OTP_RESUME_SIGNUP_KEY,
+  SIGNUP_OTP_SENT_KEY,
   completePendingSignup,
   resendSignUpOtp,
   sendSignupVerificationEmail,
@@ -67,9 +68,20 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
   const smsAutoTriedRef = useRef(false);
   const emailAutoTriedRef = useRef(false);
 
-  const pendingEmail = String(email || localStorage.getItem('batasmo_pending_otp_email') || '').trim();
+  const routeEmail = String(email || '').trim().toLowerCase();
+  const storedEmail = String(localStorage.getItem('batasmo_pending_otp_email') || '')
+    .trim()
+    .toLowerCase();
+  const pendingEmail = routeEmail || storedEmail;
   const pendingRole = String(role || localStorage.getItem('batasmo_pending_otp_role') || 'Client');
   const pendingSignupId = String(localStorage.getItem(PENDING_SIGNUP_ID_KEY) || '').trim();
+
+  useEffect(() => {
+    if (!routeEmail) return;
+    localStorage.setItem('batasmo_pending_otp_email', routeEmail);
+    emailAutoTriedRef.current = false;
+    smsAutoTriedRef.current = false;
+  }, [routeEmail]);
 
   const maskedEmail = pendingEmail
     ? pendingEmail.replace(/^(.{4}).*(@.*)$/, '$1***$2')
@@ -167,9 +179,21 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
   useEffect(() => {
     if (delivery !== 'email' || !pendingEmail || emailAutoTriedRef.current) return;
     emailAutoTriedRef.current = true;
+
+    const justSentFor = String(localStorage.getItem(SIGNUP_OTP_SENT_KEY) || '')
+      .trim()
+      .toLowerCase();
+    if (justSentFor && justSentFor === pendingEmail) {
+      setEmailInitDone(true);
+      return;
+    }
+
     setErrorText('');
     setEmailSending(true);
     sendEmailOtp()
+      .then(() => {
+        localStorage.setItem(SIGNUP_OTP_SENT_KEY, pendingEmail);
+      })
       .catch((err) => {
         setErrorText(
           getErrorMessage(err, 'Could not send verification email. Tap Resend or check spam.'),
@@ -234,7 +258,10 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
         email: pendingEmail,
         pendingId: pendingSignupId || undefined,
       })
-        .then(done)
+        .then(() => {
+          localStorage.setItem(SIGNUP_OTP_SENT_KEY, pendingEmail);
+          done();
+        })
         .catch((error) => {
           setErrorText(getErrorMessage(error, 'Failed to resend OTP.'));
         })
@@ -314,6 +341,7 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
       localStorage.removeItem(PENDING_SIGNUP_ID_KEY);
       localStorage.removeItem(PENDING_SIGNUP_USER_ID_KEY);
       localStorage.removeItem(PENDING_SMS_PHONE_KEY);
+      localStorage.removeItem(SIGNUP_OTP_SENT_KEY);
       clearOtpResumeSecrets();
 
       try {
@@ -396,8 +424,22 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
           <p className="otp-card__sub">
             {delivery === 'email' ? (
               <>
-                Enter the 6-digit code sent to your email address<br />
+                Enter the 6-digit code sent to your Gmail address<br />
                 <span className="otp-card__email">{maskedEmail}</span>
+                <br />
+                <button
+                  type="button"
+                  className="otp-resend-btn"
+                  style={{ marginTop: 8 }}
+                  onClick={() => {
+                    localStorage.removeItem('batasmo_pending_otp_email');
+                    localStorage.removeItem(PENDING_SIGNUP_ID_KEY);
+                    localStorage.removeItem(SIGNUP_OTP_SENT_KEY);
+                    onNavigate('signup');
+                  }}
+                >
+                  Wrong email? Start over
+                </button>
               </>
             ) : (
               <>

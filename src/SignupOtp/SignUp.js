@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import './SignUp.css';
 import {
   OTP_RESUME_SIGNUP_KEY,
@@ -6,6 +6,7 @@ import {
   PENDING_SIGNUP_ID_KEY,
   PENDING_SIGNUP_USER_ID_KEY,
   PENDING_SMS_PHONE_KEY,
+  SIGNUP_OTP_SENT_KEY,
   signUpWithEmail,
 } from '../lib/authApi';
 import {
@@ -69,8 +70,27 @@ const getErrorMessage = (error, fallback) => {
   return fallback;
 };
 
+const clearStaleSignupPendingKeys = () => {
+  localStorage.removeItem('batasmo_pending_otp_email');
+  localStorage.removeItem('batasmo_pending_otp_role');
+  localStorage.removeItem(PENDING_OTP_CHANNEL_KEY);
+  localStorage.removeItem(PENDING_SIGNUP_ID_KEY);
+  localStorage.removeItem(PENDING_SIGNUP_USER_ID_KEY);
+  localStorage.removeItem(PENDING_SMS_PHONE_KEY);
+  localStorage.removeItem(SIGNUP_OTP_SENT_KEY);
+  try {
+    sessionStorage.removeItem(OTP_RESUME_SIGNUP_KEY);
+  } catch {
+    /* ignore */
+  }
+};
+
 function SignUp({ onNavigate, onEmailChange }) {
   const [otpDelivery, setOtpDelivery] = useState('email');
+
+  useEffect(() => {
+    clearStaleSignupPendingKeys();
+  }, []);
   const [form, setForm] = useState({
     fullName: '',
     sex: 'male',
@@ -208,6 +228,7 @@ function SignUp({ onNavigate, onEmailChange }) {
         preferredOtpChannel: otpDelivery,
       });
 
+      clearStaleSignupPendingKeys();
       localStorage.setItem('batasmo_pending_otp_email', normalizedEmail);
       localStorage.setItem('batasmo_pending_otp_role', 'Client');
       localStorage.setItem(PENDING_OTP_CHANNEL_KEY, otpDelivery);
@@ -215,7 +236,9 @@ function SignUp({ onNavigate, onEmailChange }) {
       if (result?.pendingId) {
         localStorage.setItem(PENDING_SIGNUP_ID_KEY, String(result.pendingId));
       }
-      localStorage.removeItem(PENDING_SIGNUP_USER_ID_KEY);
+      if (otpDelivery === 'email' && result?.otpSent !== false) {
+        localStorage.setItem(SIGNUP_OTP_SENT_KEY, normalizedEmail);
+      }
       try {
         sessionStorage.setItem(
           OTP_RESUME_SIGNUP_KEY,
