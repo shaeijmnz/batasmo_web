@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import './Login.css';
 import { OTP_RESUME_LOGIN_KEY, PENDING_OTP_CHANNEL_KEY, signInWithEmail } from '../lib/authApi';
+import { getSupabaseConfigError } from '../lib/supabaseClient';
 import { normalizeRole, pageFromRole } from '../lib/userApi';
 import {
   formatLockoutMessage,
@@ -43,6 +44,13 @@ function Login({ onNavigate, onAuthSuccess }) {
   const [errorText, setErrorText] = useState('');
   const [lockoutSeconds, setLockoutSeconds] = useState(0);
   const [lockedEmail, setLockedEmail] = useState('');
+
+  useEffect(() => {
+    const configError = getSupabaseConfigError();
+    if (configError) {
+      setErrorText(configError);
+    }
+  }, []);
 
   useEffect(() => {
     if (lockoutSeconds <= 0) return undefined;
