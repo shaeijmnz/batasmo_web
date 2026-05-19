@@ -93,7 +93,10 @@ function SecretaryConsole({ profile, onNavigate, onSignOut, initialPage = 'Dashb
   const [notifications, setNotifications] = useState([]);
   const [notifOpen, setNotifOpen] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
+  const [clientsPanelOpen, setClientsPanelOpen] = useState(false);
+  const [clientSearchTerm, setClientSearchTerm] = useState('');
   const [addClientOpen, setAddClientOpen] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState('');
   const [addEmail, setAddEmail] = useState('');
   const [addFullName, setAddFullName] = useState('');
   const [addFormError, setAddFormError] = useState('');
@@ -198,6 +201,49 @@ function SecretaryConsole({ profile, onNavigate, onSignOut, initialPage = 'Dashb
     }
   };
 
+  const filteredClients = useMemo(() => {
+    const term = clientSearchTerm.trim().toLowerCase();
+    if (!term) return clients;
+    return clients.filter((client) =>
+      [client.name, client.email, client.phone].some((value) =>
+        String(value || '').toLowerCase().includes(term),
+      ),
+    );
+  }, [clients, clientSearchTerm]);
+
+  const closeAllModals = () => {
+    setSummaryOpen(false);
+    setClientsPanelOpen(false);
+    setAddClientOpen(false);
+    setCreatedCredentials(null);
+    setAddFormError('');
+    setCopyFeedback('');
+  };
+
+  const openClientsPanel = () => {
+    setClientSearchTerm('');
+    setSummaryOpen(false);
+    setClientsPanelOpen(true);
+  };
+
+  const openAddClientModal = () => {
+    setCreatedCredentials(null);
+    setAddFormError('');
+    setCopyFeedback('');
+    setAddClientOpen(true);
+  };
+
+  const copyCredentials = async () => {
+    if (!createdCredentials) return;
+    const text = `Email: ${createdCredentials.email}\nPassword: ${createdCredentials.password}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyFeedback('Copied to clipboard');
+    } catch {
+      setCopyFeedback('Could not copy — select and copy manually');
+    }
+  };
+
   const handleAddWalkInClient = async (event) => {
     event.preventDefault();
     setAddFormError('');
@@ -233,6 +279,60 @@ function SecretaryConsole({ profile, onNavigate, onSignOut, initialPage = 'Dashb
     if (status === 'in review') return 'sec-queue-status sec-queue-status--approved';
     return 'sec-queue-status sec-queue-status--pending';
   };
+
+  const renderClientRows = () => {
+    if (filteredClients.length === 0) {
+      return <p className="sec-muted">No clients found.</p>;
+    }
+
+    return (
+      <div className="sec-clients-list">
+        {filteredClients.map((client) => (
+          <article key={client.id} className="sec-client-row">
+            <div className="sec-client-row__identity">
+              <div className="sec-client-row__avatar">{client.avatar}</div>
+              <div>
+                <strong>{client.name}</strong>
+                <p className="sec-muted">{client.email}</p>
+              </div>
+            </div>
+            <div className="sec-client-row__meta">
+              <span>{client.phone}</span>
+              <span>Joined: {client.joined}</span>
+              <span>{client.consultations} consultation{client.consultations === 1 ? '' : 's'}</span>
+            </div>
+          </article>
+        ))}
+      </div>
+    );
+  };
+
+  const renderClientsToolbar = () => (
+    <div className="sec-clients-toolbar">
+      <label className="sec-clients-search">
+        <span className="sec-sr-only">Search clients</span>
+        <input
+          type="search"
+          placeholder="Search by name, email, or phone…"
+          value={clientSearchTerm}
+          onChange={(event) => setClientSearchTerm(event.target.value)}
+        />
+      </label>
+      <button type="button" className="sec-view-btn" onClick={openAddClientModal}>
+        Add Client
+      </button>
+    </div>
+  );
+
+  const renderClientsDirectory = () => (
+    <>
+      {renderClientsToolbar()}
+      <p className="sec-clients-count">
+        {filteredClients.length} registered client{filteredClients.length === 1 ? '' : 's'}
+      </p>
+      {renderClientRows()}
+    </>
+  );
 
   const renderPageShell = (title, subtitle, content) => (
     <section className="sec-page-panel">
@@ -371,36 +471,8 @@ function SecretaryConsole({ profile, onNavigate, onSignOut, initialPage = 'Dashb
     if (activePage === 'Client Assistance') {
       return renderPageShell(
         'Client Assistance',
-        'Handle account support and client onboarding requests from one place.',
-        <>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-            <button
-              type="button"
-              className="sec-view-btn"
-              onClick={() => {
-                setCreatedCredentials(null);
-                setAddFormError('');
-                setAddClientOpen(true);
-              }}
-            >
-              Add walk-in client
-            </button>
-          </div>
-          <div className="sec-page-grid">
-            {clients.length > 0 ? (
-              clients.map((client) => (
-                <article key={client.id} className="sec-subcard sec-subcard--compact">
-                  <h3>{client.name}</h3>
-                  <p className="sec-muted">{client.email}</p>
-                  {client.phone ? <p className="sec-muted">{client.phone}</p> : null}
-                  <p className="sec-muted">Joined: {client.joined}</p>
-                </article>
-              ))
-            ) : (
-              <p className="sec-muted">No clients found.</p>
-            )}
-          </div>
-        </>,
+        'View registered clients, search accounts, and add walk-in clients like the admin portal.',
+        renderClientsDirectory(),
       );
     }
 
@@ -516,11 +588,17 @@ function SecretaryConsole({ profile, onNavigate, onSignOut, initialPage = 'Dashb
         </div>
 
         <div className="sec-stats-grid">
-          <div className="sec-stat-card">
+          <button
+            type="button"
+            className="sec-stat-card sec-stat-card--clickable"
+            onClick={openClientsPanel}
+            aria-label="View all registered clients"
+          >
             <div className="sec-stat-icon"><CalendarIcon /></div>
             <p className="sec-stat-label">REGISTERED CLIENTS</p>
             <h2 className="sec-stat-value">{stats.clientCount}</h2>
-          </div>
+            <span className="sec-stat-hint">View all clients</span>
+          </button>
           <div className="sec-stat-card">
             <div className="sec-stat-icon"><CalendarIcon /></div>
             <p className="sec-stat-label">CONSULTATIONS IN QUEUE</p>
@@ -658,17 +736,9 @@ function SecretaryConsole({ profile, onNavigate, onSignOut, initialPage = 'Dashb
         {renderDashboardContent()}
       </main>
 
-      {summaryOpen || addClientOpen ? (
-        <div
-          className="sec-modal-overlay"
-          onClick={() => {
-            setSummaryOpen(false);
-            setAddClientOpen(false);
-            setCreatedCredentials(null);
-            setAddFormError('');
-          }}
-        >
-          {summaryOpen ? (
+      {summaryOpen || clientsPanelOpen || addClientOpen ? (
+        <div className="sec-modal-overlay" onClick={closeAllModals}>
+          {summaryOpen && !clientsPanelOpen && !addClientOpen ? (
             <section className="sec-modal" onClick={(event) => event.stopPropagation()}>
               <div className="sec-modal__header">
                 <h3>Operations Summary</h3>
@@ -705,10 +775,37 @@ function SecretaryConsole({ profile, onNavigate, onSignOut, initialPage = 'Dashb
             </section>
           ) : null}
 
-          {addClientOpen ? (
-            <section className="sec-modal" onClick={(event) => event.stopPropagation()}>
+          {clientsPanelOpen ? (
+            <section
+              className="sec-modal sec-modal--wide"
+              onClick={(event) => event.stopPropagation()}
+            >
               <div className="sec-modal__header">
-                <h3>Add Walk-in Client</h3>
+                <h3>Registered Clients</h3>
+                <button
+                  type="button"
+                  className="sec-modal__close"
+                  onClick={() => {
+                    setClientsPanelOpen(false);
+                    setClientSearchTerm('');
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+              <div className="sec-modal__body sec-modal__body--clients">
+                {renderClientsDirectory()}
+              </div>
+            </section>
+          ) : null}
+
+          {addClientOpen ? (
+            <section
+              className={`sec-modal ${clientsPanelOpen ? 'sec-modal--stack' : ''}`}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="sec-modal__header">
+                <h3>Add Client</h3>
                 <button
                   type="button"
                   className="sec-modal__close"
@@ -716,6 +813,7 @@ function SecretaryConsole({ profile, onNavigate, onSignOut, initialPage = 'Dashb
                     setAddClientOpen(false);
                     setCreatedCredentials(null);
                     setAddFormError('');
+                    setCopyFeedback('');
                   }}
                 >
                   Close
@@ -725,13 +823,38 @@ function SecretaryConsole({ profile, onNavigate, onSignOut, initialPage = 'Dashb
                 {createdCredentials ? (
                   <div className="sec-subcard">
                     <h3>Account created</h3>
+                    <p className="sec-muted">
+                      Give the client these login details — they will be asked to set a new password on first sign-in.
+                    </p>
                     <p><strong>Name:</strong> {createdCredentials.fullName}</p>
                     <p><strong>Email:</strong> {createdCredentials.email}</p>
-                    <p><strong>Temporary password:</strong> {createdCredentials.password}</p>
-                    <p className="sec-muted">Share these credentials with the client securely.</p>
+                    <p>
+                      <strong>Password:</strong>{' '}
+                      <code>{createdCredentials.password}</code>
+                    </p>
+                    {copyFeedback ? <p className="sec-muted">{copyFeedback}</p> : null}
+                    <div className="sec-modal__actions">
+                      <button type="button" className="sec-secondary-btn" onClick={copyCredentials}>
+                        Copy email &amp; password
+                      </button>
+                      <button
+                        type="button"
+                        className="sec-view-btn"
+                        onClick={() => {
+                          setAddClientOpen(false);
+                          setCreatedCredentials(null);
+                          setCopyFeedback('');
+                        }}
+                      >
+                        Done
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <>
+                    <p className="sec-muted">
+                      Creates a client login for the web or mobile app. The system generates a temporary password.
+                    </p>
                     <label className="sec-modal__field">
                       <span>Gmail address</span>
                       <input

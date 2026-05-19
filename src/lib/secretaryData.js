@@ -113,21 +113,44 @@ export async function loadSecretaryNotarialRequests() {
 }
 
 export async function loadSecretaryClients() {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id, full_name, email, phone, created_at')
-    .eq('role', 'Client')
-    .order('created_at', { ascending: false })
-    .limit(200)
+  const [profilesRes, appointmentsRes] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('id, full_name, email, phone, created_at')
+      .eq('role', 'Client')
+      .order('created_at', { ascending: false })
+      .limit(500),
+    supabase.from('appointments').select('client_id, status'),
+  ])
 
-  if (error) throw error
+  if (profilesRes.error) throw profilesRes.error
+  if (appointmentsRes.error) throw appointmentsRes.error
 
-  return (data || []).map((row) => ({
+  const consultationsByClient = new Map()
+  ;(appointmentsRes.data || []).forEach((row) => {
+    if (!row.client_id) return
+    const status = String(row.status || '').toLowerCase()
+    if (status === 'cancelled') return
+    consultationsByClient.set(
+      row.client_id,
+      Number(consultationsByClient.get(row.client_id) || 0) + 1,
+    )
+  })
+
+  return (profilesRes.data || []).map((row) => ({
     id: row.id,
     name: row.full_name || 'Client',
     email: row.email || '',
-    phone: row.phone || '',
+    phone: row.phone || 'No phone',
     joined: formatSchedule(row.created_at).date,
+    consultations: Number(consultationsByClient.get(row.id) || 0),
+    avatar: String(row.full_name || 'CL')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0].toUpperCase())
+      .join('') || 'CL',
   }))
 }
 
