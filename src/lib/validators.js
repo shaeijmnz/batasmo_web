@@ -90,6 +90,9 @@ export function mapLoginErrorMessage(error) {
   if (normalized.includes('too many requests') || normalized.includes('rate limit')) {
     return 'Too many login attempts. Please wait a moment and try again.';
   }
+  if (normalized.includes('auth_timeout')) {
+    return 'Login timed out. Check your connection and try again.';
+  }
   return raw;
 }
 

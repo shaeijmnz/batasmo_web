@@ -14,15 +14,16 @@ const isClientAccount = (user) => {
 export function isSignupVerificationComplete(user) {
   if (!user) return false
 
+  // Attorneys, admins, and secretaries are not gated by client signup OTP.
+  if (!isClientAccount(user)) {
+    return true
+  }
+
   const meta = user.user_metadata || {}
   if (meta.signup_otp_completed === true) return true
   if (meta.signup_otp_completed === false) return false
 
   // Legacy client accounts created before signup_otp_completed existed.
-  if (isClientAccount(user)) {
-    return Boolean(user.email_confirmed_at)
-  }
-
   return Boolean(user.email_confirmed_at)
 }
 
@@ -39,6 +40,15 @@ export async function signOutIfSignupIncomplete(user) {
   if (!user || isSignupVerificationComplete(user)) {
     return false
   }
-  await supabase.auth.signOut()
+  try {
+    await Promise.race([
+      supabase.auth.signOut(),
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('signOut timeout')), 8000)
+      }),
+    ])
+  } catch {
+    // Do not block login/OTP redirect if sign-out is slow.
+  }
   return true
 }
