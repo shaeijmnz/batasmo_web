@@ -8,7 +8,7 @@ import { supabase } from './supabaseClient'
  */
 const isClientAccount = (user) => {
   const role = String(user?.user_metadata?.role || 'Client').trim().toLowerCase()
-  return role !== 'attorney' && role !== 'admin'
+  return role !== 'attorney' && role !== 'admin' && role !== 'secretary'
 }
 
 export function isSignupVerificationComplete(user) {

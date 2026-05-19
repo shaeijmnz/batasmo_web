@@ -154,6 +154,7 @@ commit;
 -- ── Default Secretary account (change password after first login) ─────────────
 -- Email:    secretary@batasmo.app
 -- Password: BatasMo#Secretary2026!
+-- If login fails, run database/20260520_secretary_account_fix.sql instead.
 
 do $$
 declare
@@ -161,30 +162,50 @@ declare
   v_password text := 'BatasMo#Secretary2026!';
   v_full_name text := 'BatasMo Secretary';
   v_user_id uuid;
+  v_instance_id uuid := '00000000-0000-0000-0000-000000000000'::uuid;
 begin
-  select id into v_user_id from auth.users where email = v_email limit 1;
+  v_email := lower(trim(v_email));
 
+  select coalesce(
+    (select instance_id from auth.users order by created_at desc limit 1),
+    v_instance_id
+  ) into v_instance_id;
+
+  select id into v_user_id from auth.users where lower(email) = v_email limit 1;
   if v_user_id is null then
     v_user_id := gen_random_uuid();
-    insert into auth.users (
-      id, aud, role, email, encrypted_password, email_confirmed_at,
-      raw_app_meta_data, raw_user_meta_data, created_at, updated_at
-    ) values (
-      v_user_id, 'authenticated', 'authenticated', v_email,
-      crypt(v_password, gen_salt('bf')), now(),
-      jsonb_build_object('provider', 'email', 'providers', jsonb_build_array('email')),
-      jsonb_build_object('full_name', v_full_name, 'role', 'Secretary'),
-      now(), now()
-    );
-    insert into auth.identities (
-      id, user_id, identity_data, provider, provider_id,
-      last_sign_in_at, created_at, updated_at
-    ) values (
-      gen_random_uuid(), v_user_id,
-      jsonb_build_object('sub', v_user_id::text, 'email', v_email),
-      'email', v_user_id::text, now(), now(), now()
-    ) on conflict (provider, provider_id) do nothing;
   end if;
+
+  insert into auth.users (
+    id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
+    raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
+    confirmation_token, email_change, email_change_token_new, recovery_token
+  ) values (
+    v_user_id, v_instance_id, 'authenticated', 'authenticated', v_email,
+    crypt(v_password, gen_salt('bf')), now(),
+    jsonb_build_object('provider', 'email', 'providers', jsonb_build_array('email')),
+    jsonb_build_object('full_name', v_full_name, 'role', 'Secretary'),
+    now(), now(), '', '', '', ''
+  )
+  on conflict (id) do update set
+    instance_id = excluded.instance_id,
+    encrypted_password = excluded.encrypted_password,
+    email_confirmed_at = coalesce(auth.users.email_confirmed_at, now()),
+    raw_user_meta_data = coalesce(auth.users.raw_user_meta_data, '{}'::jsonb) || excluded.raw_user_meta_data,
+    updated_at = now();
+
+  insert into auth.identities (
+    id, user_id, identity_data, provider, provider_id,
+    last_sign_in_at, created_at, updated_at
+  ) values (
+    gen_random_uuid(), v_user_id,
+    jsonb_build_object('sub', v_user_id::text, 'email', v_email, 'email_verified', true),
+    'email', v_email, now(), now(), now()
+  )
+  on conflict (provider, provider_id) do update set
+    user_id = excluded.user_id,
+    identity_data = excluded.identity_data,
+    updated_at = now();
 
   insert into public.profiles (id, email, full_name, role)
   values (v_user_id, v_email, v_full_name, 'Secretary'::user_role)
