@@ -5947,32 +5947,46 @@ export const compareTimeLabels = (a, b, date) => {
   if (!aTrim) return 1
   if (!bTrim) return -1
 
-  if (date) {
-    const aDt = parseSlotDateTime(date, aTrim)
-    const bDt = parseSlotDateTime(date, bTrim)
+  const compareWithDate = (dateKey) => {
+    const aDt = parseSlotDateTime(dateKey, aTrim)
+    const bDt = parseSlotDateTime(dateKey, bTrim)
     if (aDt && bDt) return aDt.getTime() - bDt.getTime()
     if (aDt) return -1
     if (bDt) return 1
+    return null
   }
 
-  const aLabel = normalizeSlotTimeLabel(aTrim)
-  const bLabel = normalizeSlotTimeLabel(bTrim)
-  const [aHour = '0', aMinute = '0'] = aLabel.split(':')
-  const [bHour = '0', bMinute = '0'] = bLabel.split(':')
-  return Number(aHour) * 60 + Number(aMinute) - (Number(bHour) * 60 + Number(bMinute))
+  const dated = date ? compareWithDate(date) : null
+  if (dated != null) return dated
+
+  const timeOnly = compareWithDate('2000-01-01')
+  if (timeOnly != null) return timeOnly
+
+  return aTrim.localeCompare(bTrim, undefined, { numeric: true, sensitivity: 'base' })
 }
 
 export const sortTimeLabels = (times, date) => {
-  const unique = Array.from(new Set((times || []).map((t) => String(t || '').trim()).filter(Boolean)))
-  return unique.sort((a, b) => compareTimeLabels(a, b, date))
+  try {
+    const unique = Array.from(new Set((times || []).map((t) => String(t || '').trim()).filter(Boolean)))
+    return unique.sort((a, b) => compareTimeLabels(a, b, date))
+  } catch (error) {
+    console.warn('[availability] sortTimeLabels failed', error)
+    return Array.from(new Set((times || []).map((t) => String(t || '').trim()).filter(Boolean)))
+  }
 }
 
-export const sortAvailabilitySlots = (slots) =>
-  [...(slots || [])].sort((a, b) => {
-    const dateCmp = String(a?.date || '').localeCompare(String(b?.date || ''))
-    if (dateCmp !== 0) return dateCmp
-    return compareTimeLabels(a?.time, b?.time, a?.date || b?.date)
-  })
+export const sortAvailabilitySlots = (slots) => {
+  try {
+    return [...(slots || [])].sort((a, b) => {
+      const dateCmp = String(a?.date || '').localeCompare(String(b?.date || ''))
+      if (dateCmp !== 0) return dateCmp
+      return compareTimeLabels(a?.time, b?.time, a?.date || b?.date)
+    })
+  } catch (error) {
+    console.warn('[availability] sortAvailabilitySlots failed', error)
+    return [...(slots || [])]
+  }
+}
 
 // ============================================================================
 // BOOKING FLOW - Helper: Check if Slot is in the Future

@@ -112,6 +112,7 @@ const Consultations = ({ onNavigate }) => {
             if (!status) return null;
             const feedback = feedbackByAppointment.get(row.id);
             const { date, time } = formatScheduleForUi(row.scheduled_at);
+            const scheduledAtTs = row.scheduled_at ? new Date(row.scheduled_at).getTime() : 0;
             return {
               id: row.id,
               title: row.title || 'Consultation',
@@ -122,6 +123,7 @@ const Consultations = ({ onNavigate }) => {
               attorney: row.attorney?.full_name || 'Attorney',
               date,
               time,
+              scheduledAtTs: Number.isFinite(scheduledAtTs) ? scheduledAtTs : 0,
               duration: formatDurationLabel(row.duration_minutes),
               rating: feedback?.rating || 0,
               notes: feedback?.comment || row.notes || '',
@@ -189,7 +191,8 @@ const Consultations = ({ onNavigate }) => {
   }, [sessions]);
 
   const visibleSessions = useMemo(() => {
-    return activeTab === 'All' ? sessions : sessions.filter((item) => item.status === activeTab);
+    const list = activeTab === 'All' ? sessions : sessions.filter((item) => item.status === activeTab);
+    return [...list].sort((a, b) => (a.scheduledAtTs || 0) - (b.scheduledAtTs || 0));
   }, [activeTab, sessions]);
 
   const getIcon = (type) => {
