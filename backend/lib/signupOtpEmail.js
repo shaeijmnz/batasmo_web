@@ -2,7 +2,13 @@
  * Signup verification OTP email (6-digit code) — uses Render SMTP/Resend.
  */
 
+import dns from 'dns'
 import { isWelcomeEmailConfigured } from './welcomeEmail.js'
+
+/** Prefer IPv4 — some hosts (e.g. Render) have flaky IPv6 routes to Gmail. */
+const smtpLookup = (hostname, options, callback) => {
+  dns.lookup(hostname, { ...options, family: 4 }, callback)
+}
 
 const RESEND_API_KEY = String(process.env.RESEND_API_KEY || '').trim()
 const WELCOME_EMAIL_FROM = String(process.env.WELCOME_EMAIL_FROM || '').trim()
@@ -115,36 +121,21 @@ const buildSignupOtpText = ({ otp, fullName }) =>
     'If you did not create an account, you can ignore this email.',
   ].join('\n')
 
-const RESEND_FETCH_MS = 25_000
-
 const sendViaResend = async ({ to, subject, html, text }) => {
-  const controller = new AbortController()
-  const tid = setTimeout(() => controller.abort(), RESEND_FETCH_MS)
-  let response
-  try {
-    response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: WELCOME_EMAIL_FROM,
-        to: [to],
-        subject,
-        html,
-        text,
-      }),
-    })
-  } catch (e) {
-    if (e?.name === 'AbortError') {
-      throw new Error('Resend request timed out. Please tap Resend.')
-    }
-    throw e
-  } finally {
-    clearTimeout(tid)
-  }
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: WELCOME_EMAIL_FROM,
+      to: [to],
+      subject,
+      html,
+      text,
+    }),
+  })
 
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) {
@@ -154,16 +145,13 @@ const sendViaResend = async ({ to, subject, html, text }) => {
   return payload
 }
 
-/** Gmail from Render can be slow; short timeouts surface as "Connection timeout" in the UI. */
-const SMTP_CONNECTION_MS = Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 45_000)
-const SMTP_GREETING_MS = Number(process.env.SMTP_GREETING_TIMEOUT_MS || 30_000)
-const SMTP_SOCKET_MS = Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 55_000)
+const SMTP_SEND_MS = 35_000
 
-const withSendTimeout = async (promise, ms) => {
+const withSendTimeout = async (promise, ms = SMTP_SEND_MS) => {
   let timeoutId
   const timeout = new Promise((_, reject) => {
     timeoutId = setTimeout(
-      () => reject(new Error('Email send timed out. Tap Resend or check spam in a minute.')),
+      () => reject(new Error('Email send timed out. Tap Resend on the next screen.')),
       ms,
     )
   })
@@ -174,19 +162,34 @@ const withSendTimeout = async (promise, ms) => {
   }
 }
 
-const sendViaSmtp = async ({ to, subject, html, text }) => {
+const isTransientSmtpFailure = (err) => {
+  const msg = String(err?.message || err?.code || '').toLowerCase()
+  return (
+    msg.includes('timeout') ||
+    msg.includes('etimedout') ||
+    msg.includes('econnreset') ||
+    msg.includes('greeting') ||
+    msg.includes('socket') ||
+    msg.includes('connection closed')
+  )
+}
+
+const sendViaSmtpOnce = async ({ to, subject, html, text, port, secure, requireTLS }) => {
   const nodemailer = await import('nodemailer')
   const transport = nodemailer.createTransport({
     host: SMTP_HOST,
-    port: SMTP_PORT,
-    secure: SMTP_PORT === 465,
-    connectionTimeout: SMTP_CONNECTION_MS,
-    greetingTimeout: SMTP_GREETING_MS,
-    socketTimeout: SMTP_SOCKET_MS,
+    port,
+    secure,
+    requireTLS: Boolean(requireTLS),
+    connectionTimeout: 18_000,
+    greetingTimeout: 18_000,
+    socketTimeout: SMTP_SEND_MS,
     auth: {
       user: SMTP_USER,
       pass: SMTP_PASS,
     },
+    tls: { minVersion: 'TLSv1.2' },
+    lookup: smtpLookup,
   })
 
   try {
@@ -200,6 +203,38 @@ const sendViaSmtp = async ({ to, subject, html, text }) => {
   } finally {
     transport.close?.()
   }
+}
+
+/**
+ * Try configured port first; for Gmail on 465, retry 587 STARTTLS (often works when 465 hangs from cloud hosts).
+ */
+const sendViaSmtp = async ({ to, subject, html, text }) => {
+  const hostLower = SMTP_HOST.toLowerCase()
+  const isGmailHost = hostLower.includes('gmail.com') || hostLower.includes('googlemail.com')
+  const configuredPort = Number(SMTP_PORT) || 465
+
+  const attempts = [{ port: configuredPort, secure: configuredPort === 465, requireTLS: false }]
+  if (isGmailHost && configuredPort === 465) {
+    attempts.push({ port: 587, secure: false, requireTLS: true })
+  }
+  if (isGmailHost && configuredPort === 587) {
+    attempts.push({ port: 465, secure: true, requireTLS: false })
+  }
+
+  let lastError = null
+  for (const a of attempts) {
+    try {
+      await sendViaSmtpOnce({ to, subject, html, text, ...a })
+      return
+    } catch (err) {
+      lastError = err
+      if (attempts.length === 1 || !isTransientSmtpFailure(err)) {
+        throw err
+      }
+      // More attempts left; try next (e.g. 587 after 465 connection timeout).
+    }
+  }
+  throw lastError || new Error('SMTP send failed.')
 }
 
 /**
@@ -234,24 +269,22 @@ export async function sendSignupOtpEmail({ email, otp, fullName }) {
     }
   }
 
-  const smtpCapMs = SMTP_SOCKET_MS + 5_000
-
   try {
     if (smtpReady) {
       try {
-        await withSendTimeout(sendViaSmtp({ to, subject, html, text }), smtpCapMs)
+        await withSendTimeout(sendViaSmtp({ to, subject, html, text }))
         return { sent: true }
       } catch (smtpError) {
         console.warn('[signup-otp-email] SMTP failed:', smtpError?.message || smtpError)
         if (RESEND_API_KEY) {
-          await withSendTimeout(sendViaResend({ to, subject, html, text }), RESEND_FETCH_MS + 5_000)
+          await withSendTimeout(sendViaResend({ to, subject, html, text }))
           return { sent: true }
         }
         throw smtpError
       }
     }
     if (RESEND_API_KEY) {
-      await withSendTimeout(sendViaResend({ to, subject, html, text }), RESEND_FETCH_MS + 5_000)
+      await withSendTimeout(sendViaResend({ to, subject, html, text }))
     } else {
       return { sent: false, skipped: true, error: 'Verification email is not configured on the server.' }
     }

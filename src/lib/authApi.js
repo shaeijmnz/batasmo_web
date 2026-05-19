@@ -32,6 +32,20 @@ const getBackendApiBase = () =>
     .trim()
     .replace(/\/+$/, '')
 
+const humanizeSignupEmailError = (message) => {
+  const raw = String(message || '').trim()
+  const m = raw.toLowerCase()
+  if (!raw) return 'Failed to send verification email.'
+  if (m.includes('connection timeout') || m.includes('etimedout') || m.includes('econnrefused')) {
+    return (
+      'Could not reach the mail server in time (connection timeout). Tap Resend. ' +
+      'If it keeps failing, in Render try Gmail with SMTP_PORT=587 (same host, user, and App Password), ' +
+      'or add RESEND_API_KEY as a backup sender.'
+    )
+  }
+  return raw
+}
+
 const normalizeRole = (role) => {
   const value = String(role || '').trim().toLowerCase()
   if (value === 'admin') return 'Admin'
@@ -157,7 +171,7 @@ export async function signUpWithEmail({
       response.status === 502 || response.status === 504
         ? 'Signup server timed out. Try again — if you reach the code screen, tap Resend.'
         : 'Failed to start signup.'
-    throw new Error(payload?.error || fallback)
+    throw new Error(humanizeSignupEmailError(payload?.error || fallback))
   }
 
   if (!payload?.pendingId) {
@@ -190,8 +204,7 @@ export async function sendSignupVerificationEmail({ email, pendingId }) {
   if (pendingId) body.pendingId = String(pendingId).trim()
 
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 90_000)
-
+  const timeoutId = setTimeout(() => controller.abort(), 70_000)
   let response
   try {
     response = await fetch(`${base}/auth/signup-resend-otp`, {
@@ -202,22 +215,26 @@ export async function sendSignupVerificationEmail({ email, pendingId }) {
     })
   } catch (error) {
     if (error?.name === 'AbortError') {
-      throw new Error('Sending the code took too long. Wait a moment, then tap Resend.')
+      throw new Error(
+        'Resend request timed out. Check your connection, wait a moment, then tap Resend again.',
+      )
     }
-    throw error
+    throw new Error('Could not reach the signup server. Check your connection and try again.')
   } finally {
     clearTimeout(timeoutId)
   }
 
-  const payload = await response.json().catch(() => ({}))
-  if (!response.ok) {
-    const raw = String(payload?.error || '')
-    if (/connection timeout/i.test(raw)) {
-      throw new Error(
-        'Mail server was slow to connect. Tap Resend — we increased the wait time on the server.',
-      )
+  const rawText = await response.text().catch(() => '')
+  let payload = {}
+  if (rawText) {
+    try {
+      payload = JSON.parse(rawText)
+    } catch {
+      payload = {}
     }
-    throw new Error(payload?.error || 'Failed to send verification email.')
+  }
+  if (!response.ok) {
+    throw new Error(humanizeSignupEmailError(payload?.error || 'Failed to send verification email.'))
   }
   return payload
 }
