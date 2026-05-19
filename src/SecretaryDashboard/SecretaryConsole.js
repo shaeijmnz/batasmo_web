@@ -223,7 +223,7 @@ function SecretaryConsole({ profile, onNavigate, onSignOut, initialPage = 'Dashb
     setClientSearchTerm('');
     setSummaryOpen(false);
     setAddClientOpen(false);
-    setActivePage('Client Assistance');
+    setActivePage('Registered Clients');
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   };
 
