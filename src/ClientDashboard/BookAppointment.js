@@ -167,7 +167,7 @@ function BookAppointment({ onNavigate, profile }) {
   const [availableSlots, setAvailableSlots] = useState([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [hiddenPastSlotsCount, setHiddenPastSlotsCount] = useState(0);
-  const [paymentMethod, setPaymentMethod] = useState('GCash');
+  const [paymentMethod, setPaymentMethod] = useState('QRPh');
   const [isPaying, setIsPaying] = useState(false);
   const [confirmedSlot, setConfirmedSlot] = useState(null);
   const [loadError, setLoadError] = useState('');
@@ -297,7 +297,7 @@ function BookAppointment({ onNavigate, profile }) {
     if (attachmentInputRef.current) attachmentInputRef.current.value = '';
     setAvailableSlots([]);
     setHiddenPastSlotsCount(0);
-    setPaymentMethod('GCash');
+    setPaymentMethod('QRPh');
     setShowBooking(true);
   };
 
@@ -319,7 +319,7 @@ function BookAppointment({ onNavigate, profile }) {
       if (attachmentInputRef.current) attachmentInputRef.current.value = '';
       setAvailableSlots([]);
       setHiddenPastSlotsCount(0);
-      setPaymentMethod('GCash');
+      setPaymentMethod('QRPh');
       setConfirmedSlot(null);
     });
   };
@@ -908,8 +908,6 @@ function BookAppointment({ onNavigate, profile }) {
                         value={paymentMethod}
                         onChange={(e) => setPaymentMethod(e.target.value)}
                       >
-                        <option value="GCash">GCash</option>
-                        <option value="Maya">Maya</option>
                         <option value="QRPh">QR Ph</option>
                       </select>
                     </div>
