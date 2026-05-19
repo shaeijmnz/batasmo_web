@@ -773,12 +773,23 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
     setVideoCall(callData);
   };
 
+  const warmupMediaPermissions = async () => {
+    if (!navigator?.mediaDevices?.getUserMedia) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      stream.getTracks().forEach((track) => track.stop());
+    } catch {
+      // Keep call flow working even when prompt is dismissed.
+    }
+  };
+
   const handleStartVideoCall = async () => {
     if (!activeAppointmentId || videoCallLoading) return;
     setVideoCallLoading(true);
     setVideoCallError('');
     try {
       const { meetingId, roomId, token } = await getOrCreateVideoMeeting(activeAppointmentId);
+      await warmupMediaPermissions();
       openVideoCall({ meetingId, roomId, token });
     } catch (err) {
       setVideoCallError(err.message || 'Failed to start video call.');
@@ -804,19 +815,28 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
         if (!videoMeetingId || videoCallRef.current) return;
         try {
           const token = await getVideoSdkToken();
+          await warmupMediaPermissions();
           openVideoCall({
             meetingId: videoMeetingId,
             roomId: consultationRoomId,
             token,
           });
-        } catch {
-          // Attorney can still tap "Video Call" to join the shared room.
+        } catch (error) {
+          setVideoCallError(
+            error?.message || 'Incoming call is ready. Tap "Video Call" to join.',
+          );
         }
       },
     );
 
     return () => unsubscribe();
   }, [activeAppointmentId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!activeAppointmentId || isClosed || videoCall) return;
+    warmupMediaPermissions();
+    getVideoSdkToken().catch(() => {});
+  }, [activeAppointmentId, isClosed, videoCall]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Prefetch VideoSDK token in the background so the first time the attorney
   // hits "Video Call" the join is noticeably faster (token is cached 110 min).

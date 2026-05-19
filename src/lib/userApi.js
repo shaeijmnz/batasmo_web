@@ -6018,7 +6018,7 @@ export async function fetchAttorneyAnnouncementsData(userId) {
 
 // ─── VideoSDK helpers ────────────────────────────────────────────────────────
 
-const VIDEOSDK_BACKEND_URL = process.env.REACT_APP_CHATBOT_API_URL || 'http://localhost:4000'
+const VIDEOSDK_BACKEND_URL = resolvePaymentApiBaseUrl()
 
 let cachedVideoSdkToken = null
 

@@ -24,6 +24,7 @@ import Login from './LoginAuth/Login';
 import ForgotPassword from './LoginAuth/ForgotPassword';
 import ResetPassword from './LoginAuth/ResetPassword';
 import ClientShell from './ClientDashboard/ClientShell';
+import ConsultationWaitingHost from './components/ConsultationWaitingHost';
 
 /* ── Dashboard Pages (lazy-loaded to reduce initial bundle size) ── */
 const HomePage = lazy(() => import('./ClientDashboard/HomePage'));
@@ -601,19 +602,42 @@ function App() {
     </Suspense>
   )
 
-  const renderClientShell = (node) =>
-    renderLazy(
-      <ClientShell
-        currentPage={page}
+  const consultationWaitingHost =
+    currentProfile &&
+    (normalizeRole(currentProfile.role) === 'Client' ||
+      normalizeRole(currentProfile.role) === 'Attorney') ? (
+      <ConsultationWaitingHost
+        page={page}
+        pageParams={pageParams}
         profile={currentProfile}
         onNavigate={handleNavigate}
-        onSignOut={handleSignOut}
-        showNotaryModal={showNotaryModal}
-        notaryWarningMessage={NOTARY_WARNING_MESSAGE}
-        onCloseNotaryModal={() => setShowNotaryModal(false)}
-      >
+      />
+    ) : null
+
+  const renderClientShell = (node) =>
+    renderLazy(
+      <>
+        <ClientShell
+          currentPage={page}
+          profile={currentProfile}
+          onNavigate={handleNavigate}
+          onSignOut={handleSignOut}
+          showNotaryModal={showNotaryModal}
+          notaryWarningMessage={NOTARY_WARNING_MESSAGE}
+          onCloseNotaryModal={() => setShowNotaryModal(false)}
+        >
+          {node}
+        </ClientShell>
+        {consultationWaitingHost}
+      </>,
+    )
+
+  const renderAttorneyWithWaiting = (node) =>
+    renderLazy(
+      <>
         {node}
-      </ClientShell>,
+        {consultationWaitingHost}
+      </>,
     )
 
   useEffect(() => {
@@ -694,20 +718,20 @@ function App() {
   if (page === 'client-logs') return renderClientShell(<ClientLogs onNavigate={handleNavigate} profile={currentProfile} initialAppointmentId={pageParams?.appointmentId || ''} />);
   if (page === 'client-notary-tracking') return renderClientShell(<ClientNotaryTracking profile={currentProfile} />);
   if (page === 'support-messages') return renderClientShell(<SupportMessages onNavigate={handleNavigate} profile={currentProfile} initialDraft={pageParams?.draft || ''} />);
-  if (page === 'attorney-home') return renderLazy(<AttorneyHome onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} />);
-  if (page === 'consultation-requests') return renderLazy(<ConsultationRequests onNavigate={handleNavigate} profile={currentProfile} />);
-  if (page === 'upcoming-appointments') return renderLazy(<UpcomingAppointments onNavigate={handleNavigate} profile={currentProfile} />);
+  if (page === 'attorney-home') return renderAttorneyWithWaiting(<AttorneyHome onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} />);
+  if (page === 'consultation-requests') return renderAttorneyWithWaiting(<ConsultationRequests onNavigate={handleNavigate} profile={currentProfile} />);
+  if (page === 'upcoming-appointments') return renderAttorneyWithWaiting(<UpcomingAppointments onNavigate={handleNavigate} profile={currentProfile} />);
   if (page === 'attorney-availability')
-    return renderLazy(<AttorneyAvailability onNavigate={handleNavigate} profile={currentProfile} />);
-  if (page === 'notarial-requests-atty') return renderLazy(<NotarialRequestsAtty onNavigate={handleNavigate} profile={currentProfile} />);
-  if (page === 'attorney-analytics') return renderLazy(<AttorneyAnalytics onNavigate={handleNavigate} profile={currentProfile} />);
-  if (page === 'attorney-messages') return renderLazy(<AttorneyMessages onNavigate={handleNavigate} profile={currentProfile} initialAppointmentId={pageParams?.appointmentId || ''} />);
+    return renderAttorneyWithWaiting(<AttorneyAvailability onNavigate={handleNavigate} profile={currentProfile} />);
+  if (page === 'notarial-requests-atty') return renderAttorneyWithWaiting(<NotarialRequestsAtty onNavigate={handleNavigate} profile={currentProfile} />);
+  if (page === 'attorney-analytics') return renderAttorneyWithWaiting(<AttorneyAnalytics onNavigate={handleNavigate} profile={currentProfile} />);
+  if (page === 'attorney-messages') return renderAttorneyWithWaiting(<AttorneyMessages onNavigate={handleNavigate} profile={currentProfile} initialAppointmentId={pageParams?.appointmentId || ''} />);
   if (page === 'attorney-logs')
-    return renderLazy(
+    return renderAttorneyWithWaiting(
       <AttorneyLogs onNavigate={handleNavigate} profile={currentProfile} initialAppointmentId={pageParams?.appointmentId || ''} />,
     );
-  if (page === 'attorney-announcements') return renderLazy(<AttorneyAnnouncements onNavigate={handleNavigate} profile={currentProfile} />);
-  if (page === 'attorney-profile') return renderLazy(<AttorneyProfile onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} onProfileUpdated={setCurrentProfile} />);
+  if (page === 'attorney-announcements') return renderAttorneyWithWaiting(<AttorneyAnnouncements onNavigate={handleNavigate} profile={currentProfile} />);
+  if (page === 'attorney-profile') return renderAttorneyWithWaiting(<AttorneyProfile onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} onProfileUpdated={setCurrentProfile} />);
   if (page === 'admin-home') return renderLazy(<AdminDashboard onNavigate={handleNavigate} />);
   if (page === 'admin-clients') return renderLazy(<AdminClients onNavigate={handleNavigate} />);
   if (page === 'admin-attorneys') return renderLazy(<AdminAttorneys onNavigate={handleNavigate} />);
