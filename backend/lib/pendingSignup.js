@@ -217,12 +217,25 @@ async function upsertPending({ supabaseUrl, serviceKey, row }) {
   return Array.isArray(payload) ? payload[0] : payload
 }
 
+async function markPendingOtpSent({ supabaseUrl, serviceKey, pendingId }) {
+  await fetchWithTimeout(
+    `${supabaseUrl}/rest/v1/pending_client_signups?id=eq.${encodeURIComponent(pendingId)}`,
+    {
+      method: 'PATCH',
+      headers: restHeaders(serviceKey),
+      body: JSON.stringify({
+        otp_sent_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }),
+    },
+  ).catch((err) => console.warn('[signup] could not update otp_sent_at', err?.message))
+}
+
 async function sendEmailOtpForPending({ pending, otp }) {
   if (!isSignupOtpEmailConfigured()) {
     return {
       sent: false,
-      error:
-        'Gmail SMTP is not configured on the server (SMTP_HOST, SMTP_USER, SMTP_PASS, WELCOME_EMAIL_FROM).',
+      error: 'Email is not configured on the server.',
     }
   }
   return sendSignupOtpEmail({
@@ -230,6 +243,37 @@ async function sendEmailOtpForPending({ pending, otp }) {
     otp,
     fullName: pending.full_name,
   })
+}
+
+/** Fire-and-forget after signup-start so Create Account returns quickly. */
+function queueSignupOtpEmail({ supabaseUrl, serviceKey, pending, otp }) {
+  setImmediate(() => {
+    void (async () => {
+      const result = await sendEmailOtpForPending({ pending, otp })
+      if (result.sent) {
+        await markPendingOtpSent({ supabaseUrl, serviceKey, pendingId: pending.id })
+      } else {
+        console.warn('[signup] background OTP email failed:', result.error)
+      }
+    })()
+  })
+}
+
+export async function getPendingSignupOtpStatus({ supabaseUrl, serviceKey, pendingId, email }) {
+  const normalizedEmail = String(email || '').trim().toLowerCase()
+  const pending =
+    (pendingId && (await getPendingById({ supabaseUrl, serviceKey, pendingId }))) ||
+    (normalizedEmail && (await getPendingByEmail({ supabaseUrl, serviceKey, email: normalizedEmail })))
+
+  if (!pending) {
+    return { found: false, sent: false }
+  }
+  return {
+    found: true,
+    sent: Boolean(pending.otp_sent_at),
+    pendingId: pending.id,
+    email: pending.email_norm,
+  }
 }
 
 async function createSupabaseClientAccount({ supabaseUrl, serviceKey, pending, password }) {
@@ -335,24 +379,14 @@ export async function startPendingClientSignup({
   await checkSendRateLimit({ supabaseUrl, serviceKey, pendingId: pending.id })
 
   let otpSent = false
-  let emailSendError = null
 
   if (channel === 'email') {
-    const emailResult = await sendEmailOtpForPending({ pending, otp })
-    otpSent = Boolean(emailResult?.sent)
-    if (!otpSent) {
-      emailSendError = emailResult?.error || 'Failed to send verification email.'
-      console.warn('[signup] OTP email not sent on signup-start:', emailSendError)
-    } else {
-      await fetchWithTimeout(
-        `${supabaseUrl}/rest/v1/pending_client_signups?id=eq.${encodeURIComponent(pending.id)}`,
-        {
-          method: 'PATCH',
-          headers: restHeaders(serviceKey),
-          body: JSON.stringify({ otp_sent_at: new Date().toISOString(), updated_at: new Date().toISOString() }),
-        },
-      ).catch(() => {})
+    if (!isSignupOtpEmailConfigured()) {
+      throw new Error(
+        'Email verification is not configured on the server (Gmail SMTP on Render).',
+      )
     }
+    queueSignupOtpEmail({ supabaseUrl, serviceKey, pending, otp })
   } else {
     if (!iprogApiKey) throw new Error('SMS verification is not configured (IPROG_API_KEY).')
     if (!phone) throw new Error('A valid Philippine mobile number is required for SMS OTP.')
@@ -373,8 +407,8 @@ export async function startPendingClientSignup({
     pendingId: pending.id,
     email,
     preferredOtpChannel: channel,
-    otpSent,
-    emailSendError: emailSendError || undefined,
+    otpSent: channel === 'email' ? false : otpSent,
+    emailQueued: channel === 'email',
   }
 }
 
@@ -416,6 +450,8 @@ export async function resendPendingSignupOtp({
         }),
       },
     )
+    await logSend({ supabaseUrl, serviceKey, pendingId: pending.id })
+    return { pendingId: pending.id, email: pending.email_norm, otpSent: true }
   } else {
     if (!iprogApiKey) throw new Error('SMS verification is not configured.')
     const phone = normalizePhMobile(pending.phone)

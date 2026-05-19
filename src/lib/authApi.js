@@ -36,19 +36,27 @@ const humanizeSignupEmailError = (message) => {
   const raw = String(message || '').trim()
   const m = raw.toLowerCase()
   if (!raw) return 'Failed to send verification email.'
-  if (
-    m.includes('timeout') ||
-    m.includes('etimedout') ||
-    m.includes('econnrefused') ||
-    m.includes('gmail smtp')
-  ) {
-    return (
-      'Gmail could not send the code in time. Tap Resend Code on this screen. ' +
-      'If it keeps failing, ask admin to set SMTP_PORT=587 on Render (Google App Password). ' +
-      'Or sign up using SMS instead of Email.'
-    )
+  if (m.includes('timeout') || m.includes('etimedout') || m.includes('econnrefused')) {
+    return 'Still sending your code — wait a moment, then tap Resend Code. Also check Spam.'
   }
   return raw
+}
+
+export async function fetchSignupOtpDeliveryStatus({ email, pendingId }) {
+  const base = getBackendApiBase()
+  if (!base) return { found: false, sent: false }
+
+  const params = new URLSearchParams()
+  const normalizedEmail = normalizeAuthEmail(email)
+  if (pendingId) params.set('pendingId', String(pendingId).trim())
+  if (normalizedEmail) params.set('email', normalizedEmail)
+
+  const response = await fetch(`${base}/auth/signup-otp-status?${params.toString()}`)
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    return { found: false, sent: false, error: payload?.error }
+  }
+  return payload
 }
 
 const normalizeRole = (role) => {
@@ -130,7 +138,7 @@ export async function signUpWithEmail({
   }
 
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 90_000)
+  const timeoutId = setTimeout(() => controller.abort(), 60_000)
 
   let response
   try {

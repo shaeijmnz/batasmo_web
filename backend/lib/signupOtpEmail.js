@@ -9,23 +9,26 @@ const smtpLookup = (hostname, options, callback) => {
   dns.lookup(hostname, { ...options, family: 4 }, callback)
 }
 
+const RESEND_API_KEY = String(process.env.RESEND_API_KEY || '').trim()
 const WELCOME_EMAIL_FROM = String(process.env.WELCOME_EMAIL_FROM || '').trim()
 const SMTP_HOST = String(process.env.SMTP_HOST || '').trim()
-const SMTP_PORT = Number(process.env.SMTP_PORT || 465)
+const SMTP_PORT = Number(process.env.SMTP_PORT || 587)
 const SMTP_USER = String(process.env.SMTP_USER || '').trim()
 const SMTP_PASS = String(process.env.SMTP_PASS || '').trim()
 const APP_LOGIN_URL = String(process.env.APP_LOGIN_URL || 'https://batasmo-web.vercel.app/login').trim()
 const smtpReady = () => Boolean(SMTP_HOST && SMTP_USER && SMTP_PASS && WELCOME_EMAIL_FROM)
+const resendReady = () => Boolean(RESEND_API_KEY && WELCOME_EMAIL_FROM)
 
-export const isSignupOtpEmailConfigured = () => smtpReady()
+export const isSignupOtpEmailConfigured = () => smtpReady() || resendReady()
 
 export const getSignupOtpEmailStatus = () => ({
-  configured: smtpReady(),
-  primary: smtpReady() ? 'gmail-smtp' : 'none',
+  configured: isSignupOtpEmailConfigured(),
+  primary: smtpReady() ? 'gmail-smtp' : resendReady() ? 'api-backup' : 'none',
   smtp: smtpReady(),
+  resendBackup: resendReady(),
   hint: smtpReady()
-    ? 'OTP emails use Gmail SMTP on signup (Create Account). Prefer SMTP_PORT=587 on Render.'
-    : 'Set SMTP_HOST, SMTP_USER, SMTP_PASS, WELCOME_EMAIL_FROM on Render.',
+    ? 'OTP via Gmail SMTP (port 587 on Render). RESEND_API_KEY optional backup if SMTP times out.'
+    : 'Set SMTP_* on Render, or RESEND_API_KEY + WELCOME_EMAIL_FROM.',
 })
 
 const escapeHtml = (value) =>
@@ -129,7 +132,38 @@ const buildSignupOtpText = ({ otp, fullName }) =>
     'If you did not create an account, you can ignore this email.',
   ].join('\n')
 
-const SMTP_ATTEMPT_MS = 18_000
+const RESEND_TIMEOUT_MS = 15_000
+const SMTP_ATTEMPT_MS = 12_000
+
+const sendViaResend = async ({ to, subject, html, text }) => {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), RESEND_TIMEOUT_MS)
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: WELCOME_EMAIL_FROM,
+        to: [to],
+        subject,
+        html,
+        text,
+      }),
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      const msg = payload?.message || payload?.error || `Mail API error (${response.status})`
+      throw new Error(String(msg))
+    }
+    return payload
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
 
 const isTransientSmtpFailure = (err) => {
   const msg = String(err?.message || err?.code || '').toLowerCase()
@@ -198,11 +232,8 @@ const sendViaSmtp = async ({ to, subject, html, text }) => {
   throw lastError || new Error('SMTP send failed.')
 }
 
-const smtpFailureHelp =
-  'Could not send via Gmail SMTP. On Render set SMTP_PORT=587 (not 465), use a Google App Password for SMTP_PASS, and WELCOME_EMAIL_FROM matching SMTP_USER. Or choose SMS verification on sign up.'
-
 /**
- * @returns {{ sent: boolean, skipped?: boolean, error?: string }}
+ * @returns {{ sent: boolean, skipped?: boolean, error?: string, transport?: string }}
  */
 export async function sendSignupOtpEmail({ email, otp, fullName }) {
   const to = String(email || '').trim().toLowerCase()
@@ -211,12 +242,12 @@ export async function sendSignupOtpEmail({ email, otp, fullName }) {
     return { sent: false, error: 'Missing email or OTP.' }
   }
 
-  if (!smtpReady()) {
+  if (!isSignupOtpEmailConfigured()) {
     return {
       sent: false,
       skipped: true,
       error:
-        'Gmail SMTP is not configured. On Render set SMTP_HOST, SMTP_USER, SMTP_PASS, and WELCOME_EMAIL_FROM.',
+        'Email is not configured on the server (Gmail SMTP or mail API).',
     }
   }
 
@@ -225,17 +256,32 @@ export async function sendSignupOtpEmail({ email, otp, fullName }) {
   const text = buildSignupOtpText({ otp: code, fullName })
   const mail = { to, subject, html, text }
 
-  try {
-    await sendViaSmtp(mail)
-    console.info('[signup-otp-email] sent via Gmail SMTP to', to)
-    return { sent: true, transport: 'smtp' }
-  } catch (error) {
-    const msg = error?.message || 'Failed to send verification email.'
-    console.error('[signup-otp-email] Gmail SMTP failed', msg)
-    const isTimeout = String(msg).toLowerCase().includes('timeout')
-    return {
-      sent: false,
-      error: isTimeout ? `${msg}. ${smtpFailureHelp}` : msg,
+  if (smtpReady()) {
+    try {
+      await sendViaSmtp(mail)
+      console.info('[signup-otp-email] sent via Gmail SMTP to', to)
+      return { sent: true, transport: 'smtp' }
+    } catch (smtpError) {
+      console.warn('[signup-otp-email] Gmail SMTP failed:', smtpError?.message || smtpError)
+      if (!resendReady()) {
+        return {
+          sent: false,
+          error:
+            'Could not send via Gmail. Check SMTP_PORT=587 and App Password on Render, or try Resend Code.',
+        }
+      }
     }
   }
+
+  if (resendReady()) {
+    try {
+      await sendViaResend(mail)
+      console.info('[signup-otp-email] sent via mail API (SMTP unavailable) to', to)
+      return { sent: true, transport: 'api' }
+    } catch (apiError) {
+      return { sent: false, error: apiError?.message || 'Failed to send verification email.' }
+    }
+  }
+
+  return { sent: false, error: 'Could not send verification email.' }
 }

@@ -254,17 +254,6 @@ function SignUp({ onNavigate, onEmailChange }) {
         onEmailChange({ email: normalizedEmail, role: 'Client', otpChannel: otpDelivery });
       }
 
-      if (otpDelivery === 'email' && result?.otpSent === false && result?.emailSendError) {
-        try {
-          sessionStorage.setItem(
-            'batasmo_signup_email_warning',
-            String(result.emailSendError),
-          );
-        } catch {
-          /* ignore */
-        }
-      }
-
       onNavigate('otp');
     } catch (error) {
       setErrors({ form: getErrorMessage(error, 'Failed to create account.') });

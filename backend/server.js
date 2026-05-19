@@ -10,6 +10,7 @@ import {
   startPendingClientSignup,
   resendPendingSignupOtp,
   completePendingClientSignup,
+  getPendingSignupOtpStatus,
 } from './lib/pendingSignup.js'
 
 dotenv.config()
@@ -2365,6 +2366,24 @@ app.post('/auth/signup-start', async (req, res) => {
     const msg = error?.message || 'Unable to start signup.'
     console.error('[signup-start]', msg)
     return res.status(signupErrorStatus(msg)).json({ error: msg })
+  }
+})
+
+// Poll whether OTP email was delivered (after background send on signup-start).
+app.get('/auth/signup-otp-status', async (req, res) => {
+  try {
+    requireSupabaseServiceConfig()
+    const result = await getPendingSignupOtpStatus({
+      supabaseUrl: SUPABASE_URL,
+      serviceKey: SUPABASE_SERVICE_ROLE_KEY,
+      pendingId: req.query?.pendingId,
+      email: req.query?.email,
+    })
+    return res.status(200).json(result)
+  } catch (error) {
+    const msg = error?.message || 'Unable to check OTP status.'
+    console.error('[signup-otp-status]', msg)
+    return res.status(500).json({ error: msg })
   }
 })
 

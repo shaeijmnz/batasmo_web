@@ -9,6 +9,7 @@ import {
   OTP_RESUME_SIGNUP_KEY,
   SIGNUP_OTP_SENT_KEY,
   completePendingSignup,
+  fetchSignupOtpDeliveryStatus,
   resendSignUpOtp,
   sendSignupVerificationEmail,
   signInWithEmail,
@@ -63,6 +64,7 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
   const [emailInitDone, setEmailInitDone] = useState(false);
   const [smsSending, setSmsSending] = useState(false);
   const [emailSending, setEmailSending] = useState(false);
+  const [emailStatusText, setEmailStatusText] = useState('');
   const [needsPhone, setNeedsPhone] = useState(false);
   const inputs = useRef([]);
   const smsAutoTriedRef = useRef(false);
@@ -194,33 +196,77 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
       .toLowerCase();
     if (justSentFor && justSentFor === pendingEmail) {
       setEmailInitDone(true);
+      setEmailStatusText('Code sent! Check your Gmail inbox and Spam folder.');
       return;
     }
 
-    let signupWarning = '';
-    try {
-      signupWarning = String(sessionStorage.getItem('batasmo_signup_email_warning') || '').trim();
-      if (signupWarning) sessionStorage.removeItem('batasmo_signup_email_warning');
-    } catch {
-      /* ignore */
-    }
+    let cancelled = false;
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-    setErrorText(signupWarning);
-    setEmailSending(true);
-    sendEmailOtp()
-      .then(() => {
-        localStorage.setItem(SIGNUP_OTP_SENT_KEY, pendingEmail);
-        setErrorText('');
-      })
-      .catch((err) => {
-        setErrorText(
-          getErrorMessage(err, 'Could not send verification email. Tap Resend or check spam.'),
-        );
-      })
-      .finally(() => {
-        setEmailSending(false);
-      });
-  }, [delivery, pendingEmail, sendEmailOtp]);
+    const trySendEmail = async () => {
+      const data = await sendEmailOtp();
+      if (data?.pendingId) {
+        localStorage.setItem(PENDING_SIGNUP_ID_KEY, String(data.pendingId));
+      }
+      localStorage.setItem(SIGNUP_OTP_SENT_KEY, pendingEmail);
+      setEmailInitDone(true);
+      setEmailStatusText('Code sent! Check your Gmail inbox and Spam folder.');
+      setErrorText('');
+    };
+
+    ;(async () => {
+      setErrorText('');
+      setEmailSending(true);
+      setEmailStatusText('Sending code to your Gmail…');
+
+      for (let i = 0; i < 20 && !cancelled; i += 1) {
+        try {
+          const status = await fetchSignupOtpDeliveryStatus({
+            email: pendingEmail,
+            pendingId: pendingSignupId || undefined,
+          });
+          if (status?.sent) {
+            localStorage.setItem(SIGNUP_OTP_SENT_KEY, pendingEmail);
+            setEmailInitDone(true);
+            setEmailStatusText('Code sent! Check your Gmail inbox and Spam folder.');
+            setEmailSending(false);
+            return;
+          }
+        } catch {
+          /* keep polling */
+        }
+        await sleep(2000);
+      }
+
+      if (cancelled) return;
+
+      for (let attempt = 0; attempt < 2 && !cancelled; attempt += 1) {
+        try {
+          await trySendEmail();
+          setEmailSending(false);
+          return;
+        } catch (err) {
+          if (attempt === 0) {
+            setEmailStatusText('Retrying…');
+            await sleep(2500);
+          } else {
+            setErrorText(
+              getErrorMessage(
+                err,
+                'Could not send the code yet. Tap Resend Code or check Spam.',
+              ),
+            );
+            setEmailStatusText('');
+          }
+        }
+      }
+      setEmailSending(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [delivery, pendingEmail, pendingSignupId, sendEmailOtp]);
 
   useEffect(() => {
     if (delivery !== 'sms' || !pendingEmail || smsAutoTriedRef.current) return;
@@ -490,8 +536,8 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
             </label>
           </div>
 
-          {delivery === 'email' && emailSending ? (
-            <p className="otp-sms-status">Sending verification code to your Gmail...</p>
+          {delivery === 'email' && (emailSending || emailStatusText) ? (
+            <p className="otp-sms-status">{emailStatusText || 'Sending verification code to your Gmail…'}</p>
           ) : null}
 
           {delivery === 'sms' && smsSending ? (
