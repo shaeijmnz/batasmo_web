@@ -27,7 +27,7 @@ const NAV_PAGES = [
   'Dashboard',
   'Consultation Management',
   'Notarial Requests',
-  'Client Assistance',
+  'Registered Clients',
   'Messages',
   'Appointment Calendar',
   'Profile',
@@ -93,7 +93,6 @@ function SecretaryConsole({ profile, onNavigate, onSignOut, initialPage = 'Dashb
   const [notifications, setNotifications] = useState([]);
   const [notifOpen, setNotifOpen] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
-  const [clientsPanelOpen, setClientsPanelOpen] = useState(false);
   const [clientSearchTerm, setClientSearchTerm] = useState('');
   const [addClientOpen, setAddClientOpen] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState('');
@@ -157,6 +156,7 @@ function SecretaryConsole({ profile, onNavigate, onSignOut, initialPage = 'Dashb
 
   const handleNavigation = (page) => {
     setActivePage(page);
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   };
 
   const handleLogout = async () => {
@@ -213,17 +213,18 @@ function SecretaryConsole({ profile, onNavigate, onSignOut, initialPage = 'Dashb
 
   const closeAllModals = () => {
     setSummaryOpen(false);
-    setClientsPanelOpen(false);
     setAddClientOpen(false);
     setCreatedCredentials(null);
     setAddFormError('');
     setCopyFeedback('');
   };
 
-  const openClientsPanel = () => {
+  const openClientsPage = () => {
     setClientSearchTerm('');
     setSummaryOpen(false);
-    setClientsPanelOpen(true);
+    setAddClientOpen(false);
+    setActivePage('Client Assistance');
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   };
 
   const openAddClientModal = () => {
@@ -468,11 +469,11 @@ function SecretaryConsole({ profile, onNavigate, onSignOut, initialPage = 'Dashb
       );
     }
 
-    if (activePage === 'Client Assistance') {
+    if (activePage === 'Registered Clients') {
       return renderPageShell(
-        'Client Assistance',
-        'View registered clients, search accounts, and add walk-in clients like the admin portal.',
-        renderClientsDirectory(),
+        'Registered Clients',
+        'Manage all client accounts, search the directory, and add walk-in clients.',
+        <div className="sec-clients-page">{renderClientsDirectory()}</div>,
       );
     }
 
@@ -591,7 +592,7 @@ function SecretaryConsole({ profile, onNavigate, onSignOut, initialPage = 'Dashb
           <button
             type="button"
             className="sec-stat-card sec-stat-card--clickable"
-            onClick={openClientsPanel}
+            onClick={openClientsPage}
             aria-label="View all registered clients"
           >
             <div className="sec-stat-icon"><CalendarIcon /></div>
@@ -736,9 +737,9 @@ function SecretaryConsole({ profile, onNavigate, onSignOut, initialPage = 'Dashb
         {renderDashboardContent()}
       </main>
 
-      {summaryOpen || clientsPanelOpen || addClientOpen ? (
+      {summaryOpen || addClientOpen ? (
         <div className="sec-modal-overlay" onClick={closeAllModals}>
-          {summaryOpen && !clientsPanelOpen && !addClientOpen ? (
+          {summaryOpen && !addClientOpen ? (
             <section className="sec-modal" onClick={(event) => event.stopPropagation()}>
               <div className="sec-modal__header">
                 <h3>Operations Summary</h3>
@@ -775,35 +776,8 @@ function SecretaryConsole({ profile, onNavigate, onSignOut, initialPage = 'Dashb
             </section>
           ) : null}
 
-          {clientsPanelOpen ? (
-            <section
-              className="sec-modal sec-modal--wide"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="sec-modal__header">
-                <h3>Registered Clients</h3>
-                <button
-                  type="button"
-                  className="sec-modal__close"
-                  onClick={() => {
-                    setClientsPanelOpen(false);
-                    setClientSearchTerm('');
-                  }}
-                >
-                  Close
-                </button>
-              </div>
-              <div className="sec-modal__body sec-modal__body--clients">
-                {renderClientsDirectory()}
-              </div>
-            </section>
-          ) : null}
-
           {addClientOpen ? (
-            <section
-              className={`sec-modal ${clientsPanelOpen ? 'sec-modal--stack' : ''}`}
-              onClick={(event) => event.stopPropagation()}
-            >
+            <section className="sec-modal" onClick={(event) => event.stopPropagation()}>
               <div className="sec-modal__header">
                 <h3>Add Client</h3>
                 <button

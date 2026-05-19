@@ -74,7 +74,7 @@ const SECRETARY_INITIAL_PAGE = {
   'secretary-home': 'Dashboard',
   'secretary-consultations': 'Consultation Management',
   'secretary-requests': 'Notarial Requests',
-  'secretary-clients': 'Client Assistance',
+  'secretary-clients': 'Registered Clients',
   'secretary-messages': 'Messages',
   'secretary-attorneys': 'Appointment Calendar',
 };
