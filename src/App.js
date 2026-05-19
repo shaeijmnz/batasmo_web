@@ -144,7 +144,18 @@ const RECOVERY_EMAIL_KEY = 'batasmo_recovery_email'
 const RECOVERY_VERIFIED_KEY = 'batasmo_recovery_verified'
 const FORCE_LOGIN_REDIRECT_KEY = 'batasmo_force_login_redirect'
 const CURRENT_PAGE_KEY = 'batasmo_current_page'
+/** Bump when nav/auth storage shape changes — clears stale session page on deploy. */
+const APP_STORAGE_VERSION = '20260520'
+const APP_STORAGE_VERSION_KEY = 'batasmo_storage_version'
 const IS_DEV = process.env.NODE_ENV !== 'production'
+
+const syncAppStorageVersion = () => {
+  if (typeof window === 'undefined') return
+  const stored = sessionStorage.getItem(APP_STORAGE_VERSION_KEY)
+  if (stored === APP_STORAGE_VERSION) return
+  sessionStorage.removeItem(CURRENT_PAGE_KEY)
+  sessionStorage.setItem(APP_STORAGE_VERSION_KEY, APP_STORAGE_VERSION)
+}
 
 const readPaymongoReturnFromLocation = () => {
   if (typeof window === 'undefined') return null
@@ -159,6 +170,8 @@ const readPaymongoReturnFromLocation = () => {
 }
 
 const resolveInitialPage = () => {
+  syncAppStorageVersion()
+
   const forcedLogin = sessionStorage.getItem(FORCE_LOGIN_REDIRECT_KEY) === '1'
   if (forcedLogin) {
     sessionStorage.removeItem(FORCE_LOGIN_REDIRECT_KEY)
@@ -568,14 +581,17 @@ function App() {
   const handleAuthSuccess = useCallback((profile, options = {}) => {
     clearTransientAuthState({ includeRecovery: true });
     setSignupContext({ email: '', role: 'Client', otpChannel: 'email' });
-    setCurrentProfile(profile);
     const role = normalizeRole(profile?.role || '');
+    const homePage = pageFromRole(role);
+    setCurrentProfile(profile);
+    sessionStorage.setItem(CURRENT_PAGE_KEY, homePage);
     if (options.mustChangePassword && role === 'Client') {
       setPageParams({ initialProfileTab: 'password', mustChangePassword: true });
       setPage('profile');
+      sessionStorage.setItem(CURRENT_PAGE_KEY, 'profile');
     } else {
       setPageParams({});
-      setPage(pageFromRole(profile?.role));
+      setPage(homePage);
     }
   }, []);
 
@@ -604,10 +620,12 @@ function App() {
   }, [forceResetToLogin]);
 
   useEffect(() => {
-    if (!PUBLIC_PAGES.has(page)) {
+    if (PUBLIC_PAGES.has(page) || !currentProfile?.role) return
+    const role = normalizeRole(currentProfile.role)
+    if (canAccessPage(role, page)) {
       sessionStorage.setItem(CURRENT_PAGE_KEY, page)
     }
-  }, [page])
+  }, [page, currentProfile?.role])
 
   const isPublicPage = PUBLIC_PAGES.has(page);
 
