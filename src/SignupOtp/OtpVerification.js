@@ -63,7 +63,6 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
   const [smsInitDone, setSmsInitDone] = useState(false);
   const [emailInitDone, setEmailInitDone] = useState(false);
   const [smsSending, setSmsSending] = useState(false);
-  const [emailSending, setEmailSending] = useState(false);
   const [emailStatusText, setEmailStatusText] = useState('');
   const [needsPhone, setNeedsPhone] = useState(false);
   const inputs = useRef([]);
@@ -76,7 +75,6 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
     .toLowerCase();
   const pendingEmail = routeEmail || storedEmail;
   const pendingRole = String(role || localStorage.getItem('batasmo_pending_otp_role') || 'Client');
-  const pendingSignupId = String(localStorage.getItem(PENDING_SIGNUP_ID_KEY) || '').trim();
 
   useEffect(() => {
     if (!routeEmail) return;
@@ -455,8 +453,8 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
             </label>
           </div>
 
-          {delivery === 'email' && (emailSending || emailStatusText) ? (
-            <p className="otp-sms-status">{emailStatusText || 'Sending verification code to your Gmail…'}</p>
+          {delivery === 'email' && emailStatusText ? (
+            <p className="otp-sms-status">{emailStatusText}</p>
           ) : null}
 
           {delivery === 'sms' && smsSending ? (
@@ -510,7 +508,7 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
 
           {errorText ? <p className="otp-error">{errorText}</p> : null}
 
-          {(delivery === 'email' || smsInitDone) && !smsSending && !emailSending ? (
+          {(delivery === 'email' || smsInitDone) && !smsSending ? (
             <>
               <p className="otp-resend-timer">
                 Resend code in <span>00:{String(timer).padStart(2, '0')}</span>
