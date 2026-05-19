@@ -130,10 +130,14 @@ export async function signUpWithEmail({
       ? normalizedSex
       : null
 
+  const emailRedirectTo =
+    typeof window !== 'undefined' ? `${window.location.origin}/` : undefined
+
   const { data, error } = await supabase.auth.signUp({
     email: normalizedEmail,
     password,
     options: {
+      emailRedirectTo,
       data: {
         full_name: fullName,
         role: normalizedRole,
@@ -150,7 +154,18 @@ export async function signUpWithEmail({
   })
 
   if (error) {
-    throw new Error(error.message)
+    const msg = String(error.message || '')
+    const lower = msg.toLowerCase()
+    if (lower.includes('rate limit') || lower.includes('too many')) {
+      throw new Error('Too many emails sent. Wait a few minutes, then tap Resend Code on the next screen.')
+    }
+    throw new Error(msg)
+  }
+
+  if (data?.user?.identities?.length === 0) {
+    throw new Error(
+      'This Gmail is already registered. Try Log in, or in Supabase → Authentication → Users delete the old test account for this email, then sign up again.',
+    )
   }
 
   if (data?.user) {
@@ -197,10 +212,23 @@ export async function signUpWithEmail({
     }
   }
 
+  let otpSent = otpChannel === 'email'
+  if (otpChannel === 'email' && data?.user) {
+    const { error: resendError } = await supabase.auth.resend({
+      type: 'signup',
+      email: normalizedEmail,
+    })
+    if (resendError) {
+      console.warn('[signup] resend after signUp:', resendError.message)
+      otpSent = false
+    }
+  }
+
   return {
     user: data?.user,
     preferredOtpChannel: otpChannel,
-    otpSent: otpChannel === 'email',
+    otpSent,
+    resendHint: otpChannel === 'email' && !otpSent ? 'Tap Resend Code on the next screen.' : undefined,
   }
 }
 

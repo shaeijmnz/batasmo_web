@@ -182,10 +182,36 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
   }, [emailInitDone, delivery]);
 
   useEffect(() => {
-    if (delivery !== 'email' || !pendingEmail) return;
+    if (delivery !== 'email' || !pendingEmail || emailAutoTriedRef.current) return;
     emailAutoTriedRef.current = true;
-    setEmailInitDone(true);
-    setEmailStatusText('Check your Gmail inbox and Spam for the 6-digit code from BatasMo.');
+
+    const justSentFor = String(localStorage.getItem(SIGNUP_OTP_SENT_KEY) || '')
+      .trim()
+      .toLowerCase();
+    if (justSentFor === pendingEmail) {
+      setEmailInitDone(true);
+      setEmailStatusText('Code sent! Check your Gmail inbox, Promotions, and Spam.');
+      return;
+    }
+
+    setErrorText('');
+    setEmailStatusText('Sending code to your Gmail…');
+    resendSignUpOtp({ email: pendingEmail })
+      .then(() => {
+        localStorage.setItem(SIGNUP_OTP_SENT_KEY, pendingEmail);
+        setEmailInitDone(true);
+        setEmailStatusText('Code sent! Check your Gmail inbox, Promotions, and Spam.');
+        setErrorText('');
+      })
+      .catch((err) => {
+        setEmailStatusText('');
+        setErrorText(
+          getErrorMessage(
+            err,
+            'Could not send code. In Supabase: Authentication → Email → turn ON Confirm email and Email OTP. Then try Resend Code.',
+          ),
+        );
+      });
   }, [delivery, pendingEmail]);
 
   useEffect(() => {

@@ -237,10 +237,17 @@ function SignUp({ onNavigate, onEmailChange }) {
         localStorage.setItem(PENDING_SIGNUP_USER_ID_KEY, String(result.user.id));
       }
       localStorage.removeItem(PENDING_SIGNUP_ID_KEY);
-      if (otpDelivery === 'email') {
+      if (otpDelivery === 'email' && result?.otpSent) {
         localStorage.setItem(SIGNUP_OTP_SENT_KEY, normalizedEmail);
       } else {
         localStorage.removeItem(SIGNUP_OTP_SENT_KEY);
+      }
+      if (result?.resendHint) {
+        try {
+          sessionStorage.setItem('batasmo_signup_email_warning', result.resendHint);
+        } catch {
+          /* ignore */
+        }
       }
       try {
         sessionStorage.setItem(
