@@ -728,12 +728,12 @@
   color: var(--ui-text-muted);
 }
 
-/* Attach file (under Notes) */
+/* Attach file (under Notes) — light cream client theme */
 .ba-attach-row {
   margin-top: 10px;
   padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px dashed rgba(245, 166, 35, 0.35);
+  background: #fff;
+  border: 1px dashed rgba(21, 34, 56, 0.28);
   border-radius: 10px;
   display: flex;
   flex-direction: column;
@@ -741,7 +741,7 @@
 }
 
 .ba-attach-row__hint {
-  color: var(--ui-text-muted);
+  color: var(--ui-text-muted, #6b7280);
   font-size: 0.82rem;
   line-height: 1.35;
 }
@@ -759,29 +759,37 @@
 }
 
 .ba-attach-btn {
-  background: var(--ui-accent, #f5a623);
-  color: #111827;
-  border: none;
+  background: var(--ui-accent, #152238);
+  color: #fff;
+  border: 1px solid var(--ui-accent, #152238);
   border-radius: 8px;
-  padding: 6px 12px;
+  padding: 6px 14px;
   font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
 }
 
 .ba-attach-btn:hover {
-  filter: brightness(1.05);
+  background: var(--ui-accent-hover, #1e2d45);
+  border-color: var(--ui-accent-hover, #1e2d45);
 }
 
 .ba-attach-btn--ghost {
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  color: var(--ui-text-secondary, #cbd5e1);
+  background: #fff;
+  border: 1px solid rgba(21, 34, 56, 0.25);
+  color: var(--ui-text-secondary, #4b5563);
+}
+
+.ba-attach-btn--ghost:hover {
+  background: rgba(21, 34, 56, 0.06);
+  border-color: var(--ui-accent, #152238);
+  color: var(--ui-accent, #152238);
 }
 
 .ba-attach-name {
   font-size: 0.8rem;
-  color: var(--ui-text-secondary, #cbd5e1);
+  color: var(--ui-text-primary, #0b0f19);
   max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
