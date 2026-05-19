@@ -40,12 +40,12 @@ const humanizeSignupEmailError = (message) => {
     m.includes('timeout') ||
     m.includes('etimedout') ||
     m.includes('econnrefused') ||
-    m.includes('render is not connecting')
+    m.includes('gmail smtp')
   ) {
     return (
-      'Email could not be sent (server mail timeout). Tap Resend after redeploy. ' +
-      'Admin fix on Render: add RESEND_API_KEY from resend.com (recommended), or change SMTP_PORT to 587. ' +
-      'You can also sign up using SMS verification instead of Email.'
+      'Gmail could not send the code in time. Tap Resend Code on this screen. ' +
+      'If it keeps failing, ask admin to set SMTP_PORT=587 on Render (Google App Password). ' +
+      'Or sign up using SMS instead of Email.'
     )
   }
   return raw
@@ -130,7 +130,7 @@ export async function signUpWithEmail({
   }
 
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 45_000)
+  const timeoutId = setTimeout(() => controller.abort(), 90_000)
 
   let response
   try {

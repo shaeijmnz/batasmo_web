@@ -221,7 +221,8 @@ async function sendEmailOtpForPending({ pending, otp }) {
   if (!isSignupOtpEmailConfigured()) {
     return {
       sent: false,
-      error: 'Verification email is not configured on the server (Gmail SMTP on Render).',
+      error:
+        'Gmail SMTP is not configured on the server (SMTP_HOST, SMTP_USER, SMTP_PASS, WELCOME_EMAIL_FROM).',
     }
   }
   return sendSignupOtpEmail({
@@ -334,10 +335,24 @@ export async function startPendingClientSignup({
   await checkSendRateLimit({ supabaseUrl, serviceKey, pendingId: pending.id })
 
   let otpSent = false
+  let emailSendError = null
 
   if (channel === 'email') {
-    // Email is sent from the OTP screen (signup-resend-otp) so signup-start stays fast.
-    otpSent = false
+    const emailResult = await sendEmailOtpForPending({ pending, otp })
+    otpSent = Boolean(emailResult?.sent)
+    if (!otpSent) {
+      emailSendError = emailResult?.error || 'Failed to send verification email.'
+      console.warn('[signup] OTP email not sent on signup-start:', emailSendError)
+    } else {
+      await fetchWithTimeout(
+        `${supabaseUrl}/rest/v1/pending_client_signups?id=eq.${encodeURIComponent(pending.id)}`,
+        {
+          method: 'PATCH',
+          headers: restHeaders(serviceKey),
+          body: JSON.stringify({ otp_sent_at: new Date().toISOString(), updated_at: new Date().toISOString() }),
+        },
+      ).catch(() => {})
+    }
   } else {
     if (!iprogApiKey) throw new Error('SMS verification is not configured (IPROG_API_KEY).')
     if (!phone) throw new Error('A valid Philippine mobile number is required for SMS OTP.')
@@ -359,6 +374,7 @@ export async function startPendingClientSignup({
     email,
     preferredOtpChannel: channel,
     otpSent,
+    emailSendError: emailSendError || undefined,
   }
 }
 

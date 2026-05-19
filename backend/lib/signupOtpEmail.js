@@ -1,5 +1,5 @@
 /**
- * Signup verification OTP email (6-digit code) — Resend API (recommended on Render) or Gmail SMTP.
+ * Signup verification OTP email (6-digit code) — Gmail SMTP only (sent on Create Account).
  */
 
 import dns from 'dns'
@@ -9,42 +9,24 @@ const smtpLookup = (hostname, options, callback) => {
   dns.lookup(hostname, { ...options, family: 4 }, callback)
 }
 
-const RESEND_API_KEY = String(process.env.RESEND_API_KEY || '').trim()
 const WELCOME_EMAIL_FROM = String(process.env.WELCOME_EMAIL_FROM || '').trim()
 const SMTP_HOST = String(process.env.SMTP_HOST || '').trim()
 const SMTP_PORT = Number(process.env.SMTP_PORT || 465)
 const SMTP_USER = String(process.env.SMTP_USER || '').trim()
 const SMTP_PASS = String(process.env.SMTP_PASS || '').trim()
 const APP_LOGIN_URL = String(process.env.APP_LOGIN_URL || 'https://batasmo-web.vercel.app/login').trim()
-const OTP_EMAIL_PREFER = String(process.env.OTP_EMAIL_PREFER || 'auto').trim().toLowerCase()
-
-export const isSignupOtpEmailConfigured = () => isWelcomeEmailConfigured()
-
 const smtpReady = () => Boolean(SMTP_HOST && SMTP_USER && SMTP_PASS && WELCOME_EMAIL_FROM)
-const resendReady = () => Boolean(RESEND_API_KEY && WELCOME_EMAIL_FROM)
-const isResendSandboxFrom = () => WELCOME_EMAIL_FROM.toLowerCase().includes('onboarding@resend.dev')
 
-export const getSignupOtpEmailStatus = () => {
-  const smtp = smtpReady()
-  const resend = resendReady()
-  const sandbox = resend && isResendSandboxFrom() && !smtp
-  let primary = 'none'
-  if (resend && !sandbox && (OTP_EMAIL_PREFER === 'resend' || OTP_EMAIL_PREFER === 'auto' || !smtp)) {
-    primary = 'resend'
-  } else if (smtp) {
-    primary = 'smtp'
-  } else if (resend) {
-    primary = 'resend'
-  }
-  return {
-    configured: smtp || resend,
-    primary,
-    smtp,
-    resend,
-    resendSandboxOnly: sandbox,
-    recommendResendOnRender: smtp && !resend,
-  }
-}
+export const isSignupOtpEmailConfigured = () => smtpReady()
+
+export const getSignupOtpEmailStatus = () => ({
+  configured: smtpReady(),
+  primary: smtpReady() ? 'gmail-smtp' : 'none',
+  smtp: smtpReady(),
+  hint: smtpReady()
+    ? 'OTP emails use Gmail SMTP on signup (Create Account). Prefer SMTP_PORT=587 on Render.'
+    : 'Set SMTP_HOST, SMTP_USER, SMTP_PASS, WELCOME_EMAIL_FROM on Render.',
+})
 
 const escapeHtml = (value) =>
   String(value || '')
@@ -147,44 +129,7 @@ const buildSignupOtpText = ({ otp, fullName }) =>
     'If you did not create an account, you can ignore this email.',
   ].join('\n')
 
-const RESEND_TIMEOUT_MS = 20_000
-const SMTP_ATTEMPT_MS = 14_000
-
-const withTimeout = async (promise, ms, message) => {
-  let timeoutId
-  const timeout = new Promise((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error(message)), ms)
-  })
-  try {
-    return await Promise.race([promise, timeout])
-  } finally {
-    clearTimeout(timeoutId)
-  }
-}
-
-const sendViaResend = async ({ to, subject, html, text }) => {
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: WELCOME_EMAIL_FROM,
-      to: [to],
-      subject,
-      html,
-      text,
-    }),
-  })
-
-  const payload = await response.json().catch(() => ({}))
-  if (!response.ok) {
-    const msg = payload?.message || payload?.error || `Resend error (${response.status})`
-    throw new Error(String(msg))
-  }
-  return payload
-}
+const SMTP_ATTEMPT_MS = 18_000
 
 const isTransientSmtpFailure = (err) => {
   const msg = String(err?.message || err?.code || '').toLowerCase()
@@ -243,11 +188,7 @@ const sendViaSmtp = async ({ to, subject, html, text }) => {
   let lastError = null
   for (const a of attempts) {
     try {
-      await withTimeout(
-        sendViaSmtpOnce({ to, subject, html, text, ...a }),
-        SMTP_ATTEMPT_MS,
-        'SMTP connection timed out',
-      )
+      await sendViaSmtpOnce({ to, subject, html, text, ...a })
       return
     } catch (err) {
       lastError = err
@@ -258,17 +199,7 @@ const sendViaSmtp = async ({ to, subject, html, text }) => {
 }
 
 const smtpFailureHelp =
-  'Gmail SMTP from Render is not connecting. Fix: (1) Add RESEND_API_KEY on Render (free at resend.com — works for all Gmail addresses). (2) Or set SMTP_PORT=587 and redeploy. (3) Or use SMS verification on sign up.'
-
-const shouldTryResendFirst = () => {
-  if (!resendReady()) return false
-  if (isResendSandboxFrom() && smtpReady()) return false
-  if (OTP_EMAIL_PREFER === 'smtp') return false
-  if (OTP_EMAIL_PREFER === 'resend') return true
-  return true
-}
-
-const shouldTrySmtp = () => smtpReady() && OTP_EMAIL_PREFER !== 'resend'
+  'Could not send via Gmail SMTP. On Render set SMTP_PORT=587 (not 465), use a Google App Password for SMTP_PASS, and WELCOME_EMAIL_FROM matching SMTP_USER. Or choose SMS verification on sign up.'
 
 /**
  * @returns {{ sent: boolean, skipped?: boolean, error?: string }}
@@ -280,15 +211,12 @@ export async function sendSignupOtpEmail({ email, otp, fullName }) {
     return { sent: false, error: 'Missing email or OTP.' }
   }
 
-  if (!isSignupOtpEmailConfigured()) {
-    return { sent: false, skipped: true, error: 'Verification email is not configured on the server.' }
-  }
-
-  if (isResendSandboxFrom() && !smtpReady()) {
+  if (!smtpReady()) {
     return {
       sent: false,
+      skipped: true,
       error:
-        'Resend test sender (onboarding@resend.dev) only delivers to the Resend account email. Add Gmail SMTP or verify a domain on Resend.',
+        'Gmail SMTP is not configured. On Render set SMTP_HOST, SMTP_USER, SMTP_PASS, and WELCOME_EMAIL_FROM.',
     }
   }
 
@@ -297,52 +225,17 @@ export async function sendSignupOtpEmail({ email, otp, fullName }) {
   const text = buildSignupOtpText({ otp: code, fullName })
   const mail = { to, subject, html, text }
 
-  const errors = []
-
-  if (shouldTryResendFirst()) {
-    try {
-      await withTimeout(
-        sendViaResend(mail),
-        RESEND_TIMEOUT_MS,
-        'Resend API timed out',
-      )
-      console.info('[signup-otp-email] sent via Resend to', to)
-      return { sent: true, transport: 'resend' }
-    } catch (err) {
-      const msg = err?.message || String(err)
-      console.warn('[signup-otp-email] Resend failed:', msg)
-      errors.push(`Resend: ${msg}`)
-      if (!shouldTrySmtp()) {
-        return { sent: false, error: msg }
-      }
+  try {
+    await sendViaSmtp(mail)
+    console.info('[signup-otp-email] sent via Gmail SMTP to', to)
+    return { sent: true, transport: 'smtp' }
+  } catch (error) {
+    const msg = error?.message || 'Failed to send verification email.'
+    console.error('[signup-otp-email] Gmail SMTP failed', msg)
+    const isTimeout = String(msg).toLowerCase().includes('timeout')
+    return {
+      sent: false,
+      error: isTimeout ? `${msg}. ${smtpFailureHelp}` : msg,
     }
-  }
-
-  if (shouldTrySmtp()) {
-    try {
-      await sendViaSmtp(mail)
-      console.info('[signup-otp-email] sent via SMTP to', to)
-      return { sent: true, transport: 'smtp' }
-    } catch (err) {
-      const msg = err?.message || String(err)
-      console.warn('[signup-otp-email] SMTP failed:', msg)
-      errors.push(`SMTP: ${msg}`)
-    }
-  }
-
-  if (resendReady() && !shouldTryResendFirst()) {
-    try {
-      await withTimeout(sendViaResend(mail), RESEND_TIMEOUT_MS, 'Resend API timed out')
-      return { sent: true, transport: 'resend' }
-    } catch (err) {
-      errors.push(`Resend: ${err?.message || err}`)
-    }
-  }
-
-  const combined = errors.join(' | ') || 'Failed to send verification email.'
-  const isTimeout = combined.toLowerCase().includes('timeout')
-  return {
-    sent: false,
-    error: isTimeout && !resendReady() ? `${combined}. ${smtpFailureHelp}` : combined,
   }
 }
