@@ -3972,7 +3972,9 @@ export async function fetchBookableAttorneys({ concern, onlyVerified = true } = 
     const primarySpecialty = Array.isArray(item.specialties) && item.specialties.length
       ? item.specialties[0]
       : 'General Practice'
-    const availableSlots = availabilityByAttorney.get(item.user_id) || []
+    const availableSlots = (availabilityByAttorney.get(item.user_id) || []).slice().sort(
+      (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
+    )
     return {
       id: item.user_id,
       name: cms?.display_name || fullName,
@@ -5886,9 +5888,9 @@ export async function getAvailability(attorneyId, date, options = {}) {
   const { data, error } = await query
 
   if (error) throw new Error(error.message)
-  
-  const result = data || []
-  
+
+  const result = sortAvailabilitySlots(data || [])
+
   // Cache the result
   availabilitySlotsCache.set(cacheKey, {
     data: result,
@@ -5936,6 +5938,41 @@ export const normalizeSlotTimeLabel = (timeStr) => {
 
   return `${toTwoDigits(hour)}:${minute}`
 }
+
+/** Chronological order for 12h/24h slot labels (earliest first). */
+export const compareTimeLabels = (a, b, date) => {
+  const aTrim = String(a || '').trim()
+  const bTrim = String(b || '').trim()
+  if (!aTrim && !bTrim) return 0
+  if (!aTrim) return 1
+  if (!bTrim) return -1
+
+  if (date) {
+    const aDt = parseSlotDateTime(date, aTrim)
+    const bDt = parseSlotDateTime(date, bTrim)
+    if (aDt && bDt) return aDt.getTime() - bDt.getTime()
+    if (aDt) return -1
+    if (bDt) return 1
+  }
+
+  const aLabel = normalizeSlotTimeLabel(aTrim)
+  const bLabel = normalizeSlotTimeLabel(bTrim)
+  const [aHour = '0', aMinute = '0'] = aLabel.split(':')
+  const [bHour = '0', bMinute = '0'] = bLabel.split(':')
+  return Number(aHour) * 60 + Number(aMinute) - (Number(bHour) * 60 + Number(bMinute))
+}
+
+export const sortTimeLabels = (times, date) => {
+  const unique = Array.from(new Set((times || []).map((t) => String(t || '').trim()).filter(Boolean)))
+  return unique.sort((a, b) => compareTimeLabels(a, b, date))
+}
+
+export const sortAvailabilitySlots = (slots) =>
+  [...(slots || [])].sort((a, b) => {
+    const dateCmp = String(a?.date || '').localeCompare(String(b?.date || ''))
+    if (dateCmp !== 0) return dateCmp
+    return compareTimeLabels(a?.time, b?.time, a?.date || b?.date)
+  })
 
 // ============================================================================
 // BOOKING FLOW - Helper: Check if Slot is in the Future

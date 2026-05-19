@@ -5,6 +5,7 @@ import './UpcomingAppointmentsPalette.css';
 import {
   fetchAttorneyUpcomingAppointments,
   getAvailability,
+  sortTimeLabels,
   isConsultationChatWindowOpen,
   normalizeSlotTimeLabel,
   rescheduleAttorneyAppointment,
@@ -90,19 +91,13 @@ function RescheduleModal({ appointment, attorneyId, onClose, onConfirm }) {
         const slots = await getAvailability(attorneyId, newDate, { force: true });
         if (cancelled) return;
 
-        const uniqueTimes = Array.from(new Set((slots || []).map((item) => String(item.time || '').trim()).filter(Boolean)));
-        uniqueTimes.sort((a, b) => {
-          const aLabel = normalizeSlotTimeLabel(a);
-          const bLabel = normalizeSlotTimeLabel(b);
-          const [aHour = '0', aMinute = '0'] = aLabel.split(':');
-          const [bHour = '0', bMinute = '0'] = bLabel.split(':');
-          const aValue = Number(aHour) * 60 + Number(aMinute);
-          const bValue = Number(bHour) * 60 + Number(bMinute);
-          return aValue - bValue;
-        });
+        const sortedTimes = sortTimeLabels(
+          (slots || []).map((item) => String(item.time || '').trim()),
+          newDate,
+        );
 
-        setAvailableTimes(uniqueTimes);
-        setNewTime((previous) => (uniqueTimes.includes(previous) ? previous : ''));
+        setAvailableTimes(sortedTimes);
+        setNewTime((previous) => (sortedTimes.includes(previous) ? previous : ''));
       } catch (error) {
         if (cancelled) return;
         setAvailableTimes([]);

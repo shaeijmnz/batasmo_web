@@ -6,6 +6,7 @@ import {
   fetchClientForfeitedRescheduleAlerts,
   getAppointmentPaymentStatus,
   getAvailability,
+  sortTimeLabels,
   normalizeSlotTimeLabel,
   payForAppointment,
   rescheduleClientAppointment,
@@ -369,9 +370,12 @@ function MyAppointments({ onNavigate, profile }) {
         setRescheduleLoadingSlots(true);
         const slots = await getAvailability(selectedAppointmentForReschedule.attorneyId, rescheduleDate, { force: true });
         if (cancelled) return;
-        const unique = Array.from(new Set((slots || []).map((s) => String(s.time || '').trim()).filter(Boolean)));
-        setRescheduleSlots(unique);
-        setRescheduleTime((prev) => (unique.includes(prev) ? prev : ''));
+        const sorted = sortTimeLabels(
+          (slots || []).map((s) => String(s.time || '').trim()),
+          rescheduleDate,
+        );
+        setRescheduleSlots(sorted);
+        setRescheduleTime((prev) => (sorted.includes(prev) ? prev : ''));
       } catch (error) {
         if (cancelled) return;
         setRescheduleSlots([]);

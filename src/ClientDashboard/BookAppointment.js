@@ -10,6 +10,7 @@ import {
   fetchBookableAttorneys,
   getAppointmentPaymentStatus,
   getAvailability,
+  sortTimeLabels,
   invalidateAvailabilityCache,
   notifyAttorneyOfPaidBooking,
   payForAppointment,
@@ -122,7 +123,7 @@ const mapFutureTimeStrings = (slots, date) => {
   const now = new Date();
   const isToday = date === now.toISOString().split('T')[0];
 
-  const allTimes = (slots || []).map((slot) => slot.time);
+  const allTimes = sortTimeLabels((slots || []).map((slot) => slot.time), date);
   if (!isToday) {
     return { visibleTimes: allTimes, hiddenPastCount: 0 };
   }
