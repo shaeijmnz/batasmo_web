@@ -125,6 +125,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
   const filePickerRef = useRef(null);
   const timerStartedAtByAppointmentRef = useRef({});
   const tenMinuteReminderSentByAppointmentRef = useRef({});
+  const appointmentsRef = useRef([]);
   const [waitingPopup, setWaitingPopup] = useState(null);
 
   const mergeRealtimeMessage = (incoming) => {
@@ -424,13 +425,17 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
     };
   }, [activeAppointmentId, isClosed]);
 
+  appointmentsRef.current = appointments;
+
   useEffect(() => {
     if (!activeAppointmentId || !profile?.id || isClosed) {
       setWaitingPopup(null);
       return undefined;
     }
 
-    const activeRow = appointments.find((item) => String(item.id) === String(activeAppointmentId));
+    const activeRow = appointmentsRef.current.find(
+      (item) => String(item.id) === String(activeAppointmentId),
+    );
     const otherPartyName = activeRow?.name || 'Client';
 
     const detachPresence = attachConsultationChatPresence({
