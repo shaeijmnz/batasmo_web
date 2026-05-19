@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { adminCreateWalkInAttorney } from '../lib/userApi';
-import { isStrongPassword, isValidEmail, VALID_EMAIL_MESSAGE, VALID_PASSWORD_MESSAGE } from '../lib/validators';
+import { isValidEmail, VALID_EMAIL_MESSAGE } from '../lib/validators';
 import ManageAvailabilityPanel from '../components/ManageAvailabilityPanel';
 import './AdminTheme.css';
 import './attorneys.css';
@@ -66,7 +66,6 @@ const Attorneys = ({ onNavigate }) => {
   const [availabilityAttorney, setAvailabilityAttorney] = useState(null);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [addEmail, setAddEmail] = useState('');
-  const [addPassword, setAddPassword] = useState('');
   const [addFullName, setAddFullName] = useState('');
   const [addSpecialty, setAddSpecialty] = useState('');
   const [addSubmitting, setAddSubmitting] = useState(false);
@@ -265,10 +264,9 @@ const Attorneys = ({ onNavigate }) => {
     event.preventDefault();
     setAddFormError('');
     const email = addEmail.trim().toLowerCase();
-    const password = addPassword;
     const fullName = addFullName.trim();
-    if (!email || !password) {
-      setAddFormError('Email and password are required.');
+    if (!email) {
+      setAddFormError('Email is required.');
       return;
     }
     if (!isValidEmail(email)) {
@@ -279,39 +277,27 @@ const Attorneys = ({ onNavigate }) => {
       setAddFormError('Attorney name is required.');
       return;
     }
-    if (!isStrongPassword(password)) {
-      setAddFormError(VALID_PASSWORD_MESSAGE);
-      return;
-    }
 
     try {
       setAddSubmitting(true);
       const result = await adminCreateWalkInAttorney({
         email,
-        password,
         fullName,
         specialty: addSpecialty.trim(),
       });
+      const generatedPassword = result?.generatedPassword;
+      if (!generatedPassword) {
+        throw new Error('Account created but no password was returned. Check the backend deployment.');
+      }
       setCreatedAttorney({
-        email,
-        password,
-        fullName,
-        welcomeEmailSent: Boolean(result?.welcomeEmailSent),
-        welcomeEmailError: result?.welcomeEmailError || '',
+        email: result.email || email,
+        password: generatedPassword,
+        fullName: result.fullName || fullName,
       });
       setAddEmail('');
-      setAddPassword('');
       setAddFullName('');
       setAddSpecialty('');
-      if (result?.welcomeEmailSent) {
-        setAddSuccessNotice(`Welcome email sent to ${email}.`);
-      } else {
-        setAddSuccessNotice(
-          `Account created for ${email}. Copy credentials below${
-            result?.welcomeEmailError ? ` (email: ${result.welcomeEmailError})` : ' — add Gmail SMTP on Render for auto-email to any Gmail.'
-          }.`,
-        );
-      }
+      setAddSuccessNotice(`Account created for ${email}. Share the generated password so the attorney can sign in.`);
       setLoading(true);
       await loadAttorneys();
     } catch (error) {
@@ -493,22 +479,13 @@ const Attorneys = ({ onNavigate }) => {
               <>
                 <p className="modal-subtitle">
                   Account created for <strong>{createdAttorney.fullName}</strong>.
-                  {createdAttorney.welcomeEmailSent
-                    ? ' A welcome email with these credentials was sent.'
-                    : ' Share these login details with the attorney (email was not sent automatically).'}
+                  Share these login details with the attorney. After sign-in they will open the Attorney Dashboard.
                 </p>
                 <div className="attorney-created-credentials">
                   <p><strong>Email</strong> {createdAttorney.email}</p>
                   <p><strong>Password</strong> <code>{createdAttorney.password}</code></p>
                   <p><strong>Login</strong> https://batasmo-web.vercel.app/login</p>
                 </div>
-                {createdAttorney.welcomeEmailSent ? (
-                  <p className="attorney-email-sent-badge">Welcome email sent</p>
-                ) : (
-                  <p className="attorney-email-warn-badge">
-                    {createdAttorney.welcomeEmailError || 'Configure Gmail SMTP on Render to email any Gmail address.'}
-                  </p>
-                )}
                 {copyFeedback ? <p className="modal-copy-feedback">{copyFeedback}</p> : null}
                 <div className="modal-actions">
                   <button type="button" className="modal-cancel-btn" onClick={copyAttorneyCredentials}>
@@ -522,7 +499,7 @@ const Attorneys = ({ onNavigate }) => {
             ) : (
               <>
             <p className="modal-subtitle">
-              Creates an attorney login. Credentials can be emailed automatically (Gmail SMTP on Render) or copied after create.
+              Creates an attorney login with a system-generated password. Copy and share the credentials after create.
             </p>
             <form className="modal-form" onSubmit={handleAddAttorney}>
               <div className="modal-input-group">
@@ -535,19 +512,6 @@ const Attorneys = ({ onNavigate }) => {
                   onChange={(e) => setAddEmail(e.target.value)}
                   disabled={addSubmitting}
                   required
-                />
-              </div>
-              <div className="modal-input-group">
-                <label htmlFor="add-attorney-password">Password</label>
-                <input
-                  id="add-attorney-password"
-                  type="password"
-                  autoComplete="new-password"
-                  value={addPassword}
-                  onChange={(e) => setAddPassword(e.target.value)}
-                  disabled={addSubmitting}
-                  required
-                  minLength={6}
                 />
               </div>
               <div className="modal-input-group">

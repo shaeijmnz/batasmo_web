@@ -1142,23 +1142,28 @@ const supabaseAdminDemoteAdminToClient = async ({ targetUserId, actingAdminId })
 
 /**
  * Create a Supabase Auth user (email pre-confirmed) + Attorney profile rows.
+ * Password is optional: when omitted, the system generates one for admin to share.
  */
 const supabaseAdminCreateWalkInAttorney = async ({ email, password, fullName, specialty }) => {
   const normalizedEmail = String(email || '').trim().toLowerCase()
-  const safePassword = String(password || '')
+  let safePassword = String(password || '').trim()
   const displayName = String(fullName || '').trim() || 'Attorney'
   const specialtyRaw = String(specialty || '').trim()
+  let passwordWasGenerated = false
 
   if (!isValidEmailAddress(normalizedEmail)) {
     throw new Error('A valid email address is required.')
   }
-  if (!isStrongAccountPassword(safePassword)) {
+  if (!String(fullName || '').trim()) {
+    throw new Error('Attorney name is required.')
+  }
+  if (!safePassword) {
+    safePassword = generateWalkInPassword()
+    passwordWasGenerated = true
+  } else if (!isStrongAccountPassword(safePassword)) {
     throw new Error(
       'Password must be at least 8 characters and include uppercase, lowercase, number, and symbol.',
     )
-  }
-  if (!String(fullName || '').trim()) {
-    throw new Error('Attorney name is required.')
   }
 
   const specialties = specialtyRaw
@@ -1259,7 +1264,14 @@ const supabaseAdminCreateWalkInAttorney = async ({ email, password, fullName, sp
     )
   }
 
-  return { userId, email: normalizedEmail, fullName: displayName, specialties }
+  return {
+    userId,
+    email: normalizedEmail,
+    fullName: displayName,
+    specialties,
+    generatedPassword: passwordWasGenerated ? safePassword : undefined,
+    mustChangePassword: false,
+  }
 }
 
 /**
