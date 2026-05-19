@@ -4,6 +4,11 @@ import crypto from 'crypto'
 import dotenv from 'dotenv'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import jwt from 'jsonwebtoken'
+import {
+  createDiditRouter,
+  isDiditApiKeyConfigured,
+  isDiditSessionConfigured,
+} from './lib/didit/diditRoutes.js'
 
 dotenv.config()
 
@@ -491,6 +496,19 @@ app.use(
 )
 
 app.use(express.json({ limit: '10mb' }))
+
+function checkDiditMobileAuth(req, res) {
+  const secret = String(process.env.FACEID_MOBILE_SHARED_SECRET || '').trim()
+  if (!secret) return true
+  const token = req.headers.authorization?.replace(/^Bearer\s+/i, '')
+  if (token !== secret) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return false
+  }
+  return true
+}
+
+app.use('/didit', createDiditRouter({ checkMobileAuth: checkDiditMobileAuth }))
 
 // ============================================================================
 // PAYMENT HELPERS (PAYMONGO + SUPABASE)
@@ -2619,6 +2637,8 @@ app.get('/health', (req, res) => {
     configuredProviderMode: CHATBOT_PROVIDER_MODE,
     hasGeminiKey,
     modelCandidates: GEMINI_MODEL_CANDIDATES,
+    diditConfigured: isDiditApiKeyConfigured(),
+    diditSessionReady: isDiditSessionConfigured(),
   })
 })
 
