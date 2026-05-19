@@ -125,14 +125,20 @@ export default function AttorneyNotificationDropdown({
   notifications = [],
   onMarkAllRead,
   isMarkingAllRead = false,
+  variant = 'attorney',
 }) {
   if (!open) return null;
   const hasUnread = notifications.some((n) => n.unread);
+  const isAdminTheme = variant === 'admin';
 
   return (
     <>
       <button type="button" className="atty-notif-backdrop" onClick={onClose} aria-label="Close notifications" />
-      <div className="atty-notif-panel" role="dialog" aria-label="Notifications">
+      <div
+        className={`atty-notif-panel ${isAdminTheme ? 'atty-notif-panel--admin' : ''}`}
+        role="dialog"
+        aria-label="Notifications"
+      >
         <div className="atty-notif-panel__header">
           <span className="atty-notif-panel__title">Notifications</span>
           <div className="atty-notif-panel__header-actions">

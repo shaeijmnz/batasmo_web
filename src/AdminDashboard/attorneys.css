@@ -65,6 +65,69 @@
 /* Attorney Card Styles */
 .attorneys-container { background: white; border-radius: 12px; border: 1px solid var(--border); overflow: visible; }
 .list-header { padding: 20px; border-bottom: 1px solid var(--border); }
+.attorney-created-credentials {
+  margin: 0 0 14px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: #f8f6f2;
+  border: 1px solid #e8e0d4;
+}
+
+.attorney-created-credentials p {
+  margin: 0 0 10px;
+  font-size: 0.9rem;
+  color: #334155;
+}
+
+.attorney-created-credentials p:last-child {
+  margin-bottom: 0;
+}
+
+.attorney-created-credentials code {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.88rem;
+  color: #152238;
+}
+
+.attorney-email-sent-badge {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #ecfdf5;
+  border: 1px solid #86efac;
+  color: #166534;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.attorney-email-warn-badge {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  color: #92400e;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.modal-copy-feedback {
+  margin: 0 0 10px;
+  font-size: 0.82rem;
+  color: #166534;
+}
+
+.attorneys-success-message {
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: #ecfdf5;
+  border: 1px solid #86efac;
+  color: #166534;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
 .attorneys-info-message {
   padding: 16px 20px;
   color: var(--text-secondary);
@@ -487,6 +550,109 @@
 .availability-save-btn:disabled {
   cursor: wait;
   opacity: 0.7;
+}
+
+.availability-save-modal-overlay {
+  align-items: center;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 3100;
+}
+
+.availability-save-modal {
+  animation: availability-save-modal-in 0.28s ease-out;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.22);
+  max-width: 420px;
+  padding: 28px 26px 24px;
+  text-align: center;
+  width: 100%;
+}
+
+@keyframes availability-save-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.availability-save-modal__icon {
+  align-items: center;
+  background: #ecfdf3;
+  border-radius: 999px;
+  color: #15803d;
+  display: flex;
+  height: 72px;
+  justify-content: center;
+  margin: 0 auto 16px;
+  width: 72px;
+}
+
+.availability-save-modal h3 {
+  color: #0f172a;
+  font-size: 1.35rem;
+  margin: 0 0 10px;
+}
+
+.availability-save-modal__lead {
+  color: #334155;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  margin: 0 0 14px;
+}
+
+.availability-save-modal__stats {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  color: #475569;
+  font-size: 0.9rem;
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 12px 16px;
+  text-align: left;
+}
+
+.availability-save-modal__stats li + li {
+  margin-top: 6px;
+}
+
+.availability-save-modal__stats strong {
+  color: #0f172a;
+}
+
+.availability-save-modal__hint {
+  color: #64748b;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  margin: 0 0 18px;
+}
+
+.availability-save-modal__btn {
+  background: #152238;
+  border: none;
+  border-radius: 12px;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 800;
+  padding: 12px 22px;
+  width: 100%;
+}
+
+.availability-save-modal__btn:hover {
+  background: #1e2f4a;
 }
 
 .availability-slot-grid {

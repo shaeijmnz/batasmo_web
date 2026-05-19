@@ -2,11 +2,11 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   LayoutDashboard, Users, Scale,
   BarChart3, Settings, LogOut, Menu, Search,
-  Filter, Download, Mail, Phone, Calendar, Plus, X, Shield, UserMinus
+  Filter, Download, Mail, Phone, Calendar, Plus, X
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { readAdminPageCache, writeAdminPageCache } from '../lib/adminPageCache';
-import { adminCreateWalkInClient, adminDemoteAdminToClient, adminPromoteClientToAdmin } from '../lib/userApi';
+import { adminCreateWalkInClient } from '../lib/userApi';
 import { GMAIL_REQUIRED_MESSAGE, isGmailEmail } from '../lib/validators';
 import './AdminTheme.css';
 import './clients.css';
@@ -43,15 +43,6 @@ const Clients = ({ onNavigate }) => {
   const [addFormError, setAddFormError] = useState('');
   const [createdCredentials, setCreatedCredentials] = useState(null);
   const [copyFeedback, setCopyFeedback] = useState('');
-  const [promoteTarget, setPromoteTarget] = useState(null);
-  const [promoteSubmitting, setPromoteSubmitting] = useState(false);
-  const [promoteError, setPromoteError] = useState('');
-  const [roleActionSuccess, setRoleActionSuccess] = useState('');
-  const [admins, setAdmins] = useState(() => clientsBoot?.admins || []);
-  const [currentAdminId, setCurrentAdminId] = useState('');
-  const [demoteTarget, setDemoteTarget] = useState(null);
-  const [demoteSubmitting, setDemoteSubmitting] = useState(false);
-  const [demoteError, setDemoteError] = useState('');
 
   const navigate = (path) => {
     const pageMap = {
@@ -77,23 +68,17 @@ const Clients = ({ onNavigate }) => {
 
   const loadClients = useCallback(async () => {
     try {
-      const [profilesRes, appointmentsRes, adminsRes] = await Promise.all([
+      const [profilesRes, appointmentsRes] = await Promise.all([
         supabase
           .from('profiles')
           .select('id, full_name, email, phone, address, created_at')
           .eq('role', 'Client')
           .order('created_at', { ascending: false }),
         supabase.from('appointments').select('client_id, status'),
-        supabase
-          .from('profiles')
-          .select('id, full_name, email, created_at')
-          .eq('role', 'Admin')
-          .order('full_name', { ascending: true }),
       ]);
 
       if (profilesRes.error) throw profilesRes.error;
       if (appointmentsRes.error) throw appointmentsRes.error;
-      if (adminsRes.error) throw adminsRes.error;
 
       const profileRows = profilesRes.data || [];
       const appointmentRows = appointmentsRes.data || [];
@@ -134,21 +119,11 @@ const Clients = ({ onNavigate }) => {
         totalConsultations: validConsultations.length,
       };
 
-      const normalizedAdmins = (adminsRes.data || []).map((row) => ({
-        id: row.id,
-        avatar: initialsFromName(row.full_name),
-        name: row.full_name || 'Admin',
-        email: row.email || 'No email',
-        joined: formatJoinedDate(row.created_at),
-      }));
-
       setClients(normalizedClients);
-      setAdmins(normalizedAdmins);
       setClientMetrics(nextMetrics);
       writeAdminPageCache(CLIENTS_CACHE_KEY, {
         clients: normalizedClients,
         clientMetrics: nextMetrics,
-        admins: normalizedAdmins,
       });
       setLoadError('');
     } catch (error) {
@@ -176,12 +151,6 @@ const Clients = ({ onNavigate }) => {
       supabase.removeChannel(appointmentsChannel);
     };
   }, [loadClients]);
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setCurrentAdminId(String(data?.user?.id || ''));
-    });
-  }, []);
 
   useEffect(() => {
     const syncOnlineClients = (channel) => {
@@ -249,54 +218,6 @@ const Clients = ({ onNavigate }) => {
       setCopyFeedback('Copied to clipboard');
     } catch {
       setCopyFeedback('Could not copy — select and copy manually');
-    }
-  };
-
-  const closePromoteModal = () => {
-    if (promoteSubmitting) return;
-    setPromoteTarget(null);
-    setPromoteError('');
-  };
-
-  const closeDemoteModal = () => {
-    if (demoteSubmitting) return;
-    setDemoteTarget(null);
-    setDemoteError('');
-  };
-
-  const handlePromoteToAdmin = async () => {
-    if (!promoteTarget?.id || promoteSubmitting) return;
-    setPromoteSubmitting(true);
-    setPromoteError('');
-    try {
-      const result = await adminPromoteClientToAdmin({ userId: promoteTarget.id });
-      setPromoteTarget(null);
-      setRoleActionSuccess(
-        `${result?.fullName || promoteTarget.name} now has Admin access. They should sign out and sign in again.`,
-      );
-      await loadClients();
-    } catch (err) {
-      setPromoteError(err?.message || 'Could not promote user to Admin.');
-    } finally {
-      setPromoteSubmitting(false);
-    }
-  };
-
-  const handleDemoteToClient = async () => {
-    if (!demoteTarget?.id || demoteSubmitting) return;
-    setDemoteSubmitting(true);
-    setDemoteError('');
-    try {
-      const result = await adminDemoteAdminToClient({ userId: demoteTarget.id });
-      setDemoteTarget(null);
-      setRoleActionSuccess(
-        `${result?.fullName || demoteTarget.name} is now a Client again. They should sign out and sign in again.`,
-      );
-      await loadClients();
-    } catch (err) {
-      setDemoteError(err?.message || 'Could not demote user to Client.');
-    } finally {
-      setDemoteSubmitting(false);
     }
   };
 
@@ -489,97 +410,6 @@ const Clients = ({ onNavigate }) => {
             </div>
           ) : null}
 
-          {promoteTarget ? (
-            <div
-              className="clients-modal-overlay"
-              role="presentation"
-              onMouseDown={(e) => {
-                if (e.target === e.currentTarget) closePromoteModal();
-              }}
-            >
-              <div
-                className="clients-modal clients-modal--promote"
-                role="dialog"
-                aria-labelledby="promote-admin-title"
-                onMouseDown={(e) => e.stopPropagation()}
-              >
-                <div className="clients-modal__header">
-                  <h3 id="promote-admin-title">Promote to Admin</h3>
-                  <button
-                    type="button"
-                    className="clients-modal__close"
-                    disabled={promoteSubmitting}
-                    onClick={closePromoteModal}
-                    aria-label="Close"
-                  >
-                    <X size={20} />
-                  </button>
-                </div>
-                <p className="clients-modal__hint">
-                  <strong>{promoteTarget.name}</strong> ({promoteTarget.email}) will get full Admin Dashboard access.
-                  They will no longer appear in the Clients list. Ask them to sign out and sign in after promotion.
-                </p>
-                {promoteError ? <p className="clients-modal__error">{promoteError}</p> : null}
-                <div className="clients-modal__actions">
-                  <button type="button" className="btn-secondary" disabled={promoteSubmitting} onClick={closePromoteModal}>
-                    Cancel
-                  </button>
-                  <button type="button" className="add-btn clients-promote-confirm" disabled={promoteSubmitting} onClick={handlePromoteToAdmin}>
-                    {promoteSubmitting ? 'Promoting…' : 'Confirm promotion'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : null}
-
-          {demoteTarget ? (
-            <div
-              className="clients-modal-overlay"
-              role="presentation"
-              onMouseDown={(e) => {
-                if (e.target === e.currentTarget) closeDemoteModal();
-              }}
-            >
-              <div
-                className="clients-modal clients-modal--demote"
-                role="dialog"
-                aria-labelledby="demote-client-title"
-                onMouseDown={(e) => e.stopPropagation()}
-              >
-                <div className="clients-modal__header">
-                  <h3 id="demote-client-title">Demote to Client</h3>
-                  <button
-                    type="button"
-                    className="clients-modal__close"
-                    disabled={demoteSubmitting}
-                    onClick={closeDemoteModal}
-                    aria-label="Close"
-                  >
-                    <X size={20} />
-                  </button>
-                </div>
-                <p className="clients-modal__hint">
-                  <strong>{demoteTarget.name}</strong> ({demoteTarget.email}) will lose Admin Dashboard access and
-                  return to the Clients list. For testing only — they must sign out and sign in again.
-                </p>
-                {demoteError ? <p className="clients-modal__error">{demoteError}</p> : null}
-                <div className="clients-modal__actions">
-                  <button type="button" className="btn-secondary" disabled={demoteSubmitting} onClick={closeDemoteModal}>
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="clients-demote-confirm"
-                    disabled={demoteSubmitting}
-                    onClick={handleDemoteToClient}
-                  >
-                    {demoteSubmitting ? 'Demoting…' : 'Confirm demotion'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : null}
-
           {/* Stats Grid */}
           <div className="stats-grid">
             {clientStats.map((stat, index) => (
@@ -612,14 +442,6 @@ const Clients = ({ onNavigate }) => {
             <div className="list-header">
               <h3>All Clients ({filteredClients.length})</h3>
             </div>
-            {roleActionSuccess ? (
-              <p className="clients-success-message">
-                {roleActionSuccess}
-                <button type="button" className="clients-success-dismiss" onClick={() => setRoleActionSuccess('')}>
-                  Dismiss
-                </button>
-              </p>
-            ) : null}
             {loadError ? <p className="clients-info-message">{loadError}</p> : null}
             {loading ? <p className="clients-info-message">Loading clients...</p> : null}
             <div className="client-stack">
@@ -650,86 +472,12 @@ const Clients = ({ onNavigate }) => {
                         <span className="count">{client.consultations}</span>
                         <span className="label">Consultations</span>
                       </div>
-                      <button
-                        type="button"
-                        className="clients-promote-btn"
-                        title="Promote to Admin"
-                        disabled={Boolean(promoteSubmitting || demoteSubmitting)}
-                        onClick={() => {
-                          setPromoteError('');
-                          setPromoteTarget(client);
-                        }}
-                      >
-                        <Shield size={16} />
-                        Promote to Admin
-                      </button>
                     </div>
                   </div>
                 </div>
               ))}
               {!loading && !loadError && filteredClients.length === 0 ? (
                 <p className="clients-info-message">No clients found.</p>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="clients-container clients-container--admins">
-            <div className="list-header">
-              <div>
-                <h3>Admin users ({admins.length})</h3>
-                <p className="clients-admin-subtitle">
-                  Demote back to Client for testing. You cannot demote yourself or the last admin.
-                </p>
-              </div>
-            </div>
-            <div className="client-stack">
-              {admins.map((adminUser) => {
-                const isSelf = String(adminUser.id) === String(currentAdminId);
-                const isLastAdmin = admins.length <= 1;
-                const demoteDisabled = demoteSubmitting || promoteSubmitting || isSelf || isLastAdmin;
-                let demoteTitle = 'Demote to Client';
-                if (isSelf) demoteTitle = 'You cannot demote your own account';
-                else if (isLastAdmin) demoteTitle = 'At least one Admin must remain';
-
-                return (
-                  <div key={adminUser.id} className="client-row client-row--admin">
-                    <div className="client-identity">
-                      <div className="client-avatar client-avatar--admin">{adminUser.avatar}</div>
-                      <div className="client-details">
-                        <div className="name-wrapper">
-                          <span className="client-name">{adminUser.name}</span>
-                          <span className="status-badge status-badge--admin">Admin</span>
-                          {isSelf ? <span className="status-badge status-badge--you">You</span> : null}
-                        </div>
-                        <div className="contact-info">
-                          <span><Mail size={14} /> {adminUser.email}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="client-meta">
-                      <div className="meta-info">
-                        <span><Calendar size={14} /> Joined: {adminUser.joined}</span>
-                      </div>
-                      <button
-                        type="button"
-                        className="clients-demote-btn"
-                        title={demoteTitle}
-                        disabled={demoteDisabled}
-                        onClick={() => {
-                          setDemoteError('');
-                          setDemoteTarget(adminUser);
-                        }}
-                      >
-                        <UserMinus size={16} />
-                        Demote to Client
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-              {!loading && admins.length === 0 ? (
-                <p className="clients-info-message">No admin users found.</p>
               ) : null}
             </div>
           </div>

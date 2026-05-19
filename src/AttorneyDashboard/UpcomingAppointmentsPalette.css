@@ -1,0 +1,128 @@
+/* Light palette overrides for the consultation management / upcoming appointments page. */
+.ua-page {
+  background: linear-gradient(180deg, var(--at-ui-page) 0%, var(--at-ui-page-soft) 100%) !important;
+  color: var(--at-ui-text) !important;
+}
+
+.ua-sidebar {
+  background: var(--at-ui-sidebar) !important;
+  border-right: 1px solid var(--at-ui-border) !important;
+  box-shadow: var(--at-ui-shadow) !important;
+}
+
+.ua-sidebar__logo,
+.ua-topbar,
+.ua-summary,
+.ua-empty-state,
+.ua-card,
+.ua-modal,
+.ua-notif-panel {
+  background: linear-gradient(180deg, var(--at-ui-surface) 0%, var(--at-ui-surface-2) 100%) !important;
+  color: var(--at-ui-text) !important;
+  border-color: var(--at-ui-border) !important;
+}
+
+.ua-sidebar__logo,
+.ua-topbar__logo span,
+.ua-topbar__sub,
+.ua-topbar__eyebrow,
+.ua-profile__name,
+.ua-summary__count,
+.ua-section__title,
+.ua-empty-state__title,
+.ua-card__name,
+.ua-card__time,
+.ua-modal h2 {
+  color: var(--at-ui-text) !important;
+}
+
+.ua-sidebar__item,
+.ua-summary__label,
+.ua-summary__meta,
+.ua-empty-state__text,
+.ua-card__area,
+.ua-card__live-badge,
+.ua-modal__sub,
+.ua-modal__label,
+.ua-modal__hint,
+.ua-modal__error,
+.ua-modal__btn--cancel,
+.ua-notif-item__time {
+  color: var(--at-ui-muted) !important;
+}
+
+.ua-sidebar__item:hover,
+.ua-sidebar__item--active,
+.ua-btn--enter-live,
+.ua-btn--reschedule:hover,
+.ua-summary__refresh,
+.ua-modal__slot--active,
+.ua-modal__btn--confirm {
+  background: linear-gradient(135deg, var(--at-ui-accent) 0%, var(--at-ui-accent-2) 100%) !important;
+  color: #fff !important;
+}
+
+.ua-summary__availability,
+.ua-btn--reschedule,
+.ua-btn--enter,
+.ua-btn--view-file,
+.ua-modal__slot,
+.ua-modal__btn--cancel {
+  background: var(--at-ui-surface) !important;
+  border-color: var(--at-ui-border) !important;
+  color: var(--at-ui-text) !important;
+}
+
+.ua-summary__availability:hover,
+.ua-btn--enter:hover,
+.ua-btn--view-file:hover,
+.ua-modal__slot:hover,
+.ua-modal__btn--cancel:hover {
+  background: #f2e5d4 !important;
+}
+
+.ua-section__count,
+.ua-notif-dot {
+  background: var(--at-ui-accent) !important;
+  color: #fff !important;
+  border-color: var(--at-ui-border) !important;
+}
+
+.ua-notif-panel__header,
+.ua-notif-panel__title,
+.ua-notif-item__text,
+.ua-notif-panel__close {
+  color: var(--ui-text-primary) !important;
+}
+
+.ua-notif-item,
+.ua-card,
+.ua-empty-state,
+.ua-modal,
+.ua-summary,
+.ua-notif-panel {
+  box-shadow: var(--at-ui-shadow) !important;
+}
+
+.ua-modal-overlay,
+.ua-drawer-overlay {
+  background: rgba(11, 15, 25, 0.18) !important;
+}
+
+.ua-modal__input,
+.ua-modal__textarea {
+  background: #fffaf2 !important;
+  border: 1px solid var(--at-ui-border) !important;
+  color: var(--at-ui-text) !important;
+}
+
+.ua-modal__input:focus,
+.ua-modal__textarea:focus {
+  border-color: var(--at-ui-accent) !important;
+  box-shadow: 0 0 0 3px var(--at-ui-accent-soft) !important;
+}
+
+.ua-card__avatar {
+  background: linear-gradient(135deg, var(--at-ui-accent) 0%, var(--at-ui-accent-2) 100%) !important;
+  color: #fff !important;
+}

@@ -1,5 +1,10 @@
 import { getSupabaseConfigError, supabase } from './supabaseClient'
 import {
+  isSignupVerificationComplete,
+  markSignupOtpCompleted,
+  signOutIfSignupIncomplete,
+} from './signupVerification'
+import {
   isGmailEmail,
   isPhilippineMobile,
   isStrongPassword,
@@ -12,9 +17,19 @@ import {
 
 export const PENDING_OTP_CHANNEL_KEY = 'batasmo_pending_otp_channel'
 export const PENDING_SIGNUP_USER_ID_KEY = 'batasmo_pending_signup_user_id'
+export const PENDING_SIGNUP_ID_KEY = 'batasmo_pending_signup_id'
 export const PENDING_SMS_PHONE_KEY = 'batasmo_pending_sms_phone'
 export const OTP_RESUME_LOGIN_KEY = 'batasmo_otp_resume_login'
 export const OTP_RESUME_SIGNUP_KEY = 'batasmo_otp_resume_signup'
+
+const getBackendApiBase = () =>
+  String(
+    process.env.REACT_APP_PAYMENT_API_URL ||
+      process.env.REACT_APP_CHATBOT_API_URL ||
+      '',
+  )
+    .trim()
+    .replace(/\/+$/, '')
 
 const normalizeRole = (role) => {
   const value = String(role || '').trim().toLowerCase()
@@ -23,30 +38,9 @@ const normalizeRole = (role) => {
   return 'Client'
 }
 
-const AUTH_REQUEST_TIMEOUT_MS = 20000
-
-async function withAuthTimeout(promise, label = 'request') {
-  let timer
-  try {
-    return await Promise.race([
-      promise,
-      new Promise((_, reject) => {
-        timer = setTimeout(() => {
-          reject(new Error(`AUTH_TIMEOUT:${label}`))
-        }, AUTH_REQUEST_TIMEOUT_MS)
-      }),
-    ])
-  } finally {
-    if (timer) clearTimeout(timer)
-  }
-}
-
 export async function checkEmailLockout(email) {
   try {
-    const { data } = await withAuthTimeout(
-      supabase.rpc('check_login_lockout', { user_email: email }),
-      'lockout',
-    )
+    const { data } = await supabase.rpc('check_login_lockout', { user_email: email })
     if (typeof data === 'boolean') {
       return data ? 600 : 0
     }
@@ -107,72 +101,95 @@ export async function signUpWithEmail({
       ? normalizedSex
       : null
 
-  const { data, error } = await supabase.auth.signUp({
-    email: normalizedEmail,
-    password,
-    options: {
-      data: {
-        full_name: fullName,
-        role: normalizedRole,
-      },
-    },
-  })
-
-  if (error) {
-    throw new Error(error.message)
+  const base = getBackendApiBase()
+  if (!base) {
+    throw new Error(
+      'Signup is not configured. Set REACT_APP_PAYMENT_API_URL on Vercel to your Render backend URL.',
+    )
   }
 
-  if (data?.session && data.user) {
-    const { error: profileError } = await supabase.from('profiles').upsert({
-      id: data.user.id,
+  const response = await fetch(`${base}/auth/signup-start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
       email: normalizedEmail,
-      full_name: fullName,
+      password,
+      fullName,
       role: normalizedRole,
       sex: safeSex,
       phone: phone || null,
-      age: age || null,
+      age: parsedAge,
       address: address || null,
-      guardian_name: guardianName || null,
-      guardian_contact: guardianContact || null,
-      preferred_otp_channel: otpChannel,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
+      guardianName: guardianName || null,
+      guardianContact: guardianContact || null,
+      preferredOtpChannel: otpChannel,
+    }),
+  })
 
-    if (profileError) {
-      console.error('Failed to create profile:', profileError)
-    }
-
-    if (normalizedRole === 'Attorney') {
-      const { error: attorneyProfileError } = await supabase
-        .from('attorney_profiles')
-        .upsert(
-          {
-            user_id: data.user.id,
-            is_verified: false,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'user_id' },
-        )
-
-      if (attorneyProfileError) {
-        console.error('Failed to initialize attorney profile:', attorneyProfileError)
-      }
-    }
-
-    data.user.role = normalizedRole
-    data.user.name = fullName
-    data.user.phone = phone
-    data.user.address = address
-
-    // If Supabase returns a session before email is confirmed, end the session so the user
-    // must complete email or SMS OTP before reaching the dashboard.
-    if (!data.user.email_confirmed_at) {
-      await supabase.auth.signOut()
-    }
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    throw new Error(payload?.error || 'Failed to start signup.')
   }
 
-  return { token: data?.session?.access_token, user: data?.user, preferredOtpChannel: otpChannel }
+  return {
+    pendingId: payload?.pendingId,
+    email: payload?.email || normalizedEmail,
+    preferredOtpChannel: payload?.preferredOtpChannel || otpChannel,
+  }
+}
+
+/**
+ * Resend signup verification code (pending signup — no Supabase auth user yet).
+ */
+export async function sendSignupVerificationEmail({ email, pendingId }) {
+  const normalizedEmail = normalizeAuthEmail(email)
+  if (!normalizedEmail && !pendingId) throw new Error('Email is required.')
+
+  const base = getBackendApiBase()
+  if (!base) {
+    throw new Error('Signup service is not configured (REACT_APP_PAYMENT_API_URL).')
+  }
+
+  const body = {}
+  if (normalizedEmail) body.email = normalizedEmail
+  if (pendingId) body.pendingId = String(pendingId).trim()
+
+  const response = await fetch(`${base}/auth/signup-resend-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    throw new Error(payload?.error || 'Failed to send verification email.')
+  }
+  return payload
+}
+
+/**
+ * Verify OTP and create Supabase account (auth + profile) — only after this does email appear in Supabase.
+ */
+export async function completePendingSignup({ email, pendingId, otp, password }) {
+  const base = getBackendApiBase()
+  if (!base) {
+    throw new Error('Signup service is not configured (REACT_APP_PAYMENT_API_URL).')
+  }
+
+  const response = await fetch(`${base}/auth/signup-complete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: normalizeAuthEmail(email),
+      pendingId: pendingId ? String(pendingId).trim() : undefined,
+      otp: String(otp || '').replace(/\D/g, ''),
+      password: String(password || ''),
+    }),
+  })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    throw new Error(payload?.error || 'Verification failed.')
+  }
+  return payload
 }
 
 /**
@@ -288,13 +305,10 @@ export async function signInWithEmail({ email, password }) {
     throw new Error(`LOCKOUT:${lockoutBefore}`)
   }
 
-  const { data, error } = await withAuthTimeout(
-    supabase.auth.signInWithPassword({
-      email: normalizedEmail,
-      password,
-    }),
-    'signIn',
-  )
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: normalizedEmail,
+    password,
+  })
 
   if (error) {
     const normalized = String(error.message || '').toLowerCase()
@@ -321,19 +335,24 @@ export async function signInWithEmail({ email, password }) {
   ).catch(() => {})
 
   if (data?.user) {
+    if (!isSignupVerificationComplete(data.user)) {
+      await signOutIfSignupIncomplete(data.user)
+      const err = new Error('SIGNUP_OTP_REQUIRED')
+      err.code = 'SIGNUP_OTP_REQUIRED'
+      err.email = normalizedEmail
+      throw err
+    }
+
     const meta = data.user.user_metadata || {}
     let dbRole = normalizeRole(meta.role || 'Client')
     let dbName = meta.full_name || normalizedEmail
 
     // Prefer `profiles.role` so Admin (and other roles) stay correct even if auth metadata is stale.
-    const { data: profileRow } = await withAuthTimeout(
-      supabase
-        .from('profiles')
-        .select('role, full_name')
-        .eq('id', data.user.id)
-        .maybeSingle(),
-      'profile',
-    )
+    const { data: profileRow } = await supabase
+      .from('profiles')
+      .select('role, full_name')
+      .eq('id', data.user.id)
+      .maybeSingle()
 
     if (profileRow?.role) {
       dbRole = normalizeRole(profileRow.role)
@@ -366,15 +385,23 @@ export async function signInWithEmail({ email, password }) {
 }
 
 export async function verifySignUpOtp({ email, token }) {
-  const { error } = await supabase.auth.verifyOtp({
-    email,
-    token,
-    type: 'signup',
-  })
-
-  if (error) {
-    throw new Error(error.message)
+  const normalizedToken = String(token || '').replace(/\D/g, '')
+  let lastError = null
+  for (const type of ['signup', 'email']) {
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token: normalizedToken,
+      type,
+    })
+    if (!error) {
+      lastError = null
+      break
+    }
+    lastError = error
   }
+  if (lastError) throw new Error(lastError.message)
+
+  await markSignupOtpCompleted()
 
   const {
     data: { user },
@@ -399,17 +426,8 @@ export async function verifySignUpOtp({ email, token }) {
   return { success: true }
 }
 
-export async function resendSignUpOtp({ email }) {
-  const { error } = await supabase.auth.resend({
-    type: 'signup',
-    email,
-  })
-
-  if (error) {
-    throw new Error(error.message)
-  }
-
-  return { success: true }
+export async function resendSignUpOtp({ email, pendingId }) {
+  return sendSignupVerificationEmail({ email, pendingId })
 }
 
 export async function startPasswordRecovery({ email }) {

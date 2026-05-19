@@ -1,0 +1,113 @@
+/* Light palette overrides for the attorney messages page. */
+.am-page {
+  background: linear-gradient(180deg, var(--at-ui-page) 0%, var(--at-ui-page-soft) 100%) !important;
+  color: var(--at-ui-text) !important;
+}
+
+.am-sidebar,
+.am-topbar,
+.am-chat-container,
+.am-chat-header,
+.am-chat-actions,
+.am-input-bar,
+.am-confirm-modal {
+  background: linear-gradient(180deg, var(--at-ui-surface) 0%, var(--at-ui-surface-2) 100%) !important;
+  color: var(--at-ui-text) !important;
+  border-color: var(--at-ui-border) !important;
+}
+
+.am-sidebar,
+.am-chat-container {
+  box-shadow: var(--at-ui-shadow) !important;
+}
+
+.am-sidebar__logo,
+.am-topbar__logo,
+.am-topbar__user-name,
+.am-chat-header__name,
+.am-chat-header__status,
+.am-timer-chip__label,
+.am-timer-chip__value,
+.am-thread-select,
+.am-date-divider span,
+.am-bubble__text,
+.am-bubble__time,
+.am-input-bar__textarea,
+.am-input-bar__textarea::placeholder,
+.am-confirm-modal h3,
+.am-confirm-modal p {
+  color: var(--at-ui-text) !important;
+}
+
+.am-sidebar__item,
+.am-timer-chip,
+.am-bubble--admin,
+.am-bubble--attorney,
+.am-thread-select,
+.am-input-bar__textarea,
+.am-confirm-modal,
+.am-confirm-modal p,
+.am-end-session-btn,
+.am-attach-btn,
+.am-bubble__file-link,
+.am-bubble__attachment-error,
+.am-video-error {
+  color: var(--at-ui-muted) !important;
+}
+
+.am-sidebar__item:hover,
+.am-sidebar__item--active,
+.am-video-call-btn,
+.am-input-bar__send,
+.am-end-session-btn--top,
+.am-bubble--attorney,
+.am-chat-header__status {
+  background: linear-gradient(135deg, var(--at-ui-accent) 0%, var(--at-ui-accent-2) 100%) !important;
+  color: #fff !important;
+}
+
+.am-thread-select,
+.am-input-bar__textarea,
+.am-confirm-modal,
+.am-timer-chip,
+.am-bubble--admin,
+.am-bubble--attorney {
+  border: 1px solid var(--at-ui-border) !important;
+}
+
+.am-thread-select option {
+  background: var(--at-ui-surface) !important;
+  color: var(--at-ui-text) !important;
+}
+
+.am-date-divider span,
+.am-bubble--admin,
+.am-bubble--attorney,
+.am-confirm-modal,
+.am-timer-chip,
+.am-attach-btn,
+.am-input-bar__textarea {
+  background: linear-gradient(180deg, var(--at-ui-surface) 0%, var(--at-ui-surface-2) 100%) !important;
+}
+
+.am-bubble--attorney,
+.am-video-call-btn,
+.am-input-bar__send {
+  background: linear-gradient(135deg, var(--at-ui-accent) 0%, var(--at-ui-accent-2) 100%) !important;
+  color: #fff !important;
+}
+
+.am-online-dot {
+  background: var(--at-ui-accent) !important;
+}
+
+.am-modal-overlay,
+.am-confirm-overlay {
+  background: rgba(11, 15, 25, 0.18) !important;
+}
+
+.am-modal,
+.am-confirm-modal {
+  background: linear-gradient(180deg, var(--at-ui-surface) 0%, var(--at-ui-surface-2) 100%) !important;
+  box-shadow: var(--at-ui-shadow) !important;
+}

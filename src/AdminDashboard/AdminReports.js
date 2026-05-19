@@ -10,12 +10,17 @@ import {
   Menu,
   Download,
   Megaphone,
+  ImagePlus,
+  X,
   TrendingUp,
   DollarSign,
   UserCheck,
-  Star,
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
+import {
+  uploadAnnouncementImage,
+  validateAnnouncementImageFile,
+} from '../lib/announcementImages';
 import './AdminTheme.css';
 import './reports.css';
 
@@ -75,7 +80,10 @@ const Reports = ({ onNavigate }) => {
     title: '',
     body: '',
     type: 'general',
+    imageUrl: '',
   });
+  const [announcementImagePreview, setAnnouncementImagePreview] = useState('');
+  const [announcementImageUploading, setAnnouncementImageUploading] = useState(false);
   const [reportMetrics, setReportMetrics] = useState({
     totalRevenue: 0,
     currentRevenue: 0,
@@ -83,9 +91,6 @@ const Reports = ({ onNavigate }) => {
     totalCompletedConsultations: 0,
     currentCompletedConsultations: 0,
     previousCompletedConsultations: 0,
-    averageRating: 0,
-    currentAverageRating: 0,
-    previousAverageRating: 0,
   });
 
   const navigate = (path) => {
@@ -126,7 +131,7 @@ const Reports = ({ onNavigate }) => {
         const months = getLastSixMonths();
         const monthMetricsMap = new Map(months.map((item) => [item.key, { revenue: 0, consultations: 0 }]));
 
-        const [transactionsRes, appointmentsRes, feedbackRes, notarialRes] = await Promise.all([
+        const [transactionsRes, appointmentsRes, notarialRes] = await Promise.all([
           supabase
             .from('transactions')
             .select('amount, payment_status, created_at, client_id, appointment_id')
@@ -137,17 +142,12 @@ const Reports = ({ onNavigate }) => {
             .select('id, title, status, scheduled_at, updated_at, attorney_id, attorney:attorney_id(full_name), client_id')
             .order('scheduled_at', { ascending: false }),
           supabase
-            .from('consultation_feedback')
-            .select('rating, created_at')
-            .order('created_at', { ascending: false }),
-          supabase
             .from('notarial_requests')
             .select('id, service_type, status, created_at, updated_at'),
         ]);
 
         if (transactionsRes.error) throw transactionsRes.error;
         if (appointmentsRes.error) throw appointmentsRes.error;
-        if (feedbackRes.error) throw feedbackRes.error;
         if (notarialRes.error) throw notarialRes.error;
 
         const transactions = transactionsRes.data || [];
@@ -155,7 +155,6 @@ const Reports = ({ onNavigate }) => {
           (item) => String(item.status || '').toLowerCase() !== 'cancelled',
         );
         const completedAppointments = appointments.filter((item) => String(item.status || '').toLowerCase() === 'completed');
-        const feedbackRows = feedbackRes.data || [];
         const notarialRequests = notarialRes.data || [];
 
         const now = new Date();
@@ -229,31 +228,6 @@ const Reports = ({ onNavigate }) => {
           .sort((a, b) => b.consultations - a.consultations)
           .slice(0, 6);
 
-        const ratingValues = feedbackRows.map((row) => Number(row.rating || 0)).filter((value) => value > 0);
-        const averageRating = ratingValues.length
-          ? ratingValues.reduce((sum, value) => sum + value, 0) / ratingValues.length
-          : 0;
-        const currentMonthRatings = feedbackRows
-          .filter((row) => {
-            const createdAt = row.created_at ? new Date(row.created_at) : null;
-            return createdAt && !Number.isNaN(createdAt.getTime()) && createdAt >= startCurrentMonth;
-          })
-          .map((row) => Number(row.rating || 0))
-          .filter((value) => value > 0);
-        const previousMonthRatings = feedbackRows
-          .filter((row) => {
-            const createdAt = row.created_at ? new Date(row.created_at) : null;
-            return createdAt && !Number.isNaN(createdAt.getTime()) && createdAt >= startPreviousMonth && createdAt < startCurrentMonth;
-          })
-          .map((row) => Number(row.rating || 0))
-          .filter((value) => value > 0);
-        const currentAverageRating = currentMonthRatings.length
-          ? currentMonthRatings.reduce((sum, value) => sum + value, 0) / currentMonthRatings.length
-          : 0;
-        const previousAverageRating = previousMonthRatings.length
-          ? previousMonthRatings.reduce((sum, value) => sum + value, 0) / previousMonthRatings.length
-          : 0;
-
         const notarialStatusMap = new Map([
           ['Pending', 0],
           ['In Progress', 0],
@@ -283,9 +257,6 @@ const Reports = ({ onNavigate }) => {
           totalCompletedConsultations: completedAppointments.length,
           currentCompletedConsultations,
           previousCompletedConsultations,
-          averageRating,
-          currentAverageRating,
-          previousAverageRating,
         });
         setLoadError('');
       } catch (error) {
@@ -418,14 +389,6 @@ const Reports = ({ onNavigate }) => {
       icon: <UserCheck />,
       color: '#22c55e',
     },
-    {
-      label: 'Avg. Rating',
-      value: reportMetrics.averageRating.toFixed(1),
-      change: (reportMetrics.currentAverageRating - reportMetrics.previousAverageRating).toFixed(1),
-      caption: 'current month rating delta',
-      icon: <Star />,
-      color: '#a855f7',
-    },
   ], [onlineClientIds.size, reportMetrics]);
 
   const downloadCsv = (filename, header, rows) => {
@@ -466,7 +429,6 @@ const Reports = ({ onNavigate }) => {
       `Total Revenue,${Math.round(reportMetrics.totalRevenue)}`,
       `Completed Consultations,${reportMetrics.totalCompletedConsultations}`,
       `Active Clients Online,${onlineClientIds.size}`,
-      `Average Rating,${reportMetrics.averageRating.toFixed(1)}`,
       '',
       'Monthly Trend',
       'Month,Revenue,Completed Consultations',
@@ -495,32 +457,82 @@ const Reports = ({ onNavigate }) => {
     return 'admin_announcement';
   };
 
+  const clearAnnouncementImage = () => {
+    if (announcementImagePreview) {
+      URL.revokeObjectURL(announcementImagePreview);
+    }
+    setAnnouncementImagePreview('');
+    setAnnouncementForm((prev) => ({ ...prev, imageUrl: '' }));
+  };
+
   const openAnnouncementModal = () => {
     setAnnouncementError('');
     setAnnouncementSuccess('');
+    clearAnnouncementImage();
     setAnnouncementForm({
       targetMode: 'all',
       clientId: '',
       title: '',
       body: '',
       type: 'general',
+      imageUrl: '',
     });
     setAnnouncementModalOpen(true);
   };
 
   const closeAnnouncementModal = () => {
-    if (announcementSending) return;
+    if (announcementSending || announcementImageUploading) return;
+    clearAnnouncementImage();
     setAnnouncementModalOpen(false);
+  };
+
+  const handleAnnouncementImagePick = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    const validationError = validateAnnouncementImageFile(file);
+    if (validationError) {
+      setAnnouncementError(validationError);
+      return;
+    }
+
+    if (announcementImagePreview) {
+      URL.revokeObjectURL(announcementImagePreview);
+    }
+    setAnnouncementImagePreview(URL.createObjectURL(file));
+    setAnnouncementError('');
+    setAnnouncementImageUploading(true);
+
+    try {
+      const { publicUrl } = await uploadAnnouncementImage(file);
+      setAnnouncementForm((prev) => ({ ...prev, imageUrl: publicUrl }));
+    } catch (error) {
+      clearAnnouncementImage();
+      setAnnouncementError(error.message || 'Failed to upload image.');
+    } finally {
+      setAnnouncementImageUploading(false);
+    }
   };
 
   const sendAnnouncement = async () => {
     const title = String(announcementForm.title || '').trim();
     const body = String(announcementForm.body || '').trim();
+    const imageUrl = String(announcementForm.imageUrl || '').trim();
     const targetMode = announcementForm.targetMode === 'single' ? 'single' : 'all';
     const selectedClientId = String(announcementForm.clientId || '').trim();
 
-    if (!title || !body) {
-      setAnnouncementError('Title and announcement message are required.');
+    if (announcementImageUploading) {
+      setAnnouncementError('Please wait for the image upload to finish.');
+      return;
+    }
+
+    if (!title) {
+      setAnnouncementError('Title is required.');
+      return;
+    }
+    if (!body && !imageUrl) {
+      setAnnouncementError('Add a message, an image, or both.');
       return;
     }
 
@@ -544,13 +556,15 @@ const Reports = ({ onNavigate }) => {
     setAnnouncementSuccess('');
     try {
       const nowIso = new Date().toISOString();
+      const notificationData = imageUrl ? { image_url: imageUrl } : {};
       const payload = targetClientIds.map((clientId) => ({
         user_id: clientId,
         title,
-        body,
+        body: body || (imageUrl ? 'See attached announcement image.' : ''),
         type: toAnnouncementType(announcementForm.type),
         is_read: false,
         created_at: nowIso,
+        data: notificationData,
       }));
       const { error } = await supabase.from('notifications').insert(payload);
       if (error) throw error;
@@ -568,10 +582,11 @@ const Reports = ({ onNavigate }) => {
         extraRows.push({
           user_id: row.id,
           title: `Admin announcement: ${title}`,
-          body,
+          body: body || (imageUrl ? 'See attached announcement image.' : ''),
           type: annType,
           is_read: false,
           created_at: nowIso,
+          data: notificationData,
         });
       });
       (adminRows || []).forEach((row) => {
@@ -601,10 +616,12 @@ const Reports = ({ onNavigate }) => {
           ? 'Announcement sent to selected client.'
           : `Announcement sent to ${payload.length} clients.`,
       );
+      clearAnnouncementImage();
       setAnnouncementForm((previous) => ({
         ...previous,
         title: '',
         body: '',
+        imageUrl: '',
       }));
     } catch (error) {
       setAnnouncementError(error.message || 'Failed to send announcement.');
@@ -791,19 +808,63 @@ const Reports = ({ onNavigate }) => {
                     placeholder="Type your announcement for clients..."
                     value={announcementForm.body}
                     onChange={(event) => setAnnouncementForm((prev) => ({ ...prev, body: event.target.value }))}
-                    disabled={announcementSending}
+                    disabled={announcementSending || announcementImageUploading}
                   />
                 </label>
+
+                <div className="announce-full announce-image-field">
+                  <span className="announce-image-label">Image (optional)</span>
+                  <p className="announce-image-hint">JPG, PNG, WebP, or GIF — max 5 MB. Shown in client and attorney announcement feeds.</p>
+                  {announcementImagePreview || announcementForm.imageUrl ? (
+                    <div className="announce-image-preview-wrap">
+                      <img
+                        src={announcementImagePreview || announcementForm.imageUrl}
+                        alt="Announcement preview"
+                        className="announce-image-preview"
+                      />
+                      <button
+                        type="button"
+                        className="announce-image-remove"
+                        onClick={clearAnnouncementImage}
+                        disabled={announcementSending || announcementImageUploading}
+                        aria-label="Remove image"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ) : null}
+                  <label className="announce-image-upload-btn">
+                    <ImagePlus size={18} />
+                    {announcementImageUploading ? 'Uploading...' : announcementImagePreview ? 'Replace image' : 'Insert image'}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      className="announce-image-input"
+                      onChange={handleAnnouncementImagePick}
+                      disabled={announcementSending || announcementImageUploading}
+                    />
+                  </label>
+                </div>
               </div>
 
               {announcementError ? <p className="announce-error">{announcementError}</p> : null}
               {announcementSuccess ? <p className="announce-success">{announcementSuccess}</p> : null}
 
               <div className="announce-actions">
-                <button type="button" className="chart-export" onClick={closeAnnouncementModal} disabled={announcementSending}>
+                <button
+                  type="button"
+                  className="chart-export"
+                  onClick={closeAnnouncementModal}
+                  disabled={announcementSending || announcementImageUploading}
+                >
                   Close
                 </button>
-                <button type="button" className="export-all-btn" onClick={sendAnnouncement} disabled={announcementSending}>
+                <button
+                  type="button"
+                  className="export-all-btn"
+                  onClick={sendAnnouncement}
+                  disabled={announcementSending || announcementImageUploading}
+                >
                   {announcementSending ? 'Sending...' : 'Send Announcement'}
                 </button>
               </div>

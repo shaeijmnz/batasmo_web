@@ -1,11 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   LayoutDashboard, Users, Scale, FileText, MessageSquare,
-  BarChart3, Settings, LogOut, Menu, Star,
-  X, Send, Trash2, Eye, AlertCircle, CheckCircle, Calendar, Bell,
+  BarChart3, Settings, LogOut, Menu,
+  X, Send, Trash2, Eye, AlertCircle, CheckCircle, Calendar, Bell, Video,
 } from 'lucide-react';
+import {
+  countOngoingVideoCallRooms,
+  getQueueRequestDisplayStatus,
+  isOngoingVideoCallRoom,
+} from '../lib/consultationStatus';
 import { supabase } from '../lib/supabaseClient';
 import AttorneyNotificationDropdown from '../AttorneyDashboard/AttorneyNotificationDropdown';
+import './AdminNotificationDropdown.css';
 import AdminSupportDrawer from './AdminSupportDrawer';
 import AdminRescheduleRequests from './AdminRescheduleRequests';
 import {
@@ -142,20 +148,6 @@ const formatNotifBadgeCount = (count) => {
   return String(safeCount);
 };
 
-const normalizeRequestStatusForUi = (status) => {
-  const value = String(status || '').toLowerCase();
-  if (value === 'started' || value === 'in_progress' || value === 'in-progress' || value === 'active') {
-    return 'In Progress';
-  }
-  if (value === 'completed') {
-    return 'Completed';
-  }
-  if (value === 'confirmed' || value === 'rescheduled') {
-    return 'Scheduled';
-  }
-  return 'Pending';
-};
-
 const formatScheduleLabel = (value) => {
   const parsed = value ? new Date(value) : null;
   if (!parsed || Number.isNaN(parsed.getTime())) {
@@ -175,6 +167,24 @@ const formatAttorneySpecialty = (value) => {
   }
   const text = String(value || '').trim();
   return text || 'Legal Practice';
+};
+
+const CANCELLED_APPOINTMENT_STATUSES = new Set(['cancelled', 'rejected']);
+
+const isCountableConsultationStatus = (status) => {
+  const value = String(status || '').toLowerCase();
+  return Boolean(value) && !CANCELLED_APPOINTMENT_STATUSES.has(value);
+};
+
+/** Matches Admin Consultations: completed status, closed room, or started session (not live video). */
+const isFinishedConsultation = (status, closedRoomAppointmentIds, appointmentId, roomByAppointment) => {
+  const room = roomByAppointment?.get?.(appointmentId);
+  if (isOngoingVideoCallRoom(room)) return false;
+  const value = String(status || '').toLowerCase();
+  if (value === 'completed') return true;
+  if (appointmentId && closedRoomAppointmentIds?.has(appointmentId)) return true;
+  if (value === 'started') return true;
+  return false;
 };
 
 const resolveAttorneyImage = (name) => {
@@ -244,6 +254,9 @@ const Dashboard = ({ onNavigate }) => {
   );
   const [recentRequests, setRecentRequests] = useState(() => dashboardBoot?.recentRequests || []);
   const [topAttorneys, setTopAttorneys] = useState(() => dashboardBoot?.topAttorneys || []);
+  const [ongoingVideoCallCount, setOngoingVideoCallCount] = useState(
+    () => dashboardBoot?.ongoingVideoCallCount ?? 0,
+  );
 
   const [adminUserId, setAdminUserId] = useState('');
   const [adminNotifications, setAdminNotifications] = useState([]);
@@ -337,7 +350,6 @@ const Dashboard = ({ onNavigate }) => {
           name: attorney.full_name || 'Unnamed Attorney',
           specialty: 'Not set',
           consultations: 0,
-          rating: null,
           email: attorney.email || 'No email',
         }));
 
@@ -380,9 +392,7 @@ const Dashboard = ({ onNavigate }) => {
     const loadQueueAndTopAttorneys = async () => {
       if (!isMounted) return;
 
-      const appointmentStatsStatuses = ['completed', ...ACTIVE_QUEUE_STATUSES];
-
-      const [profilesRes, attorneyProfilesRes, queueAppointmentsRes, statsAppointmentsRes, feedbackRes] =
+      const [profilesRes, attorneyProfilesRes, queueAppointmentsRes, statsAppointmentsRes, roomsRes] =
         await Promise.all([
           supabase
             .from('profiles')
@@ -398,9 +408,11 @@ const Dashboard = ({ onNavigate }) => {
             .limit(8),
           supabase
             .from('appointments')
-            .select('attorney_id, status')
-            .in('status', appointmentStatsStatuses),
-          supabase.from('consultation_feedback').select('attorney_id, rating'),
+            .select('id, attorney_id, status')
+            .neq('status', 'cancelled'),
+          supabase
+            .from('consultation_rooms')
+            .select('appointment_id, is_closed, video_meeting_id'),
         ]);
 
       if (profilesRes.error) {
@@ -417,9 +429,24 @@ const Dashboard = ({ onNavigate }) => {
       if (statsAppointmentsRes.error) {
         console.warn('[admin-dashboard] appointment stats load failed', statsAppointmentsRes.error);
       }
-      if (feedbackRes.error) {
-        console.warn('[admin-dashboard] feedback load failed', feedbackRes.error);
+      if (roomsRes.error) {
+        console.warn('[admin-dashboard] consultation rooms load failed', roomsRes.error);
       }
+
+      const rooms = roomsRes.data || [];
+      const roomByAppointment = new Map();
+      rooms.forEach((row) => {
+        if (row.appointment_id) roomByAppointment.set(row.appointment_id, row);
+      });
+
+      const nextOngoingVideoCallCount = countOngoingVideoCallRooms(rooms);
+      setOngoingVideoCallCount(nextOngoingVideoCallCount);
+
+      const closedRoomAppointmentIds = new Set(
+        rooms
+          .filter((row) => row.is_closed && row.appointment_id)
+          .map((row) => row.appointment_id),
+      );
 
       const attorneyNameById = new Map(
         (profilesRes.data || []).map((row) => [row.id, row.full_name || 'Attorney']),
@@ -460,24 +487,36 @@ const Dashboard = ({ onNavigate }) => {
           name: clientNameById.get(item.client_id) || 'Client',
           atty: attorneyNameById.get(item.attorney_id) || 'Attorney',
           law: item.title || 'Consultation',
-          status: normalizeRequestStatusForUi(item.status),
+          status: getQueueRequestDisplayStatus(
+            item.status,
+            roomByAppointment.get(item.id),
+          ),
           bookedLabel: `Booked ${formatScheduleLabel(item.created_at)}`,
           age: `Scheduled ${formatScheduleLabel(item.scheduled_at)}`,
         }));
         setRecentRequests(nextRecentRequests);
       }
 
-      const completedCountByAttorney = new Map();
+      const totalConsultationsByAttorney = new Map();
+      const finishedConsultationsByAttorney = new Map();
       const activeQueueCountByAttorney = new Map();
       appointmentRows.forEach((row) => {
         if (!row.attorney_id) return;
         const status = String(row.status || '').toLowerCase();
-        if (status === 'completed') {
-          completedCountByAttorney.set(
+        if (!isCountableConsultationStatus(status)) return;
+
+        totalConsultationsByAttorney.set(
+          row.attorney_id,
+          Number(totalConsultationsByAttorney.get(row.attorney_id) || 0) + 1,
+        );
+
+        if (isFinishedConsultation(status, closedRoomAppointmentIds, row.id, roomByAppointment)) {
+          finishedConsultationsByAttorney.set(
             row.attorney_id,
-            Number(completedCountByAttorney.get(row.attorney_id) || 0) + 1,
+            Number(finishedConsultationsByAttorney.get(row.attorney_id) || 0) + 1,
           );
         }
+
         if (ACTIVE_QUEUE_STATUSES.includes(status)) {
           activeQueueCountByAttorney.set(
             row.attorney_id,
@@ -486,23 +525,10 @@ const Dashboard = ({ onNavigate }) => {
         }
       });
 
-      const ratingByAttorney = new Map();
-      (feedbackRes.data || []).forEach((row) => {
-        if (!row.attorney_id) return;
-        const existing = ratingByAttorney.get(row.attorney_id) || { total: 0, count: 0 };
-        existing.total += Number(row.rating || 0);
-        existing.count += 1;
-        ratingByAttorney.set(row.attorney_id, existing);
-      });
-
       const nextTopAttorneys = (profilesRes.data || [])
         .map((profile) => {
-          const ratingMeta = ratingByAttorney.get(profile.id);
-          const avgRating =
-            ratingMeta && ratingMeta.count > 0
-              ? Number((ratingMeta.total / ratingMeta.count).toFixed(1))
-              : null;
-          const completed = Number(completedCountByAttorney.get(profile.id) || 0);
+          const totalConsultations = Number(totalConsultationsByAttorney.get(profile.id) || 0);
+          const finishedConsultations = Number(finishedConsultationsByAttorney.get(profile.id) || 0);
           const inQueue = Number(activeQueueCountByAttorney.get(profile.id) || 0);
           const displayName = profile.full_name || 'Attorney';
           return {
@@ -510,15 +536,15 @@ const Dashboard = ({ onNavigate }) => {
             name: displayName,
             imageUrl: resolveAttorneyImage(displayName),
             law: formatAttorneySpecialty(specialtyByAttorney.get(profile.id)),
-            consultations: completed,
+            consultations: totalConsultations,
+            finished: finishedConsultations,
             inQueue,
-            rating: avgRating,
           };
         })
         .sort((a, b) => {
+          if (b.finished !== a.finished) return b.finished - a.finished;
           if (b.consultations !== a.consultations) return b.consultations - a.consultations;
-          if (b.inQueue !== a.inQueue) return b.inQueue - a.inQueue;
-          return (b.rating || 0) - (a.rating || 0);
+          return b.inQueue - a.inQueue;
         })
         .slice(0, 4)
         .map((item, index) => ({ ...item, rank: index + 1 }));
@@ -527,6 +553,7 @@ const Dashboard = ({ onNavigate }) => {
       persistDashboardCache({
         recentRequests: nextRecentRequests,
         topAttorneys: nextTopAttorneys,
+        ongoingVideoCallCount: nextOngoingVideoCallCount,
       });
     };
 
@@ -548,18 +575,18 @@ const Dashboard = ({ onNavigate }) => {
           )
           .subscribe();
 
-        const feedbackChannel = supabase
-          .channel('admin-dashboard-feedback')
+        const roomsChannel = supabase
+          .channel('admin-dashboard-consultation-rooms')
           .on(
             'postgres_changes',
-            { event: '*', schema: 'public', table: 'consultation_feedback' },
+            { event: '*', schema: 'public', table: 'consultation_rooms' },
             () => onChange(),
           )
           .subscribe();
 
         return () => {
           supabase.removeChannel(appointmentsChannel);
-          supabase.removeChannel(feedbackChannel);
+          supabase.removeChannel(roomsChannel);
         };
       },
     });
@@ -1064,6 +1091,17 @@ const Dashboard = ({ onNavigate }) => {
     { label: 'Total Clients', value: totalClients, color: '#1e3a8a', icon: <Users size={20}/>, page: '/clients' },
     { label: 'Total Attorneys', value: totalAttorneys, color: '#eab308', icon: <Scale size={20}/>, page: '/attorneys' },
     {
+      label: 'In Progress',
+      value: ongoingVideoCallCount,
+      color: '#3b82f6',
+      icon: <Video size={20} />,
+      page: '/consultations',
+      alert: ongoingVideoCallCount > 0,
+      alertText: `${ongoingVideoCallCount} ongoing video ${
+        ongoingVideoCallCount === 1 ? 'call' : 'calls'
+      }`,
+    },
+    {
       label: 'Pending Notary',
       value: pendingNotaryCount,
       color: '#ef4444',
@@ -1174,6 +1212,7 @@ const Dashboard = ({ onNavigate }) => {
                   ) : null}
                 </button>
                 <AttorneyNotificationDropdown
+                  variant="admin"
                   open={adminNotifOpen}
                   onClose={() => setAdminNotifOpen(false)}
                   notifications={displayAdminNotifications}
@@ -1391,10 +1430,7 @@ const AttorneysModal = ({ attorneys, onClose, onMessage }) => (
               <div className="attorney-info">
                 <h4>{attorney.name}</h4>
                 <p>{attorney.specialty || 'No specialty yet'}</p>
-                <p>
-                  {(attorney.consultations ?? 0)} consultations
-                  {attorney.rating ? ` â€¢ ${attorney.rating}â­` : ''}
-                </p>
+                <p>{(attorney.consultations ?? 0)} consultations</p>
               </div>
               <button className="btn-message" onClick={() => onMessage(attorney)}>
                 <MessageSquare size={16} /> Message
@@ -1580,7 +1616,7 @@ const RequestItem = ({ queuePosition, name, atty, law, status, bookedLabel, age 
   </div>
 );
 
-const AttorneyItem = ({ rank, name, imageUrl, law, consultations, inQueue = 0, rating }) => (
+const AttorneyItem = ({ rank, name, imageUrl, law, consultations, finished = 0, inQueue = 0 }) => (
   <div className="item-row">
     <div className="attorney-rank-avatar">
       <img src={imageUrl} alt="" />
@@ -1591,17 +1627,15 @@ const AttorneyItem = ({ rank, name, imageUrl, law, consultations, inQueue = 0, r
       <p className="item-subtitle">{law}</p>
     </div>
     <div className="item-meta-right">
-      <p className="item-title">{consultations} completed</p>
+      <p className="item-title">
+        {consultations} consultation{consultations === 1 ? '' : 's'}
+      </p>
+      {finished > 0 ? (
+        <p className="item-subtitle">{finished} finished</p>
+      ) : consultations > 0 ? (
+        <p className="item-subtitle">Scheduled / in progress</p>
+      ) : null}
       {inQueue > 0 ? <p className="item-subtitle">{inQueue} in queue now</p> : null}
-      <div className="rating-star">
-        {rating != null ? (
-          <>
-            <Star size={12} fill="#eab308" color="#eab308" /> {rating}
-          </>
-        ) : (
-          <span className="item-subtitle">No ratings yet</span>
-        )}
-      </div>
     </div>
   </div>
 );

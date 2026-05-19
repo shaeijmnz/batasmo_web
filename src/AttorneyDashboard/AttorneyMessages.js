@@ -1,8 +1,10 @@
 import { Suspense, lazy, useState, useRef, useEffect, useMemo } from 'react';
 import './AttorneyMessages.css';
 import './AttorneyTheme.css';
+import './AttorneyMessagesPalette.css';
+import ConsultationWaitingPopup from '../components/ConsultationWaitingPopup';
+import { attachConsultationChatPresence } from '../lib/consultationChatPresence';
 import {
-  deleteAppointmentMessage,
   endConsultationSession,
   fetchAppointmentMessages,
   fetchAttorneyUpcomingAppointments,
@@ -112,7 +114,6 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
   );
 
   const postSessionBranchRequired = consultationBranches.length > 0;
-  const [deletingMessageId, setDeletingMessageId] = useState('');
   const [signedUrlsByMessageId, setSignedUrlsByMessageId] = useState({});
   const [remainingSeconds, setRemainingSeconds] = useState(CONSULTATION_TIMER_TOTAL_SECONDS);
   const [videoCall, setVideoCall] = useState(null);
@@ -124,6 +125,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
   const filePickerRef = useRef(null);
   const timerStartedAtByAppointmentRef = useRef({});
   const tenMinuteReminderSentByAppointmentRef = useRef({});
+  const [waitingPopup, setWaitingPopup] = useState(null);
 
   const mergeRealtimeMessage = (incoming) => {
     setMessages((previous) => {
@@ -423,6 +425,30 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
   }, [activeAppointmentId, isClosed]);
 
   useEffect(() => {
+    if (!activeAppointmentId || !profile?.id || isClosed) {
+      setWaitingPopup(null);
+      return undefined;
+    }
+
+    const activeRow = appointments.find((item) => String(item.id) === String(activeAppointmentId));
+    const otherPartyName = activeRow?.name || 'Client';
+
+    const detachPresence = attachConsultationChatPresence({
+      appointmentId: activeAppointmentId,
+      role: 'attorney',
+      userId: profile.id,
+      displayName: profile.full_name || profile.name || profile.email || 'Attorney',
+      otherPartyName,
+      onWaitingPopup: (payload) => setWaitingPopup(payload),
+    });
+
+    return () => {
+      setWaitingPopup(null);
+      detachPresence();
+    };
+  }, [activeAppointmentId, appointments, profile?.id, profile?.full_name, profile?.name, profile?.email, isClosed]);
+
+  useEffect(() => {
     if (!activeAppointmentId) return undefined;
 
     let cancelled = false;
@@ -568,29 +594,6 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
       setLoadError(error.message || 'Failed to upload attachment.');
     } finally {
       setSending(false);
-    }
-  };
-
-  const handleDeleteMessage = async (messageId) => {
-    if (!activeAppointmentId || !messageId || deletingMessageId) return;
-    const shouldDelete = window.confirm('Delete this message/photo?');
-    if (!shouldDelete) return;
-
-    try {
-      setDeletingMessageId(String(messageId));
-      await deleteAppointmentMessage({ appointmentId: activeAppointmentId, messageId });
-      setMessages((previous) => previous.filter((item) => String(item.id) !== String(messageId)));
-      setSignedUrlsByMessageId((previous) => {
-        const next = { ...previous };
-        delete next[messageId];
-        delete next[String(messageId)];
-        return next;
-      });
-      setLoadError('');
-    } catch (error) {
-      setLoadError(error.message || 'Failed to delete message.');
-    } finally {
-      setDeletingMessageId('');
     }
   };
 
@@ -933,28 +936,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
                   )}
                   <div className={`am-bubble ${msg.sender === 'attorney' ? 'am-bubble--attorney' : 'am-bubble--admin'}`}>
                     {renderMessageBody(msg, msg.sender === 'attorney')}
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <span className="am-bubble__time">{msg.time}</span>
-                      {msg.sender === 'attorney' ? (
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteMessage(msg.id)}
-                          disabled={deletingMessageId === String(msg.id)}
-                          style={{
-                            border: '1px solid rgba(239, 68, 68, 0.5)',
-                            background: 'rgba(239, 68, 68, 0.12)',
-                            color: '#ef4444',
-                            cursor: 'pointer',
-                            fontSize: 12,
-                            fontWeight: 700,
-                            borderRadius: 8,
-                            padding: '2px 8px',
-                          }}
-                        >
-                          {deletingMessageId === String(msg.id) ? 'Deleting...' : 'Delete'}
-                        </button>
-                      ) : null}
-                    </div>
+                    <span className="am-bubble__time">{msg.time}</span>
                   </div>
                 </div>
               </div>
@@ -1109,6 +1091,14 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
             </div>
           </div>
         </div>
+      ) : null}
+
+      {waitingPopup ? (
+        <ConsultationWaitingPopup
+          title={waitingPopup.title}
+          body={waitingPopup.body}
+          onClose={() => setWaitingPopup(null)}
+        />
       ) : null}
 
       {videoCall ? (

@@ -2,17 +2,22 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import './OtpVerification.css';
 import {
   PENDING_OTP_CHANNEL_KEY,
+  PENDING_SIGNUP_ID_KEY,
   PENDING_SIGNUP_USER_ID_KEY,
   PENDING_SMS_PHONE_KEY,
   OTP_RESUME_LOGIN_KEY,
   OTP_RESUME_SIGNUP_KEY,
-  requestSignupSmsOtp,
+  completePendingSignup,
   resendSignUpOtp,
+  sendSignupVerificationEmail,
   signInWithEmail,
-  verifySignUpOtp,
-  verifySignupSmsOtp,
 } from '../lib/authApi';
+import { supabase } from '../lib/supabaseClient';
 import { getCurrentSessionProfile, pageFromRole } from '../lib/userApi';
+import {
+  isSignupVerificationComplete,
+  signOutIfSignupIncomplete,
+} from '../lib/signupVerification';
 import { isValidPhoneNumber, maskPhilippinePhone, sanitizePhoneInput, VALID_PHONE_MESSAGE } from '../lib/validators';
 
 const ScalesIcon = ({ size = 24, color = '#f5a623' }) => (
@@ -54,14 +59,17 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
   });
   const [optionalPhone, setOptionalPhone] = useState(() => localStorage.getItem(PENDING_SMS_PHONE_KEY) || '');
   const [smsInitDone, setSmsInitDone] = useState(false);
+  const [emailInitDone, setEmailInitDone] = useState(false);
   const [smsSending, setSmsSending] = useState(false);
+  const [emailSending, setEmailSending] = useState(false);
   const [needsPhone, setNeedsPhone] = useState(false);
   const inputs = useRef([]);
   const smsAutoTriedRef = useRef(false);
+  const emailAutoTriedRef = useRef(false);
 
   const pendingEmail = String(email || localStorage.getItem('batasmo_pending_otp_email') || '').trim();
   const pendingRole = String(role || localStorage.getItem('batasmo_pending_otp_role') || 'Client');
-  const pendingUserId = String(localStorage.getItem(PENDING_SIGNUP_USER_ID_KEY) || '').trim();
+  const pendingSignupId = String(localStorage.getItem(PENDING_SIGNUP_ID_KEY) || '').trim();
 
   const maskedEmail = pendingEmail
     ? pendingEmail.replace(/^(.{4}).*(@.*)$/, '$1***$2')
@@ -79,10 +87,70 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const guardOtpPage = async () => {
+      if (!pendingEmail) {
+        onNavigate('signup');
+        return;
+      }
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (cancelled) return;
+
+      if (user && isSignupVerificationComplete(user)) {
+        try {
+          const { profile } = await getCurrentSessionProfile();
+          onNavigate(pageFromRole(profile?.role || pendingRole));
+        } catch {
+          onNavigate(pageFromRole(pendingRole));
+        }
+        return;
+      }
+
+      if (user) {
+        await signOutIfSignupIncomplete(user);
+      }
+    };
+
+    guardOtpPage();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingEmail, pendingRole, onNavigate]);
+
+  useEffect(() => {
     if (timer <= 0) return;
     const t = setTimeout(() => setTimer(timer - 1), 1000);
     return () => clearTimeout(t);
   }, [timer]);
+
+  const sendEmailOtp = useCallback(async () => {
+    const data = await sendSignupVerificationEmail({
+      email: pendingEmail,
+      pendingId: pendingSignupId || undefined,
+    });
+    if (data?.pendingId) {
+      localStorage.setItem(PENDING_SIGNUP_ID_KEY, String(data.pendingId));
+    }
+    setEmailInitDone(true);
+  }, [pendingEmail, pendingSignupId]);
+
+  const sendSmsOtp = useCallback(async () => {
+    const data = await sendSignupVerificationEmail({
+      email: pendingEmail,
+      pendingId: pendingSignupId || undefined,
+    });
+    if (data?.pendingId) {
+      localStorage.setItem(PENDING_SIGNUP_ID_KEY, String(data.pendingId));
+    }
+    setSmsInitDone(true);
+    setNeedsPhone(false);
+  }, [pendingEmail, pendingSignupId]);
 
   useEffect(() => {
     if (smsInitDone && delivery === 'sms') {
@@ -90,22 +158,27 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
     }
   }, [smsInitDone, delivery]);
 
-  const sendSmsOtp = useCallback(
-    async (otpPhoneOverride) => {
-      const body = {
-        email: pendingEmail,
-        userId: pendingUserId || undefined,
-        otpPhone: otpPhoneOverride || optionalPhone || localStorage.getItem(PENDING_SMS_PHONE_KEY) || undefined,
-      };
-      const data = await requestSignupSmsOtp(body);
-      if (data?.userId) {
-        localStorage.setItem(PENDING_SIGNUP_USER_ID_KEY, String(data.userId));
-      }
-      setSmsInitDone(true);
-      setNeedsPhone(false);
-    },
-    [pendingEmail, pendingUserId, optionalPhone],
-  );
+  useEffect(() => {
+    if (emailInitDone && delivery === 'email') {
+      setTimer(59);
+    }
+  }, [emailInitDone, delivery]);
+
+  useEffect(() => {
+    if (delivery !== 'email' || !pendingEmail || emailAutoTriedRef.current) return;
+    emailAutoTriedRef.current = true;
+    setErrorText('');
+    setEmailSending(true);
+    sendEmailOtp()
+      .catch((err) => {
+        setErrorText(
+          getErrorMessage(err, 'Could not send verification email. Tap Resend or check spam.'),
+        );
+      })
+      .finally(() => {
+        setEmailSending(false);
+      });
+  }, [delivery, pendingEmail, sendEmailOtp]);
 
   useEffect(() => {
     if (delivery !== 'sms' || !pendingEmail || smsAutoTriedRef.current) return;
@@ -157,7 +230,10 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
     };
 
     if (delivery === 'email') {
-      resendSignUpOtp({ email: pendingEmail })
+      resendSignUpOtp({
+        email: pendingEmail,
+        pendingId: pendingSignupId || undefined,
+      })
         .then(done)
         .catch((error) => {
           setErrorText(getErrorMessage(error, 'Failed to resend OTP.'));
@@ -205,36 +281,37 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
       setErrorText('');
       setIsVerifying(true);
 
-      if (delivery === 'email') {
-        await verifySignUpOtp({ email: pendingEmail, token });
-      } else {
-        const uid = localStorage.getItem(PENDING_SIGNUP_USER_ID_KEY) || '';
-        await verifySignupSmsOtp({ userId: uid || undefined, email: pendingEmail, token });
-
-        const resumeRaw =
-          sessionStorage.getItem(OTP_RESUME_LOGIN_KEY) || sessionStorage.getItem(OTP_RESUME_SIGNUP_KEY);
-        if (!resumeRaw) {
-          setErrorText('Session expired. Please sign in with your email and password.');
-          setIsVerifying(false);
-          return;
-        }
-        let resume;
-        try {
-          resume = JSON.parse(resumeRaw);
-        } catch {
-          setErrorText('Session expired. Please sign in with your email and password.');
-          setIsVerifying(false);
-          return;
-        }
-        await signInWithEmail({
-          email: resume.email || pendingEmail,
-          password: resume.password,
-        });
+      const resumeRaw = sessionStorage.getItem(OTP_RESUME_SIGNUP_KEY);
+      if (!resumeRaw) {
+        setErrorText('Session expired. Please sign up again.');
+        setIsVerifying(false);
+        return;
       }
+      let resume;
+      try {
+        resume = JSON.parse(resumeRaw);
+      } catch {
+        setErrorText('Session expired. Please sign up again.');
+        setIsVerifying(false);
+        return;
+      }
+
+      await completePendingSignup({
+        email: pendingEmail,
+        pendingId: pendingSignupId || undefined,
+        otp: token,
+        password: resume.password,
+      });
+
+      await signInWithEmail({
+        email: resume.email || pendingEmail,
+        password: resume.password,
+      });
 
       localStorage.removeItem('batasmo_pending_otp_email');
       localStorage.removeItem('batasmo_pending_otp_role');
       localStorage.removeItem(PENDING_OTP_CHANNEL_KEY);
+      localStorage.removeItem(PENDING_SIGNUP_ID_KEY);
       localStorage.removeItem(PENDING_SIGNUP_USER_ID_KEY);
       localStorage.removeItem(PENDING_SMS_PHONE_KEY);
       clearOtpResumeSecrets();
@@ -267,6 +344,10 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
       setSmsInitDone(false);
       setNeedsPhone(false);
       setTimer(59);
+    } else {
+      emailAutoTriedRef.current = false;
+      setEmailInitDone(false);
+      setTimer(59);
     }
   };
 
@@ -280,7 +361,7 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
     setErrorText('');
     try {
       setSmsSending(true);
-      await sendSmsOtp(optionalPhone);
+      await sendSmsOtp();
       setTimer(59);
     } catch (err) {
       setErrorText(getErrorMessage(err, 'Could not send SMS.'));
@@ -349,6 +430,10 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
             </label>
           </div>
 
+          {delivery === 'email' && emailSending ? (
+            <p className="otp-sms-status">Sending verification code to your Gmail...</p>
+          ) : null}
+
           {delivery === 'sms' && smsSending ? (
             <p className="otp-sms-status">Sending SMS...</p>
           ) : null}
@@ -400,7 +485,7 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
 
           {errorText ? <p className="otp-error">{errorText}</p> : null}
 
-          {(delivery === 'email' || smsInitDone) && !smsSending ? (
+          {(delivery === 'email' || smsInitDone) && !smsSending && !emailSending ? (
             <>
               <p className="otp-resend-timer">
                 Resend code in <span>00:{String(timer).padStart(2, '0')}</span>

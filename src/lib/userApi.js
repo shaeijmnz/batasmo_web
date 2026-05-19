@@ -1,4 +1,6 @@
 import { supabase } from './supabaseClient'
+import { parseNotificationImageUrl } from './announcementImages'
+import { isSignupVerificationComplete, signOutIfSignupIncomplete } from './signupVerification'
 import {
   getConsultationBranchesForAttorney,
   parseConsultationBranchFromTitle,
@@ -689,60 +691,6 @@ export async function adminCreateWalkInClient({ email, password, fullName }) {
 }
 
 /**
- * Admin: promote an existing Client user to Admin (profile + auth metadata).
- */
-export async function adminPromoteClientToAdmin({ userId }) {
-  const session = (await supabase.auth.getSession())?.data?.session
-  if (!session?.access_token) {
-    throw new Error('You must be signed in as admin to promote a user.')
-  }
-  const id = String(userId || '').trim()
-  if (!id) {
-    throw new Error('User id is required.')
-  }
-  const baseUrl = resolvePaymentApiBaseUrl()
-  const response = await fetch(`${baseUrl}/admin/clients/${encodeURIComponent(id)}/promote-to-admin`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${session.access_token}`,
-      'Content-Type': 'application/json',
-    },
-  })
-  const payload = await response.json().catch(() => ({}))
-  if (!response.ok) {
-    throw new Error(payload?.error || payload?.message || `Request failed (${response.status}).`)
-  }
-  return payload
-}
-
-/**
- * Admin: demote an Admin user back to Client (profile + auth metadata).
- */
-export async function adminDemoteAdminToClient({ userId }) {
-  const session = (await supabase.auth.getSession())?.data?.session
-  if (!session?.access_token) {
-    throw new Error('You must be signed in as admin to demote a user.')
-  }
-  const id = String(userId || '').trim()
-  if (!id) {
-    throw new Error('User id is required.')
-  }
-  const baseUrl = resolvePaymentApiBaseUrl()
-  const response = await fetch(`${baseUrl}/admin/users/${encodeURIComponent(id)}/demote-to-client`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${session.access_token}`,
-      'Content-Type': 'application/json',
-    },
-  })
-  const payload = await response.json().catch(() => ({}))
-  if (!response.ok) {
-    throw new Error(payload?.error || payload?.message || `Request failed (${response.status}).`)
-  }
-  return payload
-}
-
-/**
  * Admin: create an Attorney auth user (email confirmed) + profile via Render backend.
  */
 export async function adminCreateWalkInAttorney({ email, password, fullName, specialty }) {
@@ -1296,6 +1244,13 @@ export async function getCurrentSessionProfile() {
     throw sessionError
   }
   if (!session?.user) {
+    sessionProfileCache = { session: null, profile: null }
+    lastSessionProfileTime = now
+    return sessionProfileCache
+  }
+
+  if (!isSignupVerificationComplete(session.user)) {
+    await signOutIfSignupIncomplete(session.user)
     sessionProfileCache = { session: null, profile: null }
     lastSessionProfileTime = now
     return sessionProfileCache
@@ -1908,6 +1863,26 @@ const formatSlotTime = (date) => {
   return `${toTwoDigits(normalizedHour)}:${toTwoDigits(minute)} ${period}`
 }
 
+/** Calendar date in the user's local timezone (matches admin/attorney date pickers). */
+const localDateKeyFromDate = (date) => {
+  const parsed = date instanceof Date ? date : new Date(date)
+  if (Number.isNaN(parsed.getTime())) return null
+  return `${parsed.getFullYear()}-${toTwoDigits(parsed.getMonth() + 1)}-${toTwoDigits(parsed.getDate())}`
+}
+
+const mapAvailabilityPersistenceError = (error, fallback = 'Failed to save availability.') => {
+  if (!error) return fallback
+  const code = String(error.code || '')
+  const message = String(error.message || '')
+  if (
+    code === '42501' ||
+    /permission denied|row-level security|violates row-level security policy/i.test(message)
+  ) {
+    return 'Could not save this schedule. If you are logged in as an attorney, run database/20260517_attorney_manage_availability_slots.sql in Supabase first.'
+  }
+  return message || fallback
+}
+
 const normalizeConcernText = (value) =>
   String(value || '')
     .toLowerCase()
@@ -2018,7 +1993,7 @@ export async function fetchAttorneyAvailabilitySlots(userId) {
 
 export async function saveAttorneyAvailabilitySlots({ attorneyId, slots }) {
   const nowIso = new Date().toISOString()
-  const todayDate = new Date().toISOString().slice(0, 10)
+  const todayDate = localDateKeyFromDate(new Date()) || new Date().toISOString().slice(0, 10)
   const now = new Date()
   const submittedSlotCount = Array.isArray(slots) ? slots.length : 0
 
@@ -2032,12 +2007,16 @@ export async function saveAttorneyAvailabilitySlots({ attorneyId, slots }) {
       if (parsedEnd <= parsedStart) return null
       if (parsedStart <= now) return null
 
+      const slotDate = localDateKeyFromDate(parsedStart)
+      const slotTime = formatSlotTime(parsedStart)
+      if (!slotDate || !slotTime) return null
+
       return {
         startIso,
         endIso,
         attorney_id: attorneyId,
-        date: parsedStart.toISOString().slice(0, 10),
-        time: formatSlotTime(parsedStart),
+        date: slotDate,
+        time: slotTime,
         is_booked: false,
         updated_at: nowIso,
       }
@@ -2062,7 +2041,7 @@ export async function saveAttorneyAvailabilitySlots({ attorneyId, slots }) {
     }
 
     if (!isMissingColumnError(clearByDateError, 'date')) {
-      throw clearByDateError
+      throw new Error(mapAvailabilityPersistenceError(clearByDateError))
     }
 
     const { error: clearByStartError } = await supabase
@@ -2072,7 +2051,7 @@ export async function saveAttorneyAvailabilitySlots({ attorneyId, slots }) {
       .eq('is_booked', false)
       .gte('start_time', nowIso)
 
-    if (clearByStartError) throw clearByStartError
+    if (clearByStartError) throw new Error(mapAvailabilityPersistenceError(clearByStartError))
     invalidateAvailabilityCache(attorneyId)
     return []
   }
@@ -2094,7 +2073,7 @@ export async function saveAttorneyAvailabilitySlots({ attorneyId, slots }) {
     .gte('date', todayDate)
 
   if (existingRowsError && !isMissingColumnError(existingRowsError, 'date')) {
-    throw existingRowsError
+    throw new Error(mapAvailabilityPersistenceError(existingRowsError))
   }
 
   const existingDates = new Set(
@@ -2163,6 +2142,9 @@ export async function saveAttorneyAvailabilitySlots({ attorneyId, slots }) {
   }
 
   if (!lastDateError) {
+    for (const date of targetDates) {
+      invalidateAvailabilityCache(attorneyId, date)
+    }
     invalidateAvailabilityCache(attorneyId)
     return fetchAttorneyAvailabilitySlots(attorneyId)
   }
@@ -2171,7 +2153,7 @@ export async function saveAttorneyAvailabilitySlots({ attorneyId, slots }) {
     !isMissingColumnError(lastDateError, 'date') &&
     !isMissingColumnError(lastDateError, 'time')
   ) {
-    throw lastDateError
+    throw new Error(mapAvailabilityPersistenceError(lastDateError))
   }
 
   const fallbackSlots = preparedSlots.map((slot) => ({
@@ -2189,14 +2171,14 @@ export async function saveAttorneyAvailabilitySlots({ attorneyId, slots }) {
     .eq('is_booked', false)
     .gte('start_time', nowIso)
 
-  if (fallbackClearError) throw fallbackClearError
+  if (fallbackClearError) throw new Error(mapAvailabilityPersistenceError(fallbackClearError))
 
   const { data, error } = await supabase
     .from('availability_slots')
     .insert(fallbackSlots)
     .select('id, start_time, end_time, is_booked')
 
-  if (error) throw error
+  if (error) throw new Error(mapAvailabilityPersistenceError(error))
   invalidateAvailabilityCache(attorneyId)
   return data || []
 }
@@ -6009,7 +5991,7 @@ export async function updateAttorneyNotarialRequestStatus({ requestId, status, n
 export async function fetchAttorneyAnnouncementsData(userId) {
   const { data, error } = await supabase
     .from('notifications')
-    .select('id, title, body, type, created_at')
+    .select('id, title, body, type, created_at, data')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(20)
@@ -6024,6 +6006,7 @@ export async function fetchAttorneyAnnouncementsData(userId) {
       id: item.id,
       title: item.title || 'Announcement',
       body: item.body || '',
+      imageUrl: parseNotificationImageUrl(item.data),
       date: valid ? dt.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Today',
       time: valid ? dt.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' }) : 'Now',
       author: 'BatasMo Admin',

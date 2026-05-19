@@ -90,16 +90,6 @@ export function mapLoginErrorMessage(error) {
   if (normalized.includes('too many requests') || normalized.includes('rate limit')) {
     return 'Too many login attempts. Please wait a moment and try again.';
   }
-  if (normalized.includes('auth_timeout') || normalized.includes('login timed out')) {
-    return 'Login timed out. Check your internet connection. If this keeps happening, set REACT_APP_SUPABASE_ANON_KEY to the legacy anon key (eyJ…) on Vercel and redeploy.';
-  }
-  if (
-    normalized.includes('missing react_app_supabase_anon_key') ||
-    normalized.includes('sb_publishable_') ||
-    normalized.includes('legacy anon')
-  ) {
-    return raw;
-  }
   return raw;
 }
 

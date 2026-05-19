@@ -47,9 +47,7 @@ function Login({ onNavigate, onAuthSuccess }) {
 
   useEffect(() => {
     const configError = getSupabaseConfigError();
-    if (configError) {
-      setErrorText(configError);
-    }
+    if (configError) setErrorText(configError);
   }, []);
 
   useEffect(() => {
@@ -124,6 +122,24 @@ function Login({ onNavigate, onAuthSuccess }) {
           setErrorText(formatLockoutMessage(timeRemaining));
           return;
         }
+      }
+
+      if (error?.code === 'SIGNUP_OTP_REQUIRED' || error?.message === 'SIGNUP_OTP_REQUIRED') {
+        const email = String(error?.email || form.email || '').trim().toLowerCase();
+        localStorage.setItem('batasmo_pending_otp_email', email);
+        localStorage.setItem('batasmo_pending_otp_role', 'Client');
+        localStorage.setItem(PENDING_OTP_CHANNEL_KEY, 'email');
+        try {
+          sessionStorage.setItem(
+            OTP_RESUME_LOGIN_KEY,
+            JSON.stringify({ email, password: form.password }),
+          );
+        } catch {
+          /* ignore */
+        }
+        setErrorText('Please verify your account with the OTP sent to your email or phone first.');
+        onNavigate('otp');
+        return;
       }
 
       const normalized = String(error?.message || '').toLowerCase();

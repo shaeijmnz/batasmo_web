@@ -9,6 +9,7 @@ import {
   signOutUser,
   subscribeToAppConfigChanges,
 } from './lib/userApi';
+import { isSignupVerificationComplete, signOutIfSignupIncomplete } from './lib/signupVerification';
 
 /* ── LandingPage ── */
 import LandingPage from './LandingPage/LandingPage';
@@ -41,6 +42,7 @@ const SupportMessages = lazy(() => import('./ClientDashboard/SupportMessages'));
 const AttorneyHome = lazy(() => import('./AttorneyDashboard/AttorneyHome'));
 const ConsultationRequests = lazy(() => import('./AttorneyDashboard/ConsultationRequests'));
 const UpcomingAppointments = lazy(() => import('./AttorneyDashboard/UpcomingAppointments'));
+const AttorneyAvailability = lazy(() => import('./AttorneyDashboard/AttorneyAvailability'));
 const NotarialRequestsAtty = lazy(() => import('./AttorneyDashboard/NotarialRequestsAtty'));
 const AttorneyAnalytics = lazy(() => import('./AttorneyDashboard/AttorneyAnalytics'));
 const AttorneyMessages = lazy(() => import('./AttorneyDashboard/AttorneyMessages'));
@@ -76,6 +78,7 @@ const ATTORNEY_PAGES = [
   'attorney-home',
   'consultation-requests',
   'upcoming-appointments',
+  'attorney-availability',
   'notarial-requests-atty',
   'attorney-analytics',
   'attorney-messages',
@@ -337,6 +340,23 @@ function App() {
         if (!session?.user) {
           clearTransientAuthState({ includeRecovery: true });
           setCurrentProfile(null);
+          return;
+        }
+
+        if (!isSignupVerificationComplete(session.user)) {
+          const pendingEmail =
+            localStorage.getItem('batasmo_pending_otp_email') || session.user.email || '';
+          if (pendingEmail) {
+            localStorage.setItem('batasmo_pending_otp_email', pendingEmail);
+          }
+          await signOutIfSignupIncomplete(session.user);
+          setCurrentProfile(null);
+          setSignupContext((prev) => ({
+            ...prev,
+            email: pendingEmail,
+            role: normalizeRole(session.user.user_metadata?.role || 'Client'),
+          }));
+          setPage('otp');
           return;
         }
 
@@ -667,6 +687,8 @@ function App() {
   if (page === 'attorney-home') return renderLazy(<AttorneyHome onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} />);
   if (page === 'consultation-requests') return renderLazy(<ConsultationRequests onNavigate={handleNavigate} profile={currentProfile} />);
   if (page === 'upcoming-appointments') return renderLazy(<UpcomingAppointments onNavigate={handleNavigate} profile={currentProfile} />);
+  if (page === 'attorney-availability')
+    return renderLazy(<AttorneyAvailability onNavigate={handleNavigate} profile={currentProfile} />);
   if (page === 'notarial-requests-atty') return renderLazy(<NotarialRequestsAtty onNavigate={handleNavigate} profile={currentProfile} />);
   if (page === 'attorney-analytics') return renderLazy(<AttorneyAnalytics onNavigate={handleNavigate} profile={currentProfile} />);
   if (page === 'attorney-messages') return renderLazy(<AttorneyMessages onNavigate={handleNavigate} profile={currentProfile} initialAppointmentId={pageParams?.appointmentId || ''} />);
