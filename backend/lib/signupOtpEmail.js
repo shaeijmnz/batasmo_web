@@ -125,6 +125,16 @@ export async function sendSignupOtpEmail({ email, otp, fullName }) {
   const html = buildSignupOtpHtml({ otp: code, fullName })
   const text = buildSignupOtpText({ otp: code, fullName })
   const smtpReady = Boolean(SMTP_HOST && SMTP_USER && SMTP_PASS && WELCOME_EMAIL_FROM)
+  const resendSandboxFrom = WELCOME_EMAIL_FROM.toLowerCase().includes('resend.dev')
+
+  if (!smtpReady && RESEND_API_KEY && resendSandboxFrom) {
+    return {
+      sent: false,
+      error:
+        'Signup email is not fully configured. The server must use Gmail SMTP (SMTP_HOST, SMTP_USER, SMTP_PASS) ' +
+        'so verification codes can be sent to any @gmail.com address.',
+    }
+  }
 
   try {
     // Prefer SMTP — delivers to any Gmail. Resend test sender only reaches the Resend account inbox.
