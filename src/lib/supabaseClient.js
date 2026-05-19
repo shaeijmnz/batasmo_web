@@ -1,9 +1,14 @@
 import { createClient } from '@supabase/supabase-js'
 
 const DEFAULT_URL = 'https://sjmmyqeqiigmclcgcadr.supabase.co'
+// Fallback for Vercel builds where REACT_APP_* was not set before deploy (anon key is public in the browser bundle).
+const DEFAULT_ANON_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNqbW15cWVxaWlnbWNsY2djYWRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI4MDY2MDEsImV4cCI6MjA4ODM4MjYwMX0.pBslZg2JQqoqRKNhaOE-uWHpWxSf0jULvV0awyC0NUI'
 
 const SUPABASE_URL = String(process.env.REACT_APP_SUPABASE_URL || DEFAULT_URL).trim()
-const SUPABASE_ANON_KEY = String(process.env.REACT_APP_SUPABASE_ANON_KEY || '').trim()
+const SUPABASE_ANON_KEY = String(
+  process.env.REACT_APP_SUPABASE_ANON_KEY || DEFAULT_ANON_KEY,
+).trim()
 
 export const SUPABASE_PUBLISHABLE_KEY_WARNING =
   'Login needs the legacy anon key (starts with eyJ), not sb_publishable_. In Supabase: Settings → API Keys → Legacy anon, public — then set REACT_APP_SUPABASE_ANON_KEY on Vercel and redeploy.'
