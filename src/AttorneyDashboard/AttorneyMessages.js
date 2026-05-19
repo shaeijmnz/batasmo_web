@@ -25,8 +25,22 @@ import {
 import { getConsultationBranchesForAttorney } from '../lib/consultationBranches';
 import { consultationSummaryHasContent, parseConsultationSummary } from '../lib/consultationSummaryFormat';
 import ConsultationSummaryForm from '../components/ConsultationSummaryForm';
+import ConsultationChatErrorBoundary from '../components/ConsultationChatErrorBoundary';
 import { attachLiveDataRefresh } from '../lib/liveDataRefresh';
 const VideoCallModal = lazy(() => import('../components/VideoCallModal'));
+
+const buildInitials = (name, fallback = 'CL') => {
+  const parts = String(name || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!parts.length) return fallback;
+  return parts
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+};
 
 const CONSULTATION_TIMER_TOTAL_SECONDS = 60 * 60;
 
@@ -119,13 +133,14 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
   const [videoCall, setVideoCall] = useState(null);
   const [videoCallLoading, setVideoCallLoading] = useState(false);
   const [videoCallError, setVideoCallError] = useState('');
-  const videoCallRef = useRef(null);
   const messagesEndRef = useRef(null);
   const otherPartyNameRef = useRef('Client');
   const imagePickerRef = useRef(null);
   const filePickerRef = useRef(null);
   const timerStartedAtByAppointmentRef = useRef({});
   const tenMinuteReminderSentByAppointmentRef = useRef({});
+  const videoMeetingSnapshotRef = useRef({ initialized: false, meetingId: null });
+  const videoCallRef = useRef(null);
   const [waitingPopup, setWaitingPopup] = useState(null);
 
   const mergeRealtimeMessage = (incoming) => {
@@ -167,13 +182,17 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
   }, [profile?.id]);
 
   useEffect(() => {
-    setAppointments([])
-    setMessages([])
-    setActiveAppointmentId('')
-    setIsClosed(false)
-    setLoadError('')
-    setSignedUrlsByMessageId({})
-  }, [profile?.id])
+    setAppointments([]);
+    setMessages([]);
+    setActiveAppointmentId(initialAppointmentId ? String(initialAppointmentId) : '');
+    setIsClosed(false);
+    setLoadError('');
+    setSignedUrlsByMessageId({});
+    videoMeetingSnapshotRef.current = { initialized: false, meetingId: null };
+    videoCallRef.current = null;
+    setVideoCall(null);
+    setVideoCallError('');
+  }, [profile?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- reset only when attorney account changes
 
   useEffect(() => {
     let isMounted = true;
@@ -193,17 +212,36 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
             paymentStatus: row.paymentStatus || 'unpaid',
           }),
         );
-        setAppointments(activeRows);
-        setActiveAppointmentId((prev) => {
-          if (!activeRows.length) return ''
-          if (initialAppointmentId && activeRows.some((row) => String(row.id) === String(initialAppointmentId))) {
-            return String(initialAppointmentId)
-          }
-          if (prev && activeRows.some((row) => String(row.id) === String(prev))) return prev
-          return String(activeRows[0].id)
-        })
 
-        if (!activeRows.length) {
+        let mergedRows = activeRows;
+        if (initialAppointmentId) {
+          const pinned = rows.find((row) => String(row.id) === String(initialAppointmentId));
+          if (
+            pinned &&
+            !activeRows.some((row) => String(row.id) === String(initialAppointmentId)) &&
+            isConsultationChatWindowOpen({
+              status: pinned.status,
+              scheduledAt: pinned.scheduledAt,
+              slotDate: pinned.slotDate,
+              slotTime: pinned.slotTime,
+              paymentStatus: pinned.paymentStatus || 'unpaid',
+            })
+          ) {
+            mergedRows = [pinned, ...activeRows];
+          }
+        }
+
+        setAppointments(mergedRows);
+        setActiveAppointmentId((prev) => {
+          if (!mergedRows.length) return '';
+          if (initialAppointmentId && mergedRows.some((row) => String(row.id) === String(initialAppointmentId))) {
+            return String(initialAppointmentId);
+          }
+          if (prev && mergedRows.some((row) => String(row.id) === String(prev))) return prev;
+          return String(mergedRows[0].id);
+        });
+
+        if (!mergedRows.length) {
           setLoadError('Consultation chat opens at the scheduled appointment time.');
         } else {
           setLoadError('');
@@ -758,13 +796,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
 
   const activeAppointment = appointments.find((item) => String(item.id) === String(activeAppointmentId)) || null;
   const chatName = activeAppointment?.name || 'Client';
-  const chatInitials = chatName
-    .split(' ')
-    .filter(Boolean)
-    .map((part) => part[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
+  const chatInitials = buildInitials(chatName, 'CL');
   const timerLabel = formatTimerLabel(remainingSeconds);
   const isTenMinuteWindow = remainingSeconds <= 10 * 60;
 
@@ -794,18 +826,34 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
     setVideoCall(null);
   };
 
-  // Auto-open video call when client starts one (video_meeting_id appears in DB)
+  // Auto-join only when client starts a NEW call (ignore stale meeting id on first load).
   useEffect(() => {
     if (!activeAppointmentId) return undefined;
+
+    videoMeetingSnapshotRef.current = { initialized: false, meetingId: null };
 
     const unsubscribe = subscribeToConsultationRoomStatus(
       activeAppointmentId,
       async ({ videoMeetingId, consultationRoomId }) => {
-        if (!videoMeetingId || videoCallRef.current) return;
+        const snapshot = videoMeetingSnapshotRef.current;
+        const meetingId = videoMeetingId || null;
+
+        if (!snapshot.initialized) {
+          videoMeetingSnapshotRef.current = { initialized: true, meetingId };
+          return;
+        }
+
+        const previousMeetingId = snapshot.meetingId;
+        videoMeetingSnapshotRef.current = { initialized: true, meetingId };
+
+        if (!meetingId || videoCallRef.current || meetingId === previousMeetingId) {
+          return;
+        }
+
         try {
           const token = await getVideoSdkToken();
           openVideoCall({
-            meetingId: videoMeetingId,
+            meetingId,
             roomId: consultationRoomId,
             token,
           });
@@ -834,7 +882,16 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
     });
   }, [activeAppointmentId, isClosed]);
 
+  if (!profile?.id) {
+    return (
+      <div className="am-page" style={{ display: 'grid', placeItems: 'center', minHeight: '60vh' }}>
+        <p>Loading consultation room…</p>
+      </div>
+    );
+  }
+
   return (
+    <ConsultationChatErrorBoundary>
     <div className="am-page">
       {/* Sidebar overlay */}
       {sidebarOpen && <div className="am-sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
@@ -874,7 +931,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
           <div className="am-topbar__user">
             <span className="am-topbar__user-name">{profile?.full_name || 'Attorney'}</span>
           </div>
-          <div className="am-topbar__avatar">{(profile?.full_name || 'AT').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()}</div>
+          <div className="am-topbar__avatar">{buildInitials(profile?.full_name, 'AT')}</div>
         </div>
       </header>
 
@@ -899,6 +956,24 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
             </div>
           ) : null}
         </div>
+
+        {appointments.length > 1 ? (
+          <div className="am-chat-actions" style={{ justifyContent: 'flex-start', paddingBottom: 0 }}>
+            <select
+              id="am-thread-select"
+              className="am-thread-select"
+              value={activeAppointmentId}
+              onChange={(e) => setActiveAppointmentId(e.target.value)}
+              aria-label="Active consultation"
+            >
+              {appointments.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name} — {item.date} {item.time}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
 
         {activeAppointmentId && !isClosed ? (
           <div className="am-chat-actions">
@@ -942,7 +1017,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
           {messages.map((msg, idx) => {
             const showDate = idx === 0 || messages[idx - 1].date !== msg.date;
             return (
-              <div key={msg.id}>
+              <div key={msg.id || `msg-${idx}`}>
                 {showDate && (
                   <div className="am-date-divider">
                     <span>{msg.date}</span>
@@ -1131,5 +1206,6 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
         </Suspense>
       ) : null}
     </div>
+    </ConsultationChatErrorBoundary>
   );
 }
