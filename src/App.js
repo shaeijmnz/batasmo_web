@@ -5,6 +5,7 @@ import {
   getCurrentSessionProfile,
   normalizeRole,
   pageFromRole,
+  resolveSessionRole,
   resetUserApiRuntimeState,
   signOutUser,
   subscribeToAppConfigChanges,
@@ -320,7 +321,16 @@ function App() {
             setCurrentProfile(null);
           } else {
             clearTransientAuthState();
-            setCurrentProfile(profile);
+            const resolvedProfile = profile
+              ? { ...profile, role: resolveSessionRole(session, profile) }
+              : null
+            setCurrentProfile(resolvedProfile);
+            if (resolvedProfile?.role) {
+              const roleHomePage = pageFromRole(resolvedProfile.role)
+              setPage((current) =>
+                !canAccessPage(normalizeRole(resolvedProfile.role), current) ? roleHomePage : current,
+              )
+            }
           }
         }
       } catch (error) {
@@ -385,18 +395,21 @@ function App() {
 
         // Fast path: update profile from session metadata immediately.
         clearTransientAuthState();
-        setCurrentProfile((prev) => ({
-          id: session.user.id,
-          full_name: session.user.user_metadata?.full_name || prev?.full_name || '',
-          email: session.user.email || prev?.email || '',
-          role: normalizeRole(session.user.user_metadata?.role || prev?.role || 'Client'),
-          phone: prev?.phone || '',
-          address: prev?.address || '',
-          age: prev?.age ?? null,
-          guardian_name: prev?.guardian_name || '',
-          guardian_contact: prev?.guardian_contact || '',
-          guardian_details: prev?.guardian_details || '',
-        }));
+        setCurrentProfile((prev) => {
+          const draft = {
+            id: session.user.id,
+            full_name: session.user.user_metadata?.full_name || prev?.full_name || '',
+            email: session.user.email || prev?.email || '',
+            role: normalizeRole(session.user.user_metadata?.role || prev?.role || 'Client'),
+            phone: prev?.phone || '',
+            address: prev?.address || '',
+            age: prev?.age ?? null,
+            guardian_name: prev?.guardian_name || '',
+            guardian_contact: prev?.guardian_contact || '',
+            guardian_details: prev?.guardian_details || '',
+          }
+          return { ...draft, role: resolveSessionRole(session, draft) }
+        });
 
         // Background hydration: fetch full profile without blocking UI.
         getCurrentSessionProfile()

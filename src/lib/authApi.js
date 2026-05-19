@@ -34,6 +34,7 @@ const getBackendApiBase = () =>
 const normalizeRole = (role) => {
   const value = String(role || '').trim().toLowerCase()
   if (value === 'admin') return 'Admin'
+  if (value === 'secretary') return 'Secretary'
   if (value === 'attorney') return 'Attorney'
   return 'Client'
 }

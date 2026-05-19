@@ -133,3 +133,9 @@ BEGIN
 
   RAISE NOTICE 'Secretary account fixed for % (user_id=%)', v_email, v_user_id;
 END $$;
+
+-- If the web app already saved profiles.role as Client, repair it:
+UPDATE public.profiles
+SET role = 'Secretary'::user_role, updated_at = now()
+WHERE lower(email) = 'secretary@batasmo.app'
+  AND role::text <> 'Secretary';

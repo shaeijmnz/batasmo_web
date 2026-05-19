@@ -1195,6 +1195,49 @@ export function pageFromRole(roleText) {
   return 'home-logged'
 }
 
+/** Prefer staff roles from auth metadata when profiles.role was saved as Client by mistake. */
+export function resolveSessionRole(session, profile) {
+  const metaRole = normalizeRole(session?.user?.user_metadata?.role || '')
+  const profileRole = normalizeRole(profile?.role || '')
+
+  if (
+    (metaRole === 'Admin' || metaRole === 'Secretary' || metaRole === 'Attorney') &&
+    profileRole === 'Client'
+  ) {
+    return metaRole
+  }
+
+  if (profileRole) return profileRole
+  if (metaRole) return metaRole
+  return 'Client'
+}
+
+function withResolvedProfileRole(session, profile) {
+  if (!profile?.id || !session?.user) return profile
+  const role = resolveSessionRole(session, profile)
+  if (normalizeRole(profile.role) === role) return profile
+  return { ...profile, role }
+}
+
+function maybeRepairStaffProfileRole(session, profile) {
+  if (!profile?.id || !session?.user) return
+  const resolvedRole = resolveSessionRole(session, profile)
+  if (normalizeRole(profile.role) === resolvedRole) return
+  if (resolvedRole === 'Client') return
+
+  void Promise.resolve(
+    supabase.from('profiles').upsert(
+      {
+        id: profile.id,
+        email: profile.email || session.user.email || '',
+        full_name: profile.full_name || session.user.user_metadata?.full_name || '',
+        role: resolvedRole,
+      },
+      { onConflict: 'id' },
+    ),
+  ).catch(() => {})
+}
+
 let sessionProfileCache = null
 let lastSessionProfileTime = 0
 const SESSION_PROFILE_CACHE_TTL_MS = 5000
@@ -1266,30 +1309,28 @@ export async function getCurrentSessionProfile() {
 
   // Do not block login/session hydration if profiles query is restricted or temporarily slow.
   if (profileError) {
-    const fallbackResult = {
-      session,
-      profile: {
-        id: session.user.id,
-        full_name: session.user.user_metadata?.full_name || '',
-        email: session.user.email || '',
-        phone: '',
-        address: '',
-        role: normalizeRole(session.user.user_metadata?.role || 'Client'),
-        age: null,
-        guardian_name: '',
-        guardian_contact: '',
-        guardian_details: '',
-      },
-    }
+    const fallbackProfile = withResolvedProfileRole(session, {
+      id: session.user.id,
+      full_name: session.user.user_metadata?.full_name || '',
+      email: session.user.email || '',
+      phone: '',
+      address: '',
+      role: normalizeRole(session.user.user_metadata?.role || 'Client'),
+      age: null,
+      guardian_name: '',
+      guardian_contact: '',
+      guardian_details: '',
+    })
+    const fallbackResult = { session, profile: fallbackProfile }
 
     sessionProfileCache = fallbackResult
     lastSessionProfileTime = now
     return fallbackResult
   }
 
-  const result = {
-    session,
-    profile: profile || {
+  const baseProfile =
+    profile ||
+    {
       id: session.user.id,
       full_name: session.user.user_metadata?.full_name || '',
       email: session.user.email || '',
@@ -1300,7 +1341,14 @@ export async function getCurrentSessionProfile() {
       guardian_name: '',
       guardian_contact: '',
       guardian_details: '',
-    },
+    }
+
+  const resolvedProfile = withResolvedProfileRole(session, baseProfile)
+  maybeRepairStaffProfileRole(session, baseProfile)
+
+  const result = {
+    session,
+    profile: resolvedProfile,
   }
 
   sessionProfileCache = result
