@@ -483,28 +483,28 @@
 	gap: 12px;
 	padding: 14px;
 	border-radius: 14px;
-	background: rgba(9, 19, 31, 0.78);
-	border: 1px solid rgba(152, 189, 232, 0.18);
+	background: linear-gradient(180deg, #fff9f0 0%, #f7ead9 100%);
+	border: 1px solid #d9c8b1;
 	transition: transform .22s ease, background .22s ease, border-color .22s ease;
 }
 
 .att-queue-item:hover {
 	transform: translateY(-2px);
-	background: rgba(13, 28, 46, 0.86);
-	border-color: rgba(161, 198, 240, 0.4);
+	background: linear-gradient(180deg, #fffdf8 0%, #f9efe1 100%);
+	border-color: #c9b89a;
 }
 
 .att-queue-item--today {
-	background: linear-gradient(120deg, rgba(35, 49, 18, 0.45), rgba(10, 25, 40, 0.84));
-	border-color: rgba(226, 191, 93, 0.42);
+	background: linear-gradient(120deg, #fff8eb 0%, #f5e8cf 100%);
+	border-color: #d4af37;
 }
 
 .att-queue-number {
 	width: 30px;
 	height: 30px;
 	border-radius: 50%;
-	background: rgba(50, 88, 140, 0.5);
-	color: #e5f0ff;
+	background: rgba(21, 34, 56, 0.1);
+	color: #152238;
 	font-size: 0.8rem;
 	font-weight: 700;
 	display: flex;
@@ -514,26 +514,28 @@
 
 .att-queue-item__date-block {
 	border-radius: 10px;
-	background: rgba(17, 35, 55, 0.72);
-	border: 1px solid rgba(161, 197, 239, 0.22);
+	background: linear-gradient(180deg, #fffaf3 0%, #f0e4d3 100%);
+	border: 1px solid #d4c4ad;
 	display: flex;
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
 	gap: 2px;
 	height: 56px;
+	box-shadow: none;
 }
 
 .att-queue-month {
 	font-size: 0.65rem;
 	text-transform: uppercase;
-	color: #9db8d8;
+	color: #8b847a;
 	letter-spacing: .07em;
+	font-weight: 600;
 }
 
 .att-queue-day {
 	font-size: 1.08rem;
-	color: #eef5ff;
+	color: #152238;
 	font-weight: 800;
 }
 
@@ -558,18 +560,19 @@
 }
 
 .att-queue-item__name {
-	color: #f2f7ff;
+	color: #1b2432;
 	font-size: 0.92rem;
 	font-weight: 700;
 }
 
 .att-queue-item__area {
 	font-size: 0.81rem;
+	color: #6f6a62;
 }
 
 .att-queue-item__time {
 	font-size: 0.77rem;
-	color: #a2bddc;
+	color: #9a9288;
 	display: inline-flex;
 	align-items: center;
 	gap: 4px;

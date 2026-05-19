@@ -64,28 +64,44 @@
   color: rgba(148, 163, 184, 0.55);
 }
 
-/* Attorney Logs modal */
-.al-summary-panel .csf-form__intro {
-  color: rgba(203, 220, 245, 0.82);
+/* Attorney cream theme — Logs modal + Messages wrap-up modal */
+.al-summary-panel .csf-form__intro,
+.am-summary-modal .csf-form__intro {
+  color: #6f6a62;
 }
 
-.al-summary-panel .csf-section {
-  border-color: rgba(128, 176, 255, 0.28);
-  background: rgba(4, 12, 24, 0.55);
+.al-summary-panel .csf-section,
+.am-summary-modal .csf-section {
+  border: 1px solid #e2d4c0;
+  background: linear-gradient(180deg, #fffaf3 0%, #f5ebdc 100%);
 }
 
-.al-summary-panel .csf-section__header {
-  color: #f0f6ff;
+.al-summary-panel .csf-section__header,
+.am-summary-modal .csf-section__header {
+  color: #152238;
 }
 
-.al-summary-panel .csf-section__subheader {
-  color: rgba(156, 183, 218, 0.9);
+.al-summary-panel .csf-section__subheader,
+.am-summary-modal .csf-section__subheader {
+  color: #6f6a62;
 }
 
-.al-summary-panel .csf-section__body {
-  border-color: rgba(128, 176, 255, 0.28);
-  background: rgba(4, 12, 24, 0.65);
-  color: #f0f6ff;
+.al-summary-panel .csf-section__body,
+.am-summary-modal .csf-section__body {
+  border: 1px solid #d9c8b1;
+  background: #fffaf2;
+  color: #1b2432;
+}
+
+.al-summary-panel .csf-section__body::placeholder,
+.am-summary-modal .csf-section__body::placeholder {
+  color: #8b857d;
+}
+
+.al-summary-panel .csf-section__body:focus,
+.am-summary-modal .csf-section__body:focus {
+  border-color: #152238;
+  box-shadow: 0 0 0 3px rgba(21, 34, 56, 0.12);
 }
 
 /* Client read view */

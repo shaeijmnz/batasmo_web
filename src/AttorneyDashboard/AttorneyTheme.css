@@ -1439,9 +1439,27 @@
   color: #1b2432 !important;
 }
 
+.att-queue-item__date-block {
+  background: linear-gradient(180deg, #fffaf3 0%, #f0e4d3 100%) !important;
+  border-color: #d4c4ad !important;
+  box-shadow: none !important;
+}
+
+.att-queue-month {
+  color: #8b847a !important;
+}
+
+.att-queue-day {
+  color: #152238 !important;
+}
+
+.att-queue-number {
+  background: rgba(21, 34, 56, 0.1) !important;
+  color: #152238 !important;
+}
+
 .att-spotlight-meta,
 .att-queue-subtitle,
-.att-queue-item__time,
 .att-queue-item__area,
 .att-queue-item__status-text,
 .ap-detail__label,
@@ -1455,6 +1473,10 @@
 .availability-page--attorney .monthly-template-head p,
 .availability-page--attorney .monthly-template-label {
   color: #5f6672 !important;
+}
+
+.att-queue-item__time {
+  color: #9a9288 !important;
 }
 
 .att-view-all {
@@ -1693,8 +1715,25 @@
 .ap-page .ap-detail__label,
 .ap-page .ap-bio,
 .ap-page .ap-stat__label,
+.att-page .att-queue-item__date-block {
+  background: linear-gradient(180deg, #fffaf3 0%, #f0e4d3 100%) !important;
+  border-color: #d4c4ad !important;
+}
+
+.att-page .att-queue-month {
+  color: #8b847a !important;
+}
+
+.att-page .att-queue-day {
+  color: #152238 !important;
+}
+
+.att-page .att-queue-number {
+  background: rgba(21, 34, 56, 0.1) !important;
+  color: #152238 !important;
+}
+
 .att-page .att-spotlight-meta,
-.att-page .att-queue-item__time,
 .att-page .att-queue-item__area,
 .att-page .att-queue-subtitle,
 .ua-page .ua-summary__meta,
@@ -1703,6 +1742,10 @@
 .ua-page .ua-card__time,
 .ua-page .ua-card__live-badge {
   color: #5f6672 !important;
+}
+
+.att-page .att-queue-item__time {
+  color: #9a9288 !important;
 }
 
 .att-page .att-spotlight-card,
@@ -1780,20 +1823,85 @@
 .al-page .al-item__meta span,
 .al-page .al-modal__header h2,
 .al-page .al-modal__header-meta,
+.al-page .al-summary-panel__title,
 .al-page .al-summary-panel__help,
 .al-page .al-summary-panel__loading,
 .al-page .al-summary-panel__label,
 .al-page .al-summary-panel__select,
-.al-page .al-summary-panel__textarea {
+.al-page .al-summary-panel__textarea,
+.al-page .csf-form__intro,
+.al-page .csf-section__header,
+.al-page .csf-section__body {
   color: #1b2432 !important;
+}
+
+.al-page .al-summary-panel__help,
+.al-page .al-summary-panel__loading,
+.al-page .csf-form__intro,
+.al-page .csf-section__subheader {
+  color: #6f6a62 !important;
 }
 
 .al-page .al-item,
 .al-page .al-modal,
+.al-page .al-modal__header,
 .al-page .al-summary-panel__select,
-.al-page .al-summary-panel__textarea {
+.al-page .al-summary-panel__textarea,
+.al-page .csf-section,
+.al-page .csf-section__body {
   background: linear-gradient(180deg, #fff9f0 0%, #f7ead9 100%) !important;
   border-color: #d9c8b1 !important;
+}
+
+.al-page .csf-section {
+  background: linear-gradient(180deg, #fffaf3 0%, #f5ebdc 100%) !important;
+  border-color: #e2d4c0 !important;
+}
+
+.al-page .csf-section__body {
+  background: #fffaf2 !important;
+}
+
+.al-page .al-close-btn {
+  background: linear-gradient(135deg, #152238 0%, #243652 100%) !important;
+  color: #fff !important;
+  border-color: transparent !important;
+}
+
+.am-page .am-summary-modal,
+.am-page .am-summary-modal h3,
+.am-page .am-summary-modal p,
+.am-page .am-summary-modal__label,
+.am-page .am-summary-modal__select,
+.am-page .am-summary-modal__textarea,
+.am-page .am-summary-modal .csf-section__header,
+.am-page .am-summary-modal .csf-section__body {
+  color: #1b2432 !important;
+}
+
+.am-page .am-summary-modal p,
+.am-page .am-summary-modal__hint,
+.am-page .am-summary-modal .csf-form__intro,
+.am-page .am-summary-modal .csf-section__subheader {
+  color: #6f6a62 !important;
+}
+
+.am-page .am-summary-modal,
+.am-page .am-summary-modal__select,
+.am-page .am-summary-modal__textarea,
+.am-page .am-summary-modal .csf-section,
+.am-page .am-summary-modal .csf-section__body {
+  background: linear-gradient(180deg, #fff9f0 0%, #f7ead9 100%) !important;
+  border-color: #d9c8b1 !important;
+}
+
+.am-page .am-summary-modal .csf-section {
+  background: linear-gradient(180deg, #fffaf3 0%, #f5ebdc 100%) !important;
+  border-color: #e2d4c0 !important;
+}
+
+.am-page .am-summary-modal .csf-section__body {
+  background: #fffaf2 !important;
 }
 
 .am-page,

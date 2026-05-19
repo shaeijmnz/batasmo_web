@@ -45,7 +45,6 @@
 .am-bubble--attorney,
 .am-thread-select,
 .am-input-bar__textarea,
-.am-confirm-modal,
 .am-confirm-modal p,
 .am-end-session-btn,
 .am-attach-btn,
@@ -53,6 +52,30 @@
 .am-bubble__attachment-error,
 .am-video-error {
   color: var(--at-ui-muted) !important;
+}
+
+.am-confirm-btn--ghost {
+  background: #fff9f0 !important;
+  border: 1px solid #c9b89a !important;
+  color: #152238 !important;
+}
+
+.am-confirm-btn--ghost:hover:not(:disabled) {
+  background: #f3e6d6 !important;
+}
+
+.am-confirm-btn--danger {
+  background: linear-gradient(135deg, #c62828 0%, #b71c1c 100%) !important;
+  border: 1px solid #9f1d1d !important;
+  color: #ffffff !important;
+  box-shadow: 0 8px 18px rgba(183, 28, 28, 0.22) !important;
+}
+
+.am-confirm-btn--primary {
+  background: linear-gradient(135deg, var(--at-ui-accent) 0%, var(--at-ui-accent-2) 100%) !important;
+  border: 1px solid transparent !important;
+  color: #ffffff !important;
+  box-shadow: 0 8px 18px var(--at-ui-accent-soft) !important;
 }
 
 .am-sidebar__item:hover,
@@ -83,7 +106,6 @@
 .am-date-divider span,
 .am-bubble--admin,
 .am-bubble--attorney,
-.am-confirm-modal,
 .am-timer-chip,
 .am-attach-btn,
 .am-input-bar__textarea {
@@ -107,7 +129,27 @@
 }
 
 .am-modal,
-.am-confirm-modal {
+.am-confirm-modal,
+.am-summary-modal {
   background: linear-gradient(180deg, var(--at-ui-surface) 0%, var(--at-ui-surface-2) 100%) !important;
   box-shadow: var(--at-ui-shadow) !important;
+  color: var(--at-ui-text) !important;
+  border-color: var(--at-ui-border) !important;
+}
+
+.am-summary-modal h3,
+.am-summary-modal__label {
+  color: var(--at-ui-accent) !important;
+}
+
+.am-summary-modal p,
+.am-summary-modal__hint {
+  color: var(--at-ui-muted) !important;
+}
+
+.am-summary-modal__select,
+.am-summary-modal__textarea {
+  background: #fffaf2 !important;
+  color: var(--at-ui-text) !important;
+  border: 1px solid var(--at-ui-border) !important;
 }
