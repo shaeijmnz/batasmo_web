@@ -139,28 +139,49 @@ const sendViaResend = async ({ to, subject, html, text }) => {
   return payload
 }
 
+const SMTP_SEND_MS = 12_000
+
+const withSendTimeout = async (promise, ms = SMTP_SEND_MS) => {
+  let timeoutId
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(
+      () => reject(new Error('Email send timed out. Tap Resend on the next screen.')),
+      ms,
+    )
+  })
+  try {
+    return await Promise.race([promise, timeout])
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
 const sendViaSmtp = async ({ to, subject, html, text }) => {
   const nodemailer = await import('nodemailer')
   const transport = nodemailer.createTransport({
     host: SMTP_HOST,
     port: SMTP_PORT,
     secure: SMTP_PORT === 465,
-    connectionTimeout: 20_000,
-    greetingTimeout: 15_000,
-    socketTimeout: 20_000,
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: SMTP_SEND_MS,
     auth: {
       user: SMTP_USER,
       pass: SMTP_PASS,
     },
   })
 
-  await transport.sendMail({
-    from: WELCOME_EMAIL_FROM,
-    to,
-    subject,
-    html,
-    text,
-  })
+  try {
+    await transport.sendMail({
+      from: WELCOME_EMAIL_FROM,
+      to,
+      subject,
+      html,
+      text,
+    })
+  } finally {
+    transport.close?.()
+  }
 }
 
 /**
@@ -197,9 +218,9 @@ export async function sendSignupOtpEmail({ email, otp, fullName }) {
 
   try {
     if (smtpReady) {
-      await sendViaSmtp({ to, subject, html, text })
+      await withSendTimeout(sendViaSmtp({ to, subject, html, text }))
     } else if (RESEND_API_KEY) {
-      await sendViaResend({ to, subject, html, text })
+      await withSendTimeout(sendViaResend({ to, subject, html, text }))
     } else {
       return { sent: false, skipped: true, error: 'Verification email is not configured on the server.' }
     }

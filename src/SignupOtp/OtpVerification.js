@@ -197,11 +197,20 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
       return;
     }
 
-    setErrorText('');
+    let signupWarning = '';
+    try {
+      signupWarning = String(sessionStorage.getItem('batasmo_signup_email_warning') || '').trim();
+      if (signupWarning) sessionStorage.removeItem('batasmo_signup_email_warning');
+    } catch {
+      /* ignore */
+    }
+
+    setErrorText(signupWarning);
     setEmailSending(true);
     sendEmailOtp()
       .then(() => {
         localStorage.setItem(SIGNUP_OTP_SENT_KEY, pendingEmail);
+        setErrorText('');
       })
       .catch((err) => {
         setErrorText(

@@ -254,7 +254,6 @@ function SignUp({ onNavigate, onEmailChange }) {
         onEmailChange({ email: normalizedEmail, role: 'Client', otpChannel: otpDelivery });
       }
 
-      onNavigate('otp');
       if (otpDelivery === 'email' && result?.otpSent === false && result?.emailSendError) {
         try {
           sessionStorage.setItem(
@@ -265,6 +264,8 @@ function SignUp({ onNavigate, onEmailChange }) {
           /* ignore */
         }
       }
+
+      onNavigate('otp');
     } catch (error) {
       setErrors({ form: getErrorMessage(error, 'Failed to create account.') });
     } finally {

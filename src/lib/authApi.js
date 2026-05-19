@@ -110,34 +110,65 @@ export async function signUpWithEmail({
     )
   }
 
-  const response = await fetch(`${base}/auth/signup-start`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      email: normalizedEmail,
-      password,
-      fullName,
-      role: normalizedRole,
-      sex: safeSex,
-      phone: phone || null,
-      age: parsedAge,
-      address: address || null,
-      guardianName: guardianName || null,
-      guardianContact: guardianContact || null,
-      preferredOtpChannel: otpChannel,
-    }),
-  })
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 28_000)
 
-  const payload = await response.json().catch(() => ({}))
+  let response
+  try {
+    response = await fetch(`${base}/auth/signup-start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: normalizedEmail,
+        password,
+        fullName,
+        role: normalizedRole,
+        sex: safeSex,
+        phone: phone || null,
+        age: parsedAge,
+        address: address || null,
+        guardianName: guardianName || null,
+        guardianContact: guardianContact || null,
+        preferredOtpChannel: otpChannel,
+      }),
+      signal: controller.signal,
+    })
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error('Signup request timed out. Please try again.')
+    }
+    throw new Error('Could not reach signup server. Check your connection and try again.')
+  } finally {
+    clearTimeout(timeoutId)
+  }
+
+  const rawText = await response.text().catch(() => '')
+  let payload = {}
+  if (rawText) {
+    try {
+      payload = JSON.parse(rawText)
+    } catch {
+      payload = {}
+    }
+  }
+
   if (!response.ok) {
-    throw new Error(payload?.error || 'Failed to start signup.')
+    const fallback =
+      response.status === 502 || response.status === 504
+        ? 'Signup server timed out. Try again — if you reach the code screen, tap Resend.'
+        : 'Failed to start signup.'
+    throw new Error(payload?.error || fallback)
+  }
+
+  if (!payload?.pendingId) {
+    throw new Error('Signup did not start correctly. Please try again.')
   }
 
   return {
-    pendingId: payload?.pendingId,
+    pendingId: payload.pendingId,
     email: payload?.email || normalizedEmail,
     preferredOtpChannel: payload?.preferredOtpChannel || otpChannel,
-    otpSent: payload?.otpSent === true,
+    otpSent: payload?.otpSent !== false,
     emailSendError: payload?.emailSendError || null,
   }
 }

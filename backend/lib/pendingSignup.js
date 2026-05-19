@@ -114,10 +114,13 @@ async function getPendingById({ supabaseUrl, serviceKey, pendingId }) {
 }
 
 async function deletePending({ supabaseUrl, serviceKey, pendingId }) {
-  await fetch(`${supabaseUrl}/rest/v1/pending_client_signups?id=eq.${encodeURIComponent(pendingId)}`, {
-    method: 'DELETE',
-    headers: restHeaders(serviceKey),
-  })
+  await fetchWithTimeout(
+    `${supabaseUrl}/rest/v1/pending_client_signups?id=eq.${encodeURIComponent(pendingId)}`,
+    {
+      method: 'DELETE',
+      headers: restHeaders(serviceKey),
+    },
+  )
 }
 
 async function checkSendRateLimit({ supabaseUrl, serviceKey, pendingId }) {
@@ -125,7 +128,10 @@ async function checkSendRateLimit({ supabaseUrl, serviceKey, pendingId }) {
   const url =
     `${supabaseUrl}/rest/v1/pending_client_signup_send_log?pending_id=eq.${encodeURIComponent(pendingId)}` +
     `&created_at=gte.${encodeURIComponent(oneHourAgo)}&select=id`
-  const res = await fetch(url, { method: 'HEAD', headers: { ...restHeaders(serviceKey), Prefer: 'count=exact' } })
+  const res = await fetchWithTimeout(url, {
+    method: 'HEAD',
+    headers: { ...restHeaders(serviceKey), Prefer: 'count=exact' },
+  })
   const range = res.headers.get('content-range') || ''
   const match = range.match(/\/(\d+)$/)
   if (match && Number(match[1]) >= MAX_SENDS_PER_HOUR) {
@@ -142,11 +148,15 @@ async function checkSendRateLimit({ supabaseUrl, serviceKey, pendingId }) {
 }
 
 async function logSend({ supabaseUrl, serviceKey, pendingId }) {
-  await fetch(`${supabaseUrl}/rest/v1/pending_client_signup_send_log`, {
-    method: 'POST',
-    headers: { ...restHeaders(serviceKey), Prefer: 'return=minimal' },
-    body: JSON.stringify({ pending_id: pendingId }),
-  })
+  try {
+    await fetchWithTimeout(`${supabaseUrl}/rest/v1/pending_client_signup_send_log`, {
+      method: 'POST',
+      headers: { ...restHeaders(serviceKey), Prefer: 'return=minimal' },
+      body: JSON.stringify({ pending_id: pendingId }),
+    })
+  } catch (error) {
+    console.warn('[signup] send log write failed:', error?.message || error)
+  }
 }
 
 async function iprogSendOtp(apiToken, phone) {
@@ -323,8 +333,8 @@ export async function startPendingClientSignup({
 
   await checkSendRateLimit({ supabaseUrl, serviceKey, pendingId: pending.id })
 
-  let emailSendError = null
   let otpSent = false
+  let emailSendError = null
 
   if (channel === 'email') {
     const emailResult = await sendEmailOtpForPending({ pending, otp })
@@ -333,15 +343,23 @@ export async function startPendingClientSignup({
       emailSendError = emailResult?.error || 'Failed to send verification email.'
       console.warn('[signup] OTP email not sent:', emailSendError)
     } else {
-      const patchRes = await fetchWithTimeout(
-        `${supabaseUrl}/rest/v1/pending_client_signups?id=eq.${encodeURIComponent(pending.id)}`,
-        {
-          method: 'PATCH',
-          headers: restHeaders(serviceKey),
-          body: JSON.stringify({ otp_sent_at: new Date().toISOString(), updated_at: new Date().toISOString() }),
-        },
-      )
-      if (!patchRes.ok) console.warn('[signup] could not update otp_sent_at')
+      try {
+        const patchRes = await fetchWithTimeout(
+          `${supabaseUrl}/rest/v1/pending_client_signups?id=eq.${encodeURIComponent(pending.id)}`,
+          {
+            method: 'PATCH',
+            headers: restHeaders(serviceKey),
+            body: JSON.stringify({
+              otp_sent_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }),
+          },
+          10_000,
+        )
+        if (!patchRes.ok) console.warn('[signup] could not update otp_sent_at')
+      } catch (error) {
+        console.warn('[signup] otp_sent_at patch failed:', error?.message || error)
+      }
     }
   } else {
     if (!iprogApiKey) throw new Error('SMS verification is not configured (IPROG_API_KEY).')
@@ -359,7 +377,7 @@ export async function startPendingClientSignup({
     )
   }
 
-  await logSend({ supabaseUrl, serviceKey, pendingId: pending.id })
+  void logSend({ supabaseUrl, serviceKey, pendingId: pending.id }).catch(() => {})
 
   return {
     pendingId: pending.id,
