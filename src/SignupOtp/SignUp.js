@@ -233,10 +233,11 @@ function SignUp({ onNavigate, onEmailChange }) {
       localStorage.setItem('batasmo_pending_otp_role', 'Client');
       localStorage.setItem(PENDING_OTP_CHANNEL_KEY, otpDelivery);
       localStorage.setItem(PENDING_SMS_PHONE_KEY, form.contact.trim());
-      if (result?.pendingId) {
-        localStorage.setItem(PENDING_SIGNUP_ID_KEY, String(result.pendingId));
+      if (result?.user?.id) {
+        localStorage.setItem(PENDING_SIGNUP_USER_ID_KEY, String(result.user.id));
       }
-      if (otpDelivery === 'email' && result?.otpSent) {
+      localStorage.removeItem(PENDING_SIGNUP_ID_KEY);
+      if (otpDelivery === 'email') {
         localStorage.setItem(SIGNUP_OTP_SENT_KEY, normalizedEmail);
       } else {
         localStorage.removeItem(SIGNUP_OTP_SENT_KEY);
