@@ -7,6 +7,7 @@ import {
   PENDING_SIGNUP_USER_ID_KEY,
   PENDING_SMS_PHONE_KEY,
   SIGNUP_OTP_SENT_KEY,
+  SIGNUP_PROFILE_KEY,
   signUpWithEmail,
 } from '../lib/authApi';
 import {
@@ -80,6 +81,7 @@ const clearStaleSignupPendingKeys = () => {
   localStorage.removeItem(SIGNUP_OTP_SENT_KEY);
   try {
     sessionStorage.removeItem(OTP_RESUME_SIGNUP_KEY);
+    sessionStorage.removeItem(SIGNUP_PROFILE_KEY);
   } catch {
     /* ignore */
   }
@@ -233,10 +235,16 @@ function SignUp({ onNavigate, onEmailChange }) {
       localStorage.setItem('batasmo_pending_otp_role', 'Client');
       localStorage.setItem(PENDING_OTP_CHANNEL_KEY, otpDelivery);
       localStorage.setItem(PENDING_SMS_PHONE_KEY, form.contact.trim());
+      if (result?.pendingId) {
+        localStorage.setItem(PENDING_SIGNUP_ID_KEY, String(result.pendingId));
+      } else {
+        localStorage.removeItem(PENDING_SIGNUP_ID_KEY);
+      }
       if (result?.user?.id) {
         localStorage.setItem(PENDING_SIGNUP_USER_ID_KEY, String(result.user.id));
+      } else {
+        localStorage.removeItem(PENDING_SIGNUP_USER_ID_KEY);
       }
-      localStorage.removeItem(PENDING_SIGNUP_ID_KEY);
       if (otpDelivery === 'email' && result?.otpSent) {
         localStorage.setItem(SIGNUP_OTP_SENT_KEY, normalizedEmail);
       } else {
@@ -254,6 +262,24 @@ function SignUp({ onNavigate, onEmailChange }) {
           OTP_RESUME_SIGNUP_KEY,
           JSON.stringify({ email: normalizedEmail, password: form.password }),
         );
+        if (otpDelivery === 'email') {
+          sessionStorage.setItem(
+            SIGNUP_PROFILE_KEY,
+            JSON.stringify({
+              fullName: form.fullName.trim(),
+              role: 'Client',
+              sex: form.sex,
+              phone: form.contact.trim(),
+              age: parsedAge,
+              address: form.address.trim(),
+              guardianName: parsedAge < 18 ? form.guardianName.trim() : null,
+              guardianContact: parsedAge < 18 ? form.guardianContact.trim() : null,
+              password: form.password,
+            }),
+          );
+        } else {
+          sessionStorage.removeItem(SIGNUP_PROFILE_KEY);
+        }
       } catch {
         /* ignore */
       }

@@ -9,6 +9,8 @@ const OTP_TTL_MS = 10 * 60 * 1000
 const MAX_SENDS_PER_HOUR = 8
 const MIN_MS_BETWEEN_SENDS = 55_000
 const SUPABASE_FETCH_MS = 30_000
+/** Pending row uses Supabase Auth OTP email (noreply@mail.app.supabase.io), not local SMTP hash. */
+const SUPABASE_OTP_MARKER = '__SUPABASE__'
 
 const fetchWithTimeout = async (url, options = {}, ms = SUPABASE_FETCH_MS) => {
   const controller = new AbortController()
@@ -245,6 +247,136 @@ async function sendEmailOtpForPending({ pending, otp }) {
   })
 }
 
+async function sendSupabaseAuthOtpEmail({ supabaseUrl, serviceKey, pending }) {
+  const redirectTo = String(process.env.APP_LOGIN_URL || 'https://batasmo-web.vercel.app/')
+    .trim()
+    .replace(/\/login\/?$/i, '/')
+
+  const res = await fetchWithTimeout(`${supabaseUrl}/auth/v1/otp`, {
+    method: 'POST',
+    headers: authHeaders(serviceKey),
+    body: JSON.stringify({
+      email: pending.email_norm,
+      create_user: true,
+      data: {
+        full_name: pending.full_name,
+        role: pending.role || 'Client',
+        signup_otp_completed: false,
+        sex: pending.sex || null,
+        phone: pending.phone || null,
+        age: pending.age ?? null,
+        address: pending.address || null,
+        guardian_name: pending.guardian_name || null,
+        guardian_contact: pending.guardian_contact || null,
+        preferred_otp_channel: 'email',
+      },
+      email_redirect_to: redirectTo,
+    }),
+  })
+  const payload = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const msg =
+      payload?.msg ||
+      payload?.message ||
+      payload?.error_description ||
+      payload?.error ||
+      `Supabase could not send email (${res.status}).`
+    return { sent: false, error: String(msg) }
+  }
+  return { sent: true }
+}
+
+async function verifySupabaseAuthOtp({ supabaseUrl, serviceKey, email, token }) {
+  const res = await fetchWithTimeout(`${supabaseUrl}/auth/v1/verify`, {
+    method: 'POST',
+    headers: authHeaders(serviceKey),
+    body: JSON.stringify({
+      type: 'email',
+      email,
+      token,
+    }),
+  })
+  const payload = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const msg =
+      payload?.msg ||
+      payload?.message ||
+      payload?.error_description ||
+      payload?.error ||
+      'Invalid or expired verification code.'
+    throw new Error(String(msg))
+  }
+  return payload
+}
+
+async function finalizeSupabasePendingUser({ supabaseUrl, serviceKey, pending, password, verifiedPayload }) {
+  const email = pending.email_norm
+  let userId = verifiedPayload?.user?.id || verifiedPayload?.id || null
+
+  if (!userId) {
+    const created = await createSupabaseClientAccount({
+      supabaseUrl,
+      serviceKey,
+      pending,
+      password,
+    })
+    return created.userId
+  }
+
+  const patchRes = await fetchWithTimeout(`${supabaseUrl}/auth/v1/admin/users/${userId}`, {
+    method: 'PUT',
+    headers: authHeaders(serviceKey),
+    body: JSON.stringify({
+      password,
+      email_confirm: true,
+      user_metadata: {
+        full_name: pending.full_name,
+        role: pending.role || 'Client',
+        signup_otp_completed: true,
+        sex: pending.sex || null,
+        phone: pending.phone || null,
+        age: pending.age ?? null,
+        address: pending.address || null,
+        guardian_name: pending.guardian_name || null,
+        guardian_contact: pending.guardian_contact || null,
+        preferred_otp_channel: 'email',
+      },
+    }),
+  })
+  const patchPayload = await patchRes.json().catch(() => ({}))
+  if (!patchRes.ok) {
+    throw new Error(
+      patchPayload?.msg ||
+        patchPayload?.message ||
+        patchPayload?.error ||
+        'Could not finalize account after verification.',
+    )
+  }
+
+  const nowIso = new Date().toISOString()
+  await fetchWithTimeout(`${supabaseUrl}/rest/v1/profiles?on_conflict=id`, {
+    method: 'POST',
+    headers: { ...restHeaders(serviceKey), Prefer: 'resolution=merge-duplicates' },
+    body: JSON.stringify({
+      id: userId,
+      email,
+      full_name: pending.full_name,
+      role: pending.role || 'Client',
+      sex: pending.sex || null,
+      phone: pending.phone || null,
+      age: pending.age ?? null,
+      address: pending.address || null,
+      guardian_name: pending.guardian_name || null,
+      guardian_contact: pending.guardian_contact || null,
+      preferred_otp_channel: 'email',
+      created_at: nowIso,
+      updated_at: nowIso,
+    }),
+  })
+
+  return userId
+}
+
 /** Fire-and-forget after signup-start so Create Account returns quickly. */
 function queueSignupOtpEmail({ supabaseUrl, serviceKey, pending, otp }) {
   setImmediate(() => {
@@ -381,12 +513,43 @@ export async function startPendingClientSignup({
   let otpSent = false
 
   if (channel === 'email') {
-    if (!isSignupOtpEmailConfigured()) {
+    const useSupabaseMailer =
+      String(process.env.SIGNUP_EMAIL_VIA_SUPABASE || 'true').toLowerCase() !== 'false'
+    const smtpConfigured = isSignupOtpEmailConfigured()
+
+    if (useSupabaseMailer) {
+      const supabaseSend = await sendSupabaseAuthOtpEmail({ supabaseUrl, serviceKey, pending })
+      if (!supabaseSend.sent) {
+        if (smtpConfigured) {
+          queueSignupOtpEmail({ supabaseUrl, serviceKey, pending, otp })
+        } else {
+          throw new Error(
+            supabaseSend.error ||
+              'Could not send verification email. In Supabase: turn ON Confirm email and Email OTP.',
+          )
+        }
+      } else {
+        await fetchWithTimeout(
+          `${supabaseUrl}/rest/v1/pending_client_signups?id=eq.${encodeURIComponent(pending.id)}`,
+          {
+            method: 'PATCH',
+            headers: restHeaders(serviceKey),
+            body: JSON.stringify({
+              otp_hash: SUPABASE_OTP_MARKER,
+              otp_expires_at: otpExpires,
+              otp_sent_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }),
+          },
+        )
+      }
+    } else if (smtpConfigured) {
+      queueSignupOtpEmail({ supabaseUrl, serviceKey, pending, otp })
+    } else {
       throw new Error(
-        'Email verification is not configured on the server (Gmail SMTP on Render).',
+        'Email verification is not configured (enable SIGNUP_EMAIL_VIA_SUPABASE or Gmail SMTP on Render).',
       )
     }
-    queueSignupOtpEmail({ supabaseUrl, serviceKey, pending, otp })
   } else {
     if (!iprogApiKey) throw new Error('SMS verification is not configured (IPROG_API_KEY).')
     if (!phone) throw new Error('A valid Philippine mobile number is required for SMS OTP.')
@@ -431,25 +594,66 @@ export async function resendPendingSignupOtp({
   const channel = pending.preferred_otp_channel === 'sms' ? 'sms' : 'email'
 
   if (channel === 'email') {
-    const otp = generateOtp()
     const otpExpires = new Date(Date.now() + OTP_TTL_MS).toISOString()
-    const emailResult = await sendEmailOtpForPending({ pending, otp })
-    if (!emailResult?.sent) {
-      throw new Error(emailResult?.error || 'Failed to send verification email.')
+    const useSupabaseMailer =
+      String(process.env.SIGNUP_EMAIL_VIA_SUPABASE || 'true').toLowerCase() !== 'false'
+
+    if (useSupabaseMailer) {
+      const supabaseSend = await sendSupabaseAuthOtpEmail({ supabaseUrl, serviceKey, pending })
+      if (!supabaseSend.sent) {
+        const otp = generateOtp()
+        const emailResult = await sendEmailOtpForPending({ pending, otp })
+        if (!emailResult?.sent) {
+          throw new Error(emailResult?.error || supabaseSend.error || 'Failed to send verification email.')
+        }
+        await fetchWithTimeout(
+          `${supabaseUrl}/rest/v1/pending_client_signups?id=eq.${encodeURIComponent(pending.id)}`,
+          {
+            method: 'PATCH',
+            headers: restHeaders(serviceKey),
+            body: JSON.stringify({
+              otp_hash: hashSecret(otp, pending.email_norm),
+              otp_expires_at: otpExpires,
+              otp_sent_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }),
+          },
+        )
+      } else {
+        await fetchWithTimeout(
+          `${supabaseUrl}/rest/v1/pending_client_signups?id=eq.${encodeURIComponent(pending.id)}`,
+          {
+            method: 'PATCH',
+            headers: restHeaders(serviceKey),
+            body: JSON.stringify({
+              otp_hash: SUPABASE_OTP_MARKER,
+              otp_expires_at: otpExpires,
+              otp_sent_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }),
+          },
+        )
+      }
+    } else {
+      const otp = generateOtp()
+      const emailResult = await sendEmailOtpForPending({ pending, otp })
+      if (!emailResult?.sent) {
+        throw new Error(emailResult?.error || 'Failed to send verification email.')
+      }
+      await fetchWithTimeout(
+        `${supabaseUrl}/rest/v1/pending_client_signups?id=eq.${encodeURIComponent(pending.id)}`,
+        {
+          method: 'PATCH',
+          headers: restHeaders(serviceKey),
+          body: JSON.stringify({
+            otp_hash: hashSecret(otp, pending.email_norm),
+            otp_expires_at: otpExpires,
+            otp_sent_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }),
+        },
+      )
     }
-    await fetchWithTimeout(
-      `${supabaseUrl}/rest/v1/pending_client_signups?id=eq.${encodeURIComponent(pending.id)}`,
-      {
-        method: 'PATCH',
-        headers: restHeaders(serviceKey),
-        body: JSON.stringify({
-          otp_hash: hashSecret(otp, pending.email_norm),
-          otp_expires_at: otpExpires,
-          otp_sent_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }),
-      },
-    )
     await logSend({ supabaseUrl, serviceKey, pendingId: pending.id })
     return { pendingId: pending.id, email: pending.email_norm, otpSent: true }
   } else {
@@ -500,6 +704,7 @@ export async function completePendingClientSignup({
   }
 
   const channel = pending.preferred_otp_channel === 'sms' ? 'sms' : 'email'
+  let verifiedPayload = null
 
   if (channel === 'email') {
     if (!pending.otp_hash || !pending.otp_expires_at) {
@@ -508,7 +713,14 @@ export async function completePendingClientSignup({
     if (new Date(pending.otp_expires_at).getTime() < Date.now()) {
       throw new Error('Verification code expired. Tap Resend Code.')
     }
-    if (hashSecret(token, pending.email_norm) !== pending.otp_hash) {
+    if (pending.otp_hash === SUPABASE_OTP_MARKER) {
+      verifiedPayload = await verifySupabaseAuthOtp({
+        supabaseUrl,
+        serviceKey,
+        email: normalizedEmail,
+        token,
+      })
+    } else if (hashSecret(token, pending.email_norm) !== pending.otp_hash) {
       throw new Error('Invalid or expired verification code.')
     }
   } else {
@@ -524,12 +736,24 @@ export async function completePendingClientSignup({
     throw new Error('This email is already registered. Try logging in.')
   }
 
-  const { userId } = await createSupabaseClientAccount({
-    supabaseUrl,
-    serviceKey,
-    pending,
-    password: plainPassword,
-  })
+  let userId
+  if (channel === 'email' && pending.otp_hash === SUPABASE_OTP_MARKER) {
+    userId = await finalizeSupabasePendingUser({
+      supabaseUrl,
+      serviceKey,
+      pending,
+      password: plainPassword,
+      verifiedPayload,
+    })
+  } else {
+    const created = await createSupabaseClientAccount({
+      supabaseUrl,
+      serviceKey,
+      pending,
+      password: plainPassword,
+    })
+    userId = created.userId
+  }
 
   await deletePending({ supabaseUrl, serviceKey, pendingId: pending.id })
 

@@ -22,6 +22,7 @@ export const PENDING_SMS_PHONE_KEY = 'batasmo_pending_sms_phone'
 export const OTP_RESUME_LOGIN_KEY = 'batasmo_otp_resume_login'
 export const OTP_RESUME_SIGNUP_KEY = 'batasmo_otp_resume_signup'
 export const SIGNUP_OTP_SENT_KEY = 'batasmo_signup_otp_sent'
+export const SIGNUP_PROFILE_KEY = 'batasmo_signup_profile'
 
 const getBackendApiBase = () =>
   String(
@@ -133,23 +134,84 @@ export async function signUpWithEmail({
   const emailRedirectTo =
     typeof window !== 'undefined' ? `${window.location.origin}/` : undefined
 
+  const userMeta = {
+    full_name: fullName,
+    role: normalizedRole,
+    signup_otp_completed: false,
+    sex: safeSex,
+    phone: phone || null,
+    age: parsedAge,
+    address: address || null,
+    guardian_name: guardianName || null,
+    guardian_contact: guardianContact || null,
+    preferred_otp_channel: otpChannel,
+  }
+
+  // Email: pending signup on backend (no profile row; Supabase OTP email from server).
+  if (otpChannel === 'email') {
+    const backendBase = getBackendApiBase()
+    if (backendBase) {
+      const pending = await startPendingSignupRequest({
+        email: normalizedEmail,
+        password,
+        fullName: String(fullName || '').trim(),
+        role: normalizedRole,
+        sex: safeSex,
+        phone: phone || null,
+        age: parsedAge,
+        address: address || null,
+        guardianName: guardianName || null,
+        guardianContact: guardianContact || null,
+        preferredOtpChannel: 'email',
+      })
+      return {
+        user: null,
+        pendingId: pending.pendingId,
+        preferredOtpChannel: 'email',
+        otpSent: Boolean(pending.otpSent || pending.emailQueued),
+        resendHint: pending.emailQueued
+          ? 'Code is sending — check Gmail in a moment (Inbox, Promotions, Spam).'
+          : undefined,
+      }
+    }
+
+    // Fallback: Supabase from browser (needs Confirm email ON in dashboard).
+    const { error } = await supabase.auth.signInWithOtp({
+      email: normalizedEmail,
+      options: {
+        shouldCreateUser: true,
+        emailRedirectTo,
+        data: userMeta,
+      },
+    })
+
+    if (error) {
+      const msg = String(error.message || '')
+      const lower = msg.toLowerCase()
+      if (lower.includes('rate limit') || lower.includes('too many')) {
+        throw new Error('Too many emails sent. Wait a few minutes, then tap Resend Code on the next screen.')
+      }
+      if (lower.includes('already registered') || lower.includes('already exists')) {
+        throw new Error(
+          'This Gmail is already registered. Delete the test user in Supabase → Authentication → Users, then try again.',
+        )
+      }
+      throw new Error(msg)
+    }
+
+    return {
+      user: null,
+      preferredOtpChannel: 'email',
+      otpSent: true,
+    }
+  }
+
   const { data, error } = await supabase.auth.signUp({
     email: normalizedEmail,
     password,
     options: {
       emailRedirectTo,
-      data: {
-        full_name: fullName,
-        role: normalizedRole,
-        signup_otp_completed: false,
-        sex: safeSex,
-        phone: phone || null,
-        age: parsedAge,
-        address: address || null,
-        guardian_name: guardianName || null,
-        guardian_contact: guardianContact || null,
-        preferred_otp_channel: otpChannel,
-      },
+      data: userMeta,
     },
   })
 
@@ -157,14 +219,14 @@ export async function signUpWithEmail({
     const msg = String(error.message || '')
     const lower = msg.toLowerCase()
     if (lower.includes('rate limit') || lower.includes('too many')) {
-      throw new Error('Too many emails sent. Wait a few minutes, then tap Resend Code on the next screen.')
+      throw new Error('Too many emails sent. Wait a few minutes, then try again.')
     }
     throw new Error(msg)
   }
 
   if (data?.user?.identities?.length === 0) {
     throw new Error(
-      'This Gmail is already registered. Try Log in, or in Supabase → Authentication → Users delete the old test account for this email, then sign up again.',
+      'This Gmail is already registered. Try Log in, or delete the test user in Supabase → Authentication → Users.',
     )
   }
 
@@ -212,24 +274,54 @@ export async function signUpWithEmail({
     }
   }
 
-  let otpSent = otpChannel === 'email'
-  if (otpChannel === 'email' && data?.user) {
-    const { error: resendError } = await supabase.auth.resend({
-      type: 'signup',
-      email: normalizedEmail,
-    })
-    if (resendError) {
-      console.warn('[signup] resend after signUp:', resendError.message)
-      otpSent = false
-    }
-  }
-
   return {
     user: data?.user,
     preferredOtpChannel: otpChannel,
-    otpSent,
-    resendHint: otpChannel === 'email' && !otpSent ? 'Tap Resend Code on the next screen.' : undefined,
+    otpSent: true,
   }
+}
+
+/**
+ * Start client signup: pending row + OTP email (Supabase mailer or Gmail SMTP on Render).
+ */
+export async function startPendingSignupRequest(payload) {
+  const base = getBackendApiBase()
+  if (!base) {
+    throw new Error('Signup service is not configured (REACT_APP_PAYMENT_API_URL).')
+  }
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 45_000)
+  let response
+  try {
+    response = await fetch(`${base}/auth/signup-start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    })
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error('Signup request timed out. Check your connection and try again.')
+    }
+    throw new Error('Could not reach the signup server. Check your connection and try again.')
+  } finally {
+    clearTimeout(timeoutId)
+  }
+
+  const rawText = await response.text().catch(() => '')
+  let data = {}
+  if (rawText) {
+    try {
+      data = JSON.parse(rawText)
+    } catch {
+      data = {}
+    }
+  }
+  if (!response.ok) {
+    throw new Error(humanizeSignupEmailError(data?.error || 'Unable to start signup.'))
+  }
+  return data
 }
 
 /**
@@ -497,6 +589,104 @@ export async function signInWithEmail({ email, password }) {
   }
 }
 
+async function upsertSignupProfile({ userId, email, profile }) {
+  const nowIso = new Date().toISOString()
+  const normalizedRole = normalizeRole(profile.role)
+
+  const { error: profileError } = await supabase.from('profiles').upsert({
+    id: userId,
+    email,
+    full_name: profile.fullName,
+    role: normalizedRole,
+    sex: profile.sex || null,
+    phone: profile.phone || null,
+    age: profile.age ?? null,
+    address: profile.address || null,
+    guardian_name: profile.guardianName || null,
+    guardian_contact: profile.guardianContact || null,
+    preferred_otp_channel: profile.preferredOtpChannel || 'email',
+    created_at: nowIso,
+    updated_at: nowIso,
+  })
+
+  if (profileError) {
+    throw new Error(profileError.message || 'Failed to save profile.')
+  }
+
+  if (normalizedRole === 'Attorney') {
+    await supabase
+      .from('attorney_profiles')
+      .upsert(
+        {
+          user_id: userId,
+          is_verified: false,
+          updated_at: nowIso,
+        },
+        { onConflict: 'user_id' },
+      )
+  }
+}
+
+/** After email OTP: set password + profile (user was created via signInWithOtp). */
+export async function completeEmailSignupAfterOtp({ email, token, password, profile }) {
+  const normalizedEmail = normalizeAuthEmail(email)
+  const normalizedToken = String(token || '').replace(/\D/g, '')
+
+  let verified = false
+  let lastError = null
+  for (const type of ['email', 'signup']) {
+    const { error } = await supabase.auth.verifyOtp({
+      email: normalizedEmail,
+      token: normalizedToken,
+      type,
+    })
+    if (!error) {
+      verified = true
+      break
+    }
+    lastError = error
+  }
+  if (!verified) {
+    throw new Error(lastError?.message || 'Invalid or expired verification code.')
+  }
+
+  const { error: passwordError } = await supabase.auth.updateUser({
+    password: String(password || ''),
+    data: {
+      full_name: profile.fullName,
+      role: normalizeRole(profile.role),
+      signup_otp_completed: true,
+      sex: profile.sex || null,
+      phone: profile.phone || null,
+      age: profile.age ?? null,
+      address: profile.address || null,
+      guardian_name: profile.guardianName || null,
+      guardian_contact: profile.guardianContact || null,
+      preferred_otp_channel: 'email',
+    },
+  })
+  if (passwordError) {
+    throw new Error(passwordError.message || 'Could not set password.')
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user?.id) {
+    throw new Error('Verification succeeded but session is missing. Try logging in.')
+  }
+
+  await upsertSignupProfile({
+    userId: user.id,
+    email: normalizedEmail,
+    profile: { ...profile, preferredOtpChannel: 'email' },
+  })
+
+  await markSignupOtpCompleted()
+
+  return { success: true, user }
+}
+
 export async function verifySignUpOtp({ email, token }) {
   const normalizedToken = String(token || '').replace(/\D/g, '')
   let lastError = null
@@ -541,13 +731,23 @@ export async function verifySignUpOtp({ email, token }) {
 
 export async function resendSignUpOtp({ email }) {
   const normalizedEmail = normalizeAuthEmail(email)
-  const { error } = await supabase.auth.resend({
+
+  const { error: otpError } = await supabase.auth.signInWithOtp({
+    email: normalizedEmail,
+    options: { shouldCreateUser: false },
+  })
+
+  if (!otpError) {
+    return { success: true }
+  }
+
+  const { error: resendError } = await supabase.auth.resend({
     type: 'signup',
     email: normalizedEmail,
   })
 
-  if (error) {
-    throw new Error(error.message)
+  if (resendError) {
+    throw new Error(resendError.message || otpError.message)
   }
 
   return { success: true }

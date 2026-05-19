@@ -8,8 +8,13 @@ import {
   OTP_RESUME_LOGIN_KEY,
   OTP_RESUME_SIGNUP_KEY,
   SIGNUP_OTP_SENT_KEY,
+  SIGNUP_PROFILE_KEY,
+  completeEmailSignupAfterOtp,
+  completePendingSignup,
+  fetchSignupOtpDeliveryStatus,
   requestSignupSmsOtp,
   resendSignUpOtp,
+  sendSignupVerificationEmail,
   verifySignUpOtp,
   verifySignupSmsOtp,
   signInWithEmail,
@@ -151,6 +156,7 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
   }, [timer]);
 
   const pendingUserId = String(localStorage.getItem(PENDING_SIGNUP_USER_ID_KEY) || '').trim();
+  const pendingSignupId = String(localStorage.getItem(PENDING_SIGNUP_ID_KEY) || '').trim();
 
   const sendSmsOtp = useCallback(
     async (phoneOverride) => {
@@ -194,6 +200,38 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
       return;
     }
 
+    if (pendingSignupId) {
+      setEmailStatusText('Sending code to your Gmail…');
+      fetchSignupOtpDeliveryStatus({ email: pendingEmail, pendingId: pendingSignupId })
+        .then((status) => {
+          if (status?.sent) {
+            localStorage.setItem(SIGNUP_OTP_SENT_KEY, pendingEmail);
+            setEmailInitDone(true);
+            setEmailStatusText('Code sent! Check your Gmail inbox, Promotions, and Spam.');
+            setErrorText('');
+            return;
+          }
+          return sendSignupVerificationEmail({ email: pendingEmail, pendingId: pendingSignupId }).then(
+            () => {
+              localStorage.setItem(SIGNUP_OTP_SENT_KEY, pendingEmail);
+              setEmailInitDone(true);
+              setEmailStatusText('Code sent! Check your Gmail inbox, Promotions, and Spam.');
+              setErrorText('');
+            },
+          );
+        })
+        .catch((err) => {
+          setEmailStatusText('');
+          setErrorText(
+            getErrorMessage(
+              err,
+              'Could not send code. In Supabase → Sign In / Providers: turn ON Confirm email. Then Resend Code.',
+            ),
+          );
+        });
+      return;
+    }
+
     setErrorText('');
     setEmailStatusText('Sending code to your Gmail…');
     resendSignUpOtp({ email: pendingEmail })
@@ -212,7 +250,7 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
           ),
         );
       });
-  }, [delivery, pendingEmail]);
+  }, [delivery, pendingEmail, pendingSignupId]);
 
   useEffect(() => {
     if (delivery !== 'sms' || !pendingEmail || smsAutoTriedRef.current) return;
@@ -264,7 +302,10 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
     };
 
     if (delivery === 'email') {
-      resendSignUpOtp({ email: pendingEmail })
+      const resendPromise = pendingSignupId
+        ? sendSignupVerificationEmail({ email: pendingEmail, pendingId: pendingSignupId })
+        : resendSignUpOtp({ email: pendingEmail });
+      resendPromise
         .then(() => {
           localStorage.setItem(SIGNUP_OTP_SENT_KEY, pendingEmail);
           done();
@@ -292,6 +333,7 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
     try {
       sessionStorage.removeItem(OTP_RESUME_LOGIN_KEY);
       sessionStorage.removeItem(OTP_RESUME_SIGNUP_KEY);
+      sessionStorage.removeItem(SIGNUP_PROFILE_KEY);
     } catch {
       /* ignore */
     }
@@ -316,7 +358,45 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
       setIsVerifying(true);
 
       if (delivery === 'email') {
-        await verifySignUpOtp({ email: pendingEmail, token });
+        let resumePassword = null;
+        try {
+          const resumeRaw = sessionStorage.getItem(OTP_RESUME_SIGNUP_KEY);
+          if (resumeRaw) {
+            const resume = JSON.parse(resumeRaw);
+            resumePassword = resume?.password || null;
+          }
+        } catch {
+          resumePassword = null;
+        }
+
+        if (pendingSignupId && resumePassword) {
+          await completePendingSignup({
+            email: pendingEmail,
+            pendingId: pendingSignupId,
+            otp: token,
+            password: resumePassword,
+          });
+          await signInWithEmail({ email: pendingEmail, password: resumePassword });
+        } else {
+          let storedProfile = null;
+          try {
+            const raw = sessionStorage.getItem(SIGNUP_PROFILE_KEY);
+            if (raw) storedProfile = JSON.parse(raw);
+          } catch {
+            storedProfile = null;
+          }
+
+          if (storedProfile?.password) {
+            await completeEmailSignupAfterOtp({
+              email: pendingEmail,
+              token,
+              password: storedProfile.password,
+              profile: storedProfile,
+            });
+          } else {
+            await verifySignUpOtp({ email: pendingEmail, token });
+          }
+        }
       } else {
         const uid = localStorage.getItem(PENDING_SIGNUP_USER_ID_KEY) || '';
         await verifySignupSmsOtp({ userId: uid || undefined, email: pendingEmail, token });
