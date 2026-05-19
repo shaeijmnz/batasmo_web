@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './UpcomingAppointments.css';
 import './AttorneyTheme.css';
-import './UpcomingAppointmentsPalette.css';
 import {
   fetchAttorneyUpcomingAppointments,
   getAvailability,
@@ -416,7 +415,6 @@ function UpcomingAppointments({ onNavigate, profile }) {
           {[
             { label: 'Dashboard',     icon: <DashboardIcon />,          nav: 'attorney-home' },
             { label: 'Consultation Management',   icon: <ScheduleIcon />,           nav: 'upcoming-appointments' },
-            { label: 'My Availability', icon: <ScheduleIcon />, nav: 'attorney-availability' },
             { label: 'Logs',          icon: <LogsIcon />,               nav: 'attorney-logs' },
             { label: 'Announcement',  icon: <SideAnnouncementIcon />,   nav: 'attorney-announcements' },
             { label: 'Profile',       icon: <ProfileIcon />,            nav: 'attorney-profile' },
@@ -489,23 +487,14 @@ function UpcomingAppointments({ onNavigate, profile }) {
             <h2 className="ua-summary__count">{totalUpcoming}</h2>
             <p className="ua-summary__meta">Last synced: {lastUpdatedLabel}</p>
           </div>
-          <div className="ua-summary__actions">
-            <button
-              type="button"
-              className="ua-summary__availability"
-              onClick={() => onNavigate('attorney-availability')}
-            >
-              Manage My Availability
-            </button>
-            <button
-              className="ua-summary__refresh"
-              type="button"
-              onClick={() => loadAppointments({ force: true })}
-              disabled={isRefreshing}
-            >
-              {isRefreshing ? 'Refreshing...' : 'Refresh'}
-            </button>
-          </div>
+          <button
+            className="ua-summary__refresh"
+            type="button"
+            onClick={() => loadAppointments({ force: true })}
+            disabled={isRefreshing}
+          >
+            {isRefreshing ? 'Refreshing...' : 'Refresh'}
+          </button>
         </section>
 
         {loadError ? <p className="ua-load-error">{loadError}</p> : null}

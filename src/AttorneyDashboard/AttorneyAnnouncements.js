@@ -166,22 +166,10 @@ export default function AttorneyAnnouncements({ onNavigate, profile }) {
                   </div>
                 </div>
                 <h2 className="aa-card__title">{a.title}</h2>
-                {a.imageUrl ? (
-                  <a
-                    href={a.imageUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="aa-card__image-link"
-                  >
-                    <img src={a.imageUrl} alt="" className="aa-card__image" loading="lazy" />
-                  </a>
-                ) : null}
-                {a.body ? (
-                  <p className={`aa-card__body ${isExpanded ? '' : 'aa-card__body--clamped'}`}>
-                    {a.body}
-                  </p>
-                ) : null}
-                {a.body && a.body.length > 150 && (
+                <p className={`aa-card__body ${isExpanded ? '' : 'aa-card__body--clamped'}`}>
+                  {a.body}
+                </p>
+                {a.body.length > 150 && (
                   <button className="aa-card__toggle" onClick={() => setExpandedId(isExpanded ? null : a.id)}>
                     {isExpanded ? 'Show Less' : 'Read More'}
                   </button>

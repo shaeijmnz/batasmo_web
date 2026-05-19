@@ -4,14 +4,6 @@ import crypto from 'crypto'
 import dotenv from 'dotenv'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import jwt from 'jsonwebtoken'
-import { isWelcomeEmailConfigured, sendAttorneyWelcomeEmail } from './lib/welcomeEmail.js'
-import { isSignupOtpEmailConfigured, getSignupOtpEmailStatus } from './lib/signupOtpEmail.js'
-import {
-  startPendingClientSignup,
-  resendPendingSignupOtp,
-  completePendingClientSignup,
-  getPendingSignupOtpStatus,
-} from './lib/pendingSignup.js'
 
 dotenv.config()
 
@@ -22,7 +14,6 @@ const ALLOWED_ORIGIN_BASE = String(ALLOWED_ORIGIN).trim().replace(/\/+$/, '')
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').trim()
 const SUPABASE_SERVICE_ROLE_KEY = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
-const IPROG_API_KEY = String(process.env.IPROG_API_KEY || process.env.IPROG_API_TOKEN || '').trim()
 const PAYMONGO_SECRET_KEY = String(process.env.PAYMONGO_SECRET_KEY || '').trim()
 const AZURE_FACE_KEY = String(process.env.AZURE_FACE_KEY || '').trim()
 const AZURE_FACE_ENDPOINT = String(process.env.AZURE_FACE_ENDPOINT || '').trim().replace(/\/+$/, '')
@@ -737,32 +728,17 @@ const verifySupabaseUserJwt = async (jwt) => {
   return payload
 }
 
-const getCallerProfileRole = async (jwt) => {
+const verifyCallerIsAdmin = async (jwt) => {
   const user = await verifySupabaseUserJwt(jwt)
   const profile = await supabaseSelectSingle({
     table: 'profiles',
     query: new URLSearchParams({ id: `eq.${user.id}` }).toString(),
   })
   const role = String(profile?.role || '').toLowerCase()
-  return { userId: user.id, role }
-}
-
-/** Admin or Secretary — operational desk tasks (clients, scheduling, support). */
-const verifyCallerIsStaff = async (jwt) => {
-  const { userId, role } = await getCallerProfileRole(jwt)
-  if (role !== 'admin' && role !== 'secretary') {
-    throw new Error('Only Admin or Secretary users can perform this action.')
-  }
-  return userId
-}
-
-/** Admin only — sensitive configuration and attorney account creation. */
-const verifyCallerIsAdmin = async (jwt) => {
-  const { userId, role } = await getCallerProfileRole(jwt)
   if (role !== 'admin') {
     throw new Error('Only Admin users can perform this action.')
   }
-  return userId
+  return user.id
 }
 
 const WALK_IN_PASSWORD_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
@@ -891,6 +867,262 @@ const supabaseAdminCreateWalkInClient = async ({ email, password, fullName }) =>
 }
 
 /**
+ * Promote an existing Client profile (and auth metadata) to Admin.
+ */
+const supabaseAdminPromoteClientToAdmin = async ({ targetUserId }) => {
+  const userId = String(targetUserId || '').trim()
+  if (!userId) {
+    throw new Error('User id is required.')
+  }
+
+  const profile = await supabaseSelectSingle({
+    table: 'profiles',
+    query: new URLSearchParams({ id: `eq.${userId}` }).toString(),
+  })
+  if (!profile) {
+    throw new Error('User not found.')
+  }
+
+  const role = String(profile.role || '').trim()
+  if (role === 'Admin') {
+    throw new Error('This user is already an Admin.')
+  }
+  if (role === 'Attorney') {
+    throw new Error('Attorney accounts cannot be promoted from Clients. Manage them under Attorneys.')
+  }
+  if (role !== 'Client') {
+    throw new Error(`Cannot promote user with role "${role || 'unknown'}".`)
+  }
+
+  const nowIso = new Date().toISOString()
+  const profileRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/profiles?${new URLSearchParams({ id: `eq.${userId}` }).toString()}`,
+    {
+      method: 'PATCH',
+      headers: supabaseRestHeaders(),
+      body: JSON.stringify({
+        role: 'Admin',
+        updated_at: nowIso,
+      }),
+    },
+  )
+  const profilePayload = await profileRes.json().catch(() => null)
+  if (!profileRes.ok) {
+    throw new Error(
+      profilePayload?.message ||
+        profilePayload?.error ||
+        `Failed to update profile role (${profileRes.status}).`,
+    )
+  }
+
+  const authGetRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    },
+  })
+  const authUser = await authGetRes.json().catch(() => null)
+  if (!authGetRes.ok) {
+    console.warn('[admin promote] auth user fetch failed', authUser)
+    throw new Error(
+      authUser?.msg ||
+        authUser?.message ||
+        'Profile was updated but loading the auth user failed. Check Supabase logs.',
+    )
+  }
+
+  const existingMeta = authUser?.user_metadata || authUser?.raw_user_meta_data || {}
+  const authPatchRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
+    method: 'PUT',
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      user_metadata: {
+        ...existingMeta,
+        role: 'Admin',
+        full_name: existingMeta.full_name || profile.full_name || profile.email || 'Admin',
+      },
+    }),
+  })
+  const authPatchPayload = await authPatchRes.json().catch(() => null)
+  if (!authPatchRes.ok) {
+    console.warn('[admin promote] auth metadata update failed', authPatchPayload)
+    throw new Error(
+      authPatchPayload?.msg ||
+        authPatchPayload?.message ||
+        'Profile role was set to Admin but updating login metadata failed. Ask the user to sign out and back in, or retry.',
+    )
+  }
+
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/notifications`, {
+      method: 'POST',
+      headers: supabaseRestHeaders(),
+      body: JSON.stringify({
+        user_id: userId,
+        title: 'Admin access granted',
+        body: 'Your account was promoted to BatasMo Admin. Sign out and sign in again to open the Admin Dashboard.',
+        type: 'admin_update',
+        is_read: false,
+        created_at: nowIso,
+      }),
+    })
+  } catch (notifyErr) {
+    console.warn('[admin promote] notification insert failed', notifyErr)
+  }
+
+  return {
+    userId,
+    email: profile.email || authUser?.email || '',
+    fullName: profile.full_name || existingMeta.full_name || 'Admin',
+    role: 'Admin',
+  }
+}
+
+const supabaseListAdminProfileIds = async () => {
+  const response = await fetch(
+    `${SUPABASE_URL}/rest/v1/profiles?${new URLSearchParams({ role: 'eq.Admin', select: 'id' }).toString()}`,
+    {
+      method: 'GET',
+      headers: supabaseRestHeaders(),
+    },
+  )
+  const payload = await response.json().catch(() => [])
+  if (!response.ok) {
+    throw new Error(payload?.message || payload?.error || 'Failed to list Admin users.')
+  }
+  return Array.isArray(payload) ? payload.map((row) => String(row.id || '')).filter(Boolean) : []
+}
+
+/**
+ * Demote an Admin profile (and auth metadata) back to Client — for testing / rollback.
+ */
+const supabaseAdminDemoteAdminToClient = async ({ targetUserId, actingAdminId }) => {
+  const userId = String(targetUserId || '').trim()
+  if (!userId) {
+    throw new Error('User id is required.')
+  }
+
+  if (actingAdminId && String(actingAdminId) === userId) {
+    throw new Error('You cannot demote your own account while signed in.')
+  }
+
+  const profile = await supabaseSelectSingle({
+    table: 'profiles',
+    query: new URLSearchParams({ id: `eq.${userId}` }).toString(),
+  })
+  if (!profile) {
+    throw new Error('User not found.')
+  }
+
+  const role = String(profile.role || '').trim()
+  if (role === 'Client') {
+    throw new Error('This user is already a Client.')
+  }
+  if (role === 'Attorney') {
+    throw new Error('Attorney accounts cannot be demoted here. Manage them under Attorneys.')
+  }
+  if (role !== 'Admin') {
+    throw new Error(`Cannot demote user with role "${role || 'unknown'}".`)
+  }
+
+  const adminIds = await supabaseListAdminProfileIds()
+  if (adminIds.length <= 1) {
+    throw new Error('Cannot demote the only remaining Admin account.')
+  }
+
+  const nowIso = new Date().toISOString()
+  const profileRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/profiles?${new URLSearchParams({ id: `eq.${userId}` }).toString()}`,
+    {
+      method: 'PATCH',
+      headers: supabaseRestHeaders(),
+      body: JSON.stringify({
+        role: 'Client',
+        updated_at: nowIso,
+      }),
+    },
+  )
+  const profilePayload = await profileRes.json().catch(() => null)
+  if (!profileRes.ok) {
+    throw new Error(
+      profilePayload?.message ||
+        profilePayload?.error ||
+        `Failed to update profile role (${profileRes.status}).`,
+    )
+  }
+
+  const authGetRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    },
+  })
+  const authUser = await authGetRes.json().catch(() => null)
+  if (!authGetRes.ok) {
+    console.warn('[admin demote] auth user fetch failed', authUser)
+    throw new Error(
+      authUser?.msg ||
+        authUser?.message ||
+        'Profile was updated but loading the auth user failed. Check Supabase logs.',
+    )
+  }
+
+  const existingMeta = authUser?.user_metadata || authUser?.raw_user_meta_data || {}
+  const authPatchRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
+    method: 'PUT',
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      user_metadata: {
+        ...existingMeta,
+        role: 'Client',
+        full_name: existingMeta.full_name || profile.full_name || profile.email || 'Client',
+      },
+    }),
+  })
+  const authPatchPayload = await authPatchRes.json().catch(() => null)
+  if (!authPatchRes.ok) {
+    console.warn('[admin demote] auth metadata update failed', authPatchPayload)
+    throw new Error(
+      authPatchPayload?.msg ||
+        authPatchPayload?.message ||
+        'Profile role was set to Client but updating login metadata failed. Ask the user to sign out and back in, or retry.',
+    )
+  }
+
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/notifications`, {
+      method: 'POST',
+      headers: supabaseRestHeaders(),
+      body: JSON.stringify({
+        user_id: userId,
+        title: 'Admin access removed',
+        body: 'Your account was changed back to Client. Sign out and sign in again to use the client dashboard.',
+        type: 'admin_update',
+        is_read: false,
+        created_at: nowIso,
+      }),
+    })
+  } catch (notifyErr) {
+    console.warn('[admin demote] notification insert failed', notifyErr)
+  }
+
+  return {
+    userId,
+    email: profile.email || authUser?.email || '',
+    fullName: profile.full_name || existingMeta.full_name || 'Client',
+    role: 'Client',
+  }
+}
+
+/**
  * Create a Supabase Auth user (email pre-confirmed) + Attorney profile rows.
  */
 const supabaseAdminCreateWalkInAttorney = async ({ email, password, fullName, specialty }) => {
@@ -1009,13 +1241,7 @@ const supabaseAdminCreateWalkInAttorney = async ({ email, password, fullName, sp
     )
   }
 
-  return {
-    userId,
-    email: normalizedEmail,
-    fullName: displayName,
-    specialties,
-    password: safePassword,
-  }
+  return { userId, email: normalizedEmail, fullName: displayName, specialties }
 }
 
 /**
@@ -1954,7 +2180,7 @@ app.get('/admin/clients/:clientId/active-appointments', async (req, res) => {
     const authHeader = String(req.headers.authorization || '').trim()
     const jwt = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
     if (!jwt) return res.status(401).json({ error: 'Authorization Bearer token is required.' })
-    await verifyCallerIsStaff(jwt)
+    await verifyCallerIsAdmin(jwt)
 
     const clientId = String(req.params?.clientId || '').trim()
     if (!clientId) return res.status(400).json({ error: 'clientId is required.' })
@@ -2010,6 +2236,81 @@ app.get('/admin/clients/:clientId/active-appointments', async (req, res) => {
   }
 })
 
+// Promote an existing Client account to Admin (profile + auth metadata).
+app.post('/admin/clients/:userId/promote-to-admin', async (req, res) => {
+  try {
+    requireSupabaseServiceConfig()
+
+    const authHeader = String(req.headers.authorization || '').trim()
+    const jwt = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
+    if (!jwt) {
+      return res.status(401).json({ error: 'Authorization Bearer token is required.' })
+    }
+
+    await verifyCallerIsAdmin(jwt)
+
+    const userId = String(req.params?.userId || '').trim()
+    const result = await supabaseAdminPromoteClientToAdmin({ targetUserId: userId })
+    return res.status(200).json(result)
+  } catch (error) {
+    const msg = error?.message || 'Unable to promote user to Admin.'
+    const lower = msg.toLowerCase()
+    const status =
+      msg.includes('Only Admin') || msg.includes('Invalid') || msg.includes('session')
+        ? 403
+        : msg.includes('Bearer')
+          ? 401
+          : lower.includes('not found') ||
+              lower.includes('already an admin') ||
+              lower.includes('cannot promote') ||
+              lower.includes('attorney accounts') ||
+              lower.includes('user id is required')
+            ? 400
+            : 500
+    return res.status(status).json({ error: msg })
+  }
+})
+
+// Demote an Admin account back to Client (profile + auth metadata).
+app.post('/admin/users/:userId/demote-to-client', async (req, res) => {
+  try {
+    requireSupabaseServiceConfig()
+
+    const authHeader = String(req.headers.authorization || '').trim()
+    const jwt = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
+    if (!jwt) {
+      return res.status(401).json({ error: 'Authorization Bearer token is required.' })
+    }
+
+    const actingAdminId = await verifyCallerIsAdmin(jwt)
+
+    const userId = String(req.params?.userId || '').trim()
+    const result = await supabaseAdminDemoteAdminToClient({
+      targetUserId: userId,
+      actingAdminId,
+    })
+    return res.status(200).json(result)
+  } catch (error) {
+    const msg = error?.message || 'Unable to demote user to Client.'
+    const lower = msg.toLowerCase()
+    const status =
+      msg.includes('Only Admin') || msg.includes('Invalid') || msg.includes('session')
+        ? 403
+        : msg.includes('Bearer')
+          ? 401
+          : lower.includes('not found') ||
+              lower.includes('already a client') ||
+              lower.includes('cannot demote') ||
+              lower.includes('cannot demote your own') ||
+              lower.includes('only remaining admin') ||
+              lower.includes('attorney accounts') ||
+              lower.includes('user id is required')
+            ? 400
+            : 500
+    return res.status(status).json({ error: msg })
+  }
+})
+
 // Walk-in / front-desk: admin creates a Client account (email + password, email confirmed).
 app.post('/admin/clients/walk-in', async (req, res) => {
   try {
@@ -2021,7 +2322,7 @@ app.post('/admin/clients/walk-in', async (req, res) => {
       return res.status(401).json({ error: 'Authorization Bearer token is required.' })
     }
 
-    await verifyCallerIsStaff(jwt)
+    await verifyCallerIsAdmin(jwt)
 
     const email = String(req.body?.email || '').trim()
     const password = String(req.body?.password || '')
@@ -2073,26 +2374,7 @@ app.post('/admin/attorneys/walk-in', async (req, res) => {
       fullName,
       specialty,
     })
-
-    const loginBase = String(process.env.APP_LOGIN_URL || '').trim()
-    const loginUrl =
-      loginBase ||
-      `${ALLOWED_ORIGIN_BASE}/login`
-
-    const emailResult = await sendAttorneyWelcomeEmail({
-      email: result.email,
-      fullName: result.fullName,
-      password: result.password,
-      loginUrl,
-    })
-
-    const { password: _omitPassword, ...safeResult } = result
-    return res.status(201).json({
-      ...safeResult,
-      welcomeEmailSent: Boolean(emailResult.sent),
-      welcomeEmailSkipped: Boolean(emailResult.skipped),
-      welcomeEmailError: emailResult.sent ? undefined : emailResult.error,
-    })
+    return res.status(201).json(result)
   } catch (error) {
     const msg = error?.message || 'Unable to create attorney account.'
     const lower = msg.toLowerCase()
@@ -2125,7 +2407,7 @@ app.post('/admin/appointments/reschedule', async (req, res) => {
       return res.status(401).json({ error: 'Authorization Bearer token is required.' })
     }
 
-    await verifyCallerIsStaff(jwt)
+    await verifyCallerIsAdmin(jwt)
 
     const appointmentId = String(req.body?.appointmentId || '').trim()
     const newSlotId = String(req.body?.newSlotId || '').trim()
@@ -2329,109 +2611,6 @@ app.post('/verify-identity', async (req, res) => {
   }
 })
 
-const signupErrorStatus = (msg) => {
-  const lower = String(msg || '').toLowerCase()
-  if (lower.includes('wait') || lower.includes('limit')) return 429
-  if (
-    lower.includes('configured') ||
-    lower.includes('required') ||
-    lower.includes('valid') ||
-    lower.includes('already') ||
-    lower.includes('not found') ||
-    lower.includes('invalid') ||
-    lower.includes('expired') ||
-    lower.includes('mismatch')
-  ) {
-    return 400
-  }
-  return 500
-}
-
-// Client signup step 1: pending record + OTP only (no auth.users row yet).
-app.post('/auth/signup-start', async (req, res) => {
-  try {
-    requireSupabaseServiceConfig()
-    const email = String(req.body?.email || '').trim()
-    if (!isGmailAddress(email)) {
-      return res.status(400).json({ error: 'A valid Gmail address is required.' })
-    }
-    const result = await startPendingClientSignup({
-      supabaseUrl: SUPABASE_URL,
-      serviceKey: SUPABASE_SERVICE_ROLE_KEY,
-      iprogApiKey: IPROG_API_KEY,
-      payload: req.body,
-    })
-    return res.status(200).json(result)
-  } catch (error) {
-    const msg = error?.message || 'Unable to start signup.'
-    console.error('[signup-start]', msg)
-    return res.status(signupErrorStatus(msg)).json({ error: msg })
-  }
-})
-
-// Poll whether OTP email was delivered (after background send on signup-start).
-app.get('/auth/signup-otp-status', async (req, res) => {
-  try {
-    requireSupabaseServiceConfig()
-    const result = await getPendingSignupOtpStatus({
-      supabaseUrl: SUPABASE_URL,
-      serviceKey: SUPABASE_SERVICE_ROLE_KEY,
-      pendingId: req.query?.pendingId,
-      email: req.query?.email,
-    })
-    return res.status(200).json(result)
-  } catch (error) {
-    const msg = error?.message || 'Unable to check OTP status.'
-    console.error('[signup-otp-status]', msg)
-    return res.status(500).json({ error: msg })
-  }
-})
-
-// Resend OTP for pending signup (email or SMS).
-app.post('/auth/signup-resend-otp', async (req, res) => {
-  try {
-    requireSupabaseServiceConfig()
-    const email = String(req.body?.email || '').trim()
-    const pendingId = String(req.body?.pendingId || '').trim()
-    if (!email && !pendingId) {
-      return res.status(400).json({ error: 'Email or pendingId is required.' })
-    }
-    const result = await resendPendingSignupOtp({
-      supabaseUrl: SUPABASE_URL,
-      serviceKey: SUPABASE_SERVICE_ROLE_KEY,
-      iprogApiKey: IPROG_API_KEY,
-      email,
-      pendingId,
-    })
-    return res.status(200).json(result)
-  } catch (error) {
-    const msg = error?.message || 'Unable to resend verification code.'
-    console.error('[signup-resend-otp]', msg)
-    return res.status(signupErrorStatus(msg)).json({ error: msg })
-  }
-})
-
-// Client signup step 2: verify OTP → create Supabase auth user + profile.
-app.post('/auth/signup-complete', async (req, res) => {
-  try {
-    requireSupabaseServiceConfig()
-    const result = await completePendingClientSignup({
-      supabaseUrl: SUPABASE_URL,
-      serviceKey: SUPABASE_SERVICE_ROLE_KEY,
-      iprogApiKey: IPROG_API_KEY,
-      email: req.body?.email,
-      pendingId: req.body?.pendingId,
-      otp: req.body?.otp,
-      password: req.body?.password,
-    })
-    return res.status(200).json(result)
-  } catch (error) {
-    const msg = error?.message || 'Unable to complete signup.'
-    console.error('[signup-complete]', msg)
-    return res.status(signupErrorStatus(msg)).json({ error: msg })
-  }
-})
-
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -2440,9 +2619,6 @@ app.get('/health', (req, res) => {
     configuredProviderMode: CHATBOT_PROVIDER_MODE,
     hasGeminiKey,
     modelCandidates: GEMINI_MODEL_CANDIDATES,
-    welcomeEmailConfigured: isWelcomeEmailConfigured(),
-    signupOtpEmailConfigured: isSignupOtpEmailConfigured(),
-    signupOtpEmail: getSignupOtpEmailStatus(),
   })
 })
 

@@ -36,7 +36,3 @@ supabase/.temp/
 
 # GitHub PAT for quick-push.sh (NEVER commit this file).
 .git-credentials
-
-# Secretary UI reference clone (local only)
-.secretary_fetch/
-secretary_ui_zip.zip

@@ -1,9 +1,8 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import './ChatRoom.css';
 import './ClientTheme.css';
-import ConsultationWaitingPopup from '../components/ConsultationWaitingPopup';
-import { attachConsultationChatPresence } from '../lib/consultationChatPresence';
 import {
+  deleteAppointmentMessage,
   fetchAppointmentMessages,
   fetchClientNotifications,
   fetchClientChatEligibleAppointments,
@@ -61,12 +60,12 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
   const [activeAppointmentId, setActiveAppointmentId] = useState('');
   const [messages, setMessages] = useState([]);
   const [inputMsg, setInputMsg] = useState('');
+  const [deletingMessageId, setDeletingMessageId] = useState('');
   const [sending, setSending] = useState(false);
   const [isClosed, setIsClosed] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [signedUrlsByMessageId, setSignedUrlsByMessageId] = useState({});
   const [timeWarningPopup, setTimeWarningPopup] = useState(null);
-  const [waitingPopup, setWaitingPopup] = useState(null);
   const [videoCall, setVideoCall] = useState(null);
   const [videoCallLoading, setVideoCallLoading] = useState(false);
   const [videoCallError, setVideoCallError] = useState('');
@@ -75,7 +74,6 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
   const sessionWasActiveRef = useRef(false);
   const lastAppointmentRef = useRef('');
   const messagesEndRef = useRef(null);
-  const otherPartyNameRef = useRef('Attorney');
   const imagePickerRef = useRef(null);
   const filePickerRef = useRef(null);
   const shownTimeWarningIdsRef = useRef(new Set());
@@ -270,40 +268,6 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
       unsubscribe();
     };
   }, [activeAppointmentId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    otherPartyNameRef.current = activeThread?.name || 'Attorney';
-  }, [activeThread?.name]);
-
-  useEffect(() => {
-    if (!activeAppointmentId || !profile?.id || isClosed) {
-      setWaitingPopup(null);
-      return undefined;
-    }
-
-    const detachPresence = attachConsultationChatPresence({
-      appointmentId: activeAppointmentId,
-      role: 'client',
-      userId: profile.id,
-      displayName: profile.full_name || profile.email || 'Client',
-      otherPartyName: otherPartyNameRef.current,
-      onWaitingPopup: (payload) => setWaitingPopup(payload),
-    });
-
-    return () => {
-      setWaitingPopup(null);
-      detachPresence();
-    };
-    // Display name is stable enough via ref on subscribe; avoid re-subscribing on every profile field change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeAppointmentId, profile?.id, isClosed]);
-
-  const handleWaitingGoToChatroom = () => {
-    setWaitingPopup(null);
-    window.setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 50);
-  };
 
   useEffect(() => {
     if (!profile?.id) return undefined;
@@ -519,6 +483,29 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
     }
   };
 
+  const handleDeleteMessage = async (messageId) => {
+    if (!activeAppointmentId || !messageId || deletingMessageId) return;
+    const shouldDelete = window.confirm('Delete this message/photo?');
+    if (!shouldDelete) return;
+
+    try {
+      setDeletingMessageId(String(messageId));
+      await deleteAppointmentMessage({ appointmentId: activeAppointmentId, messageId });
+      setMessages((previous) => previous.filter((item) => String(item.id) !== String(messageId)));
+      setSignedUrlsByMessageId((previous) => {
+        const next = { ...previous };
+        delete next[messageId];
+        delete next[String(messageId)];
+        return next;
+      });
+      setLoadError('');
+    } catch (error) {
+      setLoadError(error.message || 'Unable to delete message.');
+    } finally {
+      setDeletingMessageId('');
+    }
+  };
+
   const renderMessageBody = (msg, isClient) => {
     const hasResolvedUrl = Object.prototype.hasOwnProperty.call(signedUrlsByMessageId, msg.id);
     const signedUrl = signedUrlsByMessageId[msg.id];
@@ -574,8 +561,19 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
     setIncomingCallData(null);
   };
 
+  const warmupMediaPermissions = async () => {
+    if (!navigator?.mediaDevices?.getUserMedia) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      stream.getTracks().forEach((track) => track.stop());
+    } catch {
+      // Keep call flow working even when prompt is dismissed.
+    }
+  };
+
   const tryOpenIncomingCall = async (callData) => {
     setIncomingCallData(callData);
+    await warmupMediaPermissions();
     openVideoCall(callData);
   };
 
@@ -591,6 +589,7 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
     setVideoCallError('');
     try {
       const { meetingId, roomId, token } = await getOrCreateVideoMeeting(activeAppointmentId);
+      await warmupMediaPermissions();
       openVideoCall({ meetingId, roomId, token });
     } catch (err) {
       setVideoCallError(err.message || 'Failed to start video call.');
@@ -621,8 +620,11 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
 
   useEffect(() => {
     if (!activeAppointmentId || isClosed || videoCall) return;
-    // Prefetch token only — camera/mic are opened once inside VideoCallModal.
-    getVideoSdkToken().catch(() => {});
+    warmupMediaPermissions();
+    // Prefetch VideoSDK token so the first call's join is faster (110m cache).
+    getVideoSdkToken().catch(() => {
+      // Ignore prefetch failure; will retry on actual call.
+    });
   }, [activeAppointmentId, isClosed, videoCall]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
@@ -727,7 +729,28 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
                     {!isClient ? <span className="cr-msg__sender">{msg.senderName || 'Attorney'}</span> : null}
                     {renderMessageBody(msg, isClient)}
                   </div>
-                  <span className="cr-msg__time">{msg.time}</span>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <span className="cr-msg__time">{msg.time}</span>
+                    {isClient ? (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteMessage(msg.id)}
+                        disabled={deletingMessageId === String(msg.id)}
+                        style={{
+                          border: '1px solid rgba(239, 68, 68, 0.5)',
+                          background: 'rgba(239, 68, 68, 0.12)',
+                          color: '#ef4444',
+                          cursor: 'pointer',
+                          fontSize: 12,
+                          fontWeight: 700,
+                          borderRadius: 8,
+                          padding: '2px 8px',
+                        }}
+                      >
+                        {deletingMessageId === String(msg.id) ? 'Deleting...' : 'Delete'}
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             );
@@ -794,15 +817,6 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
           )}
         </form>
       </div>
-
-      {waitingPopup ? (
-        <ConsultationWaitingPopup
-          title={waitingPopup.title}
-          body={waitingPopup.body}
-          onClose={() => setWaitingPopup(null)}
-          onGoToChatroom={handleWaitingGoToChatroom}
-        />
-      ) : null}
 
       {timeWarningPopup ? (
         <div className="cr-time-warning-overlay" onClick={() => setTimeWarningPopup(null)}>

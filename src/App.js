@@ -5,7 +5,6 @@ import {
   getCurrentSessionProfile,
   normalizeRole,
   pageFromRole,
-  resolveSessionRole,
   resetUserApiRuntimeState,
   signOutUser,
   subscribeToAppConfigChanges,
@@ -24,14 +23,6 @@ import Login from './LoginAuth/Login';
 import ForgotPassword from './LoginAuth/ForgotPassword';
 import ResetPassword from './LoginAuth/ResetPassword';
 import ClientShell from './ClientDashboard/ClientShell';
-import ConsultationWaitingHost from './components/ConsultationWaitingHost';
-import {
-  ADMIN_PAGES,
-  SECRETARY_PAGES,
-  SECRETARY_DENIED_PAGES,
-  isAdminRole,
-  isSecretaryRole,
-} from './lib/staffAccess';
 
 /* ── Dashboard Pages (lazy-loaded to reduce initial bundle size) ── */
 const HomePage = lazy(() => import('./ClientDashboard/HomePage'));
@@ -50,7 +41,6 @@ const SupportMessages = lazy(() => import('./ClientDashboard/SupportMessages'));
 const AttorneyHome = lazy(() => import('./AttorneyDashboard/AttorneyHome'));
 const ConsultationRequests = lazy(() => import('./AttorneyDashboard/ConsultationRequests'));
 const UpcomingAppointments = lazy(() => import('./AttorneyDashboard/UpcomingAppointments'));
-const AttorneyAvailability = lazy(() => import('./AttorneyDashboard/AttorneyAvailability'));
 const NotarialRequestsAtty = lazy(() => import('./AttorneyDashboard/NotarialRequestsAtty'));
 const AttorneyAnalytics = lazy(() => import('./AttorneyDashboard/AttorneyAnalytics'));
 const AttorneyMessages = lazy(() => import('./AttorneyDashboard/AttorneyMessages'));
@@ -66,17 +56,6 @@ const AdminConsultations = lazy(() => import('./AdminDashboard/AdminConsultation
 const AdminReports = lazy(() => import('./AdminDashboard/AdminReports'));
 const AdminSettingsPage = lazy(() => import('./AdminDashboard/AdminSettingsPage'));
 const AdminMessages = lazy(() => import('./AdminDashboard/AdminMessages'));
-
-const SecretaryConsole = lazy(() => import('./SecretaryDashboard/SecretaryConsole'));
-
-const SECRETARY_INITIAL_PAGE = {
-  'secretary-home': 'Dashboard',
-  'secretary-consultations': 'Consultations',
-  'secretary-requests': 'Notarial Requests',
-  'secretary-clients': 'Registered Clients',
-  'secretary-messages': 'Messages',
-  'secretary-attorneys': 'Appointment Calendar',
-};
 
 const CLIENT_PAGES = [
   'home-logged',
@@ -97,7 +76,6 @@ const ATTORNEY_PAGES = [
   'attorney-home',
   'consultation-requests',
   'upcoming-appointments',
-  'attorney-availability',
   'notarial-requests-atty',
   'attorney-analytics',
   'attorney-messages',
@@ -106,16 +84,22 @@ const ATTORNEY_PAGES = [
   'attorney-profile',
 ]
 
+const ADMIN_PAGES = [
+  'admin-home',
+  'admin-clients',
+  'admin-attorneys',
+  'admin-requests',
+  'admin-consultations',
+  'admin-reports',
+  'admin-settings',
+  'admin-messages',
+]
+
 const canAccessPage = (role, targetPage) => {
   if (!targetPage) return true
   if (CLIENT_PAGES.includes(targetPage)) return role === 'Client'
   if (ATTORNEY_PAGES.includes(targetPage)) return role === 'Attorney'
-  if (ADMIN_PAGES.includes(targetPage)) {
-    if (isAdminRole(role)) return true
-    if (isSecretaryRole(role)) return !SECRETARY_DENIED_PAGES.includes(targetPage)
-    return false
-  }
-  if (SECRETARY_PAGES.includes(targetPage)) return isSecretaryRole(role)
+  if (ADMIN_PAGES.includes(targetPage)) return role === 'Admin'
   return true
 }
 
@@ -143,18 +127,7 @@ const RECOVERY_EMAIL_KEY = 'batasmo_recovery_email'
 const RECOVERY_VERIFIED_KEY = 'batasmo_recovery_verified'
 const FORCE_LOGIN_REDIRECT_KEY = 'batasmo_force_login_redirect'
 const CURRENT_PAGE_KEY = 'batasmo_current_page'
-/** Bump when nav/auth storage shape changes — clears stale session page on deploy. */
-const APP_STORAGE_VERSION = '20260520'
-const APP_STORAGE_VERSION_KEY = 'batasmo_storage_version'
 const IS_DEV = process.env.NODE_ENV !== 'production'
-
-const syncAppStorageVersion = () => {
-  if (typeof window === 'undefined') return
-  const stored = sessionStorage.getItem(APP_STORAGE_VERSION_KEY)
-  if (stored === APP_STORAGE_VERSION) return
-  sessionStorage.removeItem(CURRENT_PAGE_KEY)
-  sessionStorage.setItem(APP_STORAGE_VERSION_KEY, APP_STORAGE_VERSION)
-}
 
 const readPaymongoReturnFromLocation = () => {
   if (typeof window === 'undefined') return null
@@ -169,8 +142,6 @@ const readPaymongoReturnFromLocation = () => {
 }
 
 const resolveInitialPage = () => {
-  syncAppStorageVersion()
-
   const forcedLogin = sessionStorage.getItem(FORCE_LOGIN_REDIRECT_KEY) === '1'
   if (forcedLogin) {
     sessionStorage.removeItem(FORCE_LOGIN_REDIRECT_KEY)
@@ -253,16 +224,6 @@ function PageLifecycleTrace({ page, profile, children }) {
 function App() {
   const [page, setPage] = useState(() => resolveInitialPage());
   const [pageParams, setPageParams] = useState({});
-
-  useEffect(() => {
-    const isAttorneyShell = ATTORNEY_PAGES.includes(page);
-    document.documentElement.classList.toggle('attorney-ui-active', isAttorneyShell);
-    document.body.classList.toggle('attorney-ui-active', isAttorneyShell);
-    return () => {
-      document.documentElement.classList.remove('attorney-ui-active');
-      document.body.classList.remove('attorney-ui-active');
-    };
-  }, [page]);
   const [showNotaryModal, setShowNotaryModal] = useState(false);
   const [signupContext, setSignupContext] = useState({ email: '', role: 'Client', otpChannel: 'email' });
   const [currentProfile, setCurrentProfile] = useState(null);
@@ -333,16 +294,7 @@ function App() {
             setCurrentProfile(null);
           } else {
             clearTransientAuthState();
-            const resolvedProfile = profile
-              ? { ...profile, role: resolveSessionRole(session, profile) }
-              : null
-            setCurrentProfile(resolvedProfile);
-            if (resolvedProfile?.role) {
-              const roleHomePage = pageFromRole(resolvedProfile.role)
-              setPage((current) =>
-                !canAccessPage(normalizeRole(resolvedProfile.role), current) ? roleHomePage : current,
-              )
-            }
+            setCurrentProfile(profile);
           }
         }
       } catch (error) {
@@ -390,21 +342,18 @@ function App() {
 
         // Fast path: update profile from session metadata immediately.
         clearTransientAuthState();
-        setCurrentProfile((prev) => {
-          const draft = {
-            id: session.user.id,
-            full_name: session.user.user_metadata?.full_name || prev?.full_name || '',
-            email: session.user.email || prev?.email || '',
-            role: normalizeRole(session.user.user_metadata?.role || prev?.role || 'Client'),
-            phone: prev?.phone || '',
-            address: prev?.address || '',
-            age: prev?.age ?? null,
-            guardian_name: prev?.guardian_name || '',
-            guardian_contact: prev?.guardian_contact || '',
-            guardian_details: prev?.guardian_details || '',
-          }
-          return { ...draft, role: resolveSessionRole(session, draft) }
-        });
+        setCurrentProfile((prev) => ({
+          id: session.user.id,
+          full_name: session.user.user_metadata?.full_name || prev?.full_name || '',
+          email: session.user.email || prev?.email || '',
+          role: normalizeRole(session.user.user_metadata?.role || prev?.role || 'Client'),
+          phone: prev?.phone || '',
+          address: prev?.address || '',
+          age: prev?.age ?? null,
+          guardian_name: prev?.guardian_name || '',
+          guardian_contact: prev?.guardian_contact || '',
+          guardian_details: prev?.guardian_details || '',
+        }));
 
         // Background hydration: fetch full profile without blocking UI.
         getCurrentSessionProfile()
@@ -563,17 +512,14 @@ function App() {
   const handleAuthSuccess = useCallback((profile, options = {}) => {
     clearTransientAuthState({ includeRecovery: true });
     setSignupContext({ email: '', role: 'Client', otpChannel: 'email' });
-    const role = normalizeRole(profile?.role || '');
-    const homePage = pageFromRole(role);
     setCurrentProfile(profile);
-    sessionStorage.setItem(CURRENT_PAGE_KEY, homePage);
+    const role = normalizeRole(profile?.role || '');
     if (options.mustChangePassword && role === 'Client') {
       setPageParams({ initialProfileTab: 'password', mustChangePassword: true });
       setPage('profile');
-      sessionStorage.setItem(CURRENT_PAGE_KEY, 'profile');
     } else {
       setPageParams({});
-      setPage(homePage);
+      setPage(pageFromRole(profile?.role));
     }
   }, []);
 
@@ -602,12 +548,10 @@ function App() {
   }, [forceResetToLogin]);
 
   useEffect(() => {
-    if (PUBLIC_PAGES.has(page) || !currentProfile?.role) return
-    const role = normalizeRole(currentProfile.role)
-    if (canAccessPage(role, page)) {
+    if (!PUBLIC_PAGES.has(page)) {
       sessionStorage.setItem(CURRENT_PAGE_KEY, page)
     }
-  }, [page, currentProfile?.role])
+  }, [page])
 
   const isPublicPage = PUBLIC_PAGES.has(page);
 
@@ -627,42 +571,19 @@ function App() {
     </Suspense>
   )
 
-  const consultationWaitingHost =
-    currentProfile &&
-    (normalizeRole(currentProfile.role) === 'Client' ||
-      normalizeRole(currentProfile.role) === 'Attorney') ? (
-      <ConsultationWaitingHost
-        page={page}
-        pageParams={pageParams}
-        profile={currentProfile}
-        onNavigate={handleNavigate}
-      />
-    ) : null
-
   const renderClientShell = (node) =>
     renderLazy(
-      <>
-        <ClientShell
-          currentPage={page}
-          profile={currentProfile}
-          onNavigate={handleNavigate}
-          onSignOut={handleSignOut}
-          showNotaryModal={showNotaryModal}
-          notaryWarningMessage={NOTARY_WARNING_MESSAGE}
-          onCloseNotaryModal={() => setShowNotaryModal(false)}
-        >
-          {node}
-        </ClientShell>
-        {consultationWaitingHost}
-      </>,
-    )
-
-  const renderAttorneyWithWaiting = (node) =>
-    renderLazy(
-      <>
+      <ClientShell
+        currentPage={page}
+        profile={currentProfile}
+        onNavigate={handleNavigate}
+        onSignOut={handleSignOut}
+        showNotaryModal={showNotaryModal}
+        notaryWarningMessage={NOTARY_WARNING_MESSAGE}
+        onCloseNotaryModal={() => setShowNotaryModal(false)}
+      >
         {node}
-        {consultationWaitingHost}
-      </>,
+      </ClientShell>,
     )
 
   useEffect(() => {
@@ -743,20 +664,18 @@ function App() {
   if (page === 'client-logs') return renderClientShell(<ClientLogs onNavigate={handleNavigate} profile={currentProfile} initialAppointmentId={pageParams?.appointmentId || ''} />);
   if (page === 'client-notary-tracking') return renderClientShell(<ClientNotaryTracking profile={currentProfile} />);
   if (page === 'support-messages') return renderClientShell(<SupportMessages onNavigate={handleNavigate} profile={currentProfile} initialDraft={pageParams?.draft || ''} />);
-  if (page === 'attorney-home') return renderAttorneyWithWaiting(<AttorneyHome onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} />);
-  if (page === 'consultation-requests') return renderAttorneyWithWaiting(<ConsultationRequests onNavigate={handleNavigate} profile={currentProfile} />);
-  if (page === 'upcoming-appointments') return renderAttorneyWithWaiting(<UpcomingAppointments onNavigate={handleNavigate} profile={currentProfile} />);
-  if (page === 'attorney-availability')
-    return renderAttorneyWithWaiting(<AttorneyAvailability onNavigate={handleNavigate} profile={currentProfile} />);
-  if (page === 'notarial-requests-atty') return renderAttorneyWithWaiting(<NotarialRequestsAtty onNavigate={handleNavigate} profile={currentProfile} />);
-  if (page === 'attorney-analytics') return renderAttorneyWithWaiting(<AttorneyAnalytics onNavigate={handleNavigate} profile={currentProfile} />);
-  if (page === 'attorney-messages') return renderAttorneyWithWaiting(<AttorneyMessages onNavigate={handleNavigate} profile={currentProfile} initialAppointmentId={pageParams?.appointmentId || ''} />);
+  if (page === 'attorney-home') return renderLazy(<AttorneyHome onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} />);
+  if (page === 'consultation-requests') return renderLazy(<ConsultationRequests onNavigate={handleNavigate} profile={currentProfile} />);
+  if (page === 'upcoming-appointments') return renderLazy(<UpcomingAppointments onNavigate={handleNavigate} profile={currentProfile} />);
+  if (page === 'notarial-requests-atty') return renderLazy(<NotarialRequestsAtty onNavigate={handleNavigate} profile={currentProfile} />);
+  if (page === 'attorney-analytics') return renderLazy(<AttorneyAnalytics onNavigate={handleNavigate} profile={currentProfile} />);
+  if (page === 'attorney-messages') return renderLazy(<AttorneyMessages onNavigate={handleNavigate} profile={currentProfile} initialAppointmentId={pageParams?.appointmentId || ''} />);
   if (page === 'attorney-logs')
-    return renderAttorneyWithWaiting(
+    return renderLazy(
       <AttorneyLogs onNavigate={handleNavigate} profile={currentProfile} initialAppointmentId={pageParams?.appointmentId || ''} />,
     );
-  if (page === 'attorney-announcements') return renderAttorneyWithWaiting(<AttorneyAnnouncements onNavigate={handleNavigate} profile={currentProfile} />);
-  if (page === 'attorney-profile') return renderAttorneyWithWaiting(<AttorneyProfile onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} onProfileUpdated={setCurrentProfile} />);
+  if (page === 'attorney-announcements') return renderLazy(<AttorneyAnnouncements onNavigate={handleNavigate} profile={currentProfile} />);
+  if (page === 'attorney-profile') return renderLazy(<AttorneyProfile onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} onProfileUpdated={setCurrentProfile} />);
   if (page === 'admin-home') return renderLazy(<AdminDashboard onNavigate={handleNavigate} />);
   if (page === 'admin-clients') return renderLazy(<AdminClients onNavigate={handleNavigate} />);
   if (page === 'admin-attorneys') return renderLazy(<AdminAttorneys onNavigate={handleNavigate} />);
@@ -765,17 +684,6 @@ function App() {
   if (page === 'admin-reports') return renderLazy(<AdminReports onNavigate={handleNavigate} />);
   if (page === 'admin-settings') return renderLazy(<AdminSettingsPage onNavigate={handleNavigate} />);
   if (page === 'admin-messages') return renderLazy(<AdminMessages onNavigate={handleNavigate} />);
-
-  if (SECRETARY_PAGES.includes(page)) {
-    return renderLazy(
-      <SecretaryConsole
-        onNavigate={handleNavigate}
-        onSignOut={handleSignOut}
-        profile={currentProfile}
-        initialPage={SECRETARY_INITIAL_PAGE[page] || 'Dashboard'}
-      />,
-    );
-  }
 
   return <LandingPage onNavigate={handleNavigate} />;
 }

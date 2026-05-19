@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import './Announcements.css';
 import { supabase } from '../lib/supabaseClient';
-import { parseNotificationImageUrl } from '../lib/announcementImages';
 
 /* ── Icons ── */
 const ScalesIcon = ({ size = 24, color = '#f5a623' }) => (
@@ -144,7 +143,7 @@ function Announcements({ onNavigate, profile }) {
       try {
         const { data, error } = await supabase
           .from('notifications')
-          .select('id, title, body, type, is_read, created_at, data')
+          .select('id, title, body, type, is_read, created_at')
           .eq('user_id', profile.id)
           .in('type', ['admin_announcement', 'admin_general', 'admin_reschedule', 'admin_update', 'admin_reminder'])
           .order('created_at', { ascending: false })
@@ -168,7 +167,6 @@ function Announcements({ onNavigate, profile }) {
             type: normalizedType,
             title: item.title || 'Announcement',
             message: item.body || '',
-            imageUrl: parseNotificationImageUrl(item.data),
             date: Number.isNaN(dt.getTime()) ? 'Today' : dt.toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }),
             priority: normalizedType === 'reschedule' || normalizedType === 'reminder' ? 'high' : 'normal',
             read: !!item.is_read,
@@ -290,17 +288,7 @@ function Announcements({ onNavigate, profile }) {
                           </span>
                         )}
                       </div>
-                      {ann.imageUrl ? (
-                        <a
-                          href={ann.imageUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="ann-card__image-link"
-                        >
-                          <img src={ann.imageUrl} alt="" className="ann-card__image" loading="lazy" />
-                        </a>
-                      ) : null}
-                      {ann.message ? <p className="ann-card__message">{ann.message}</p> : null}
+                      <p className="ann-card__message">{ann.message}</p>
                       <div className="ann-card__footer">
                         <span className="ann-card__date">
                           <CalendarSmall /> {ann.date}

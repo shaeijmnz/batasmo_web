@@ -143,14 +143,8 @@ Deno.serve(async (req) => {
       })
     }
 
-    const existingMeta =
-      u.user_metadata && typeof u.user_metadata === 'object' ? u.user_metadata : {}
     const { error: updErr } = await supabaseAdmin.auth.admin.updateUserById(userId, {
       email_confirm: true,
-      user_metadata: {
-        ...existingMeta,
-        signup_otp_completed: true,
-      },
     })
     if (updErr) {
       console.error('confirm email', updErr)

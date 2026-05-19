@@ -5,20 +5,21 @@ import {
   Video, Phone, MessageCircle, Star
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
-import { getConsultationSessionStatus } from '../lib/consultationStatus';
 import './AdminTheme.css';
 import './consultations.css';
 
-const formatScheduleForUi = (scheduledAt) => {
-  const parsed = scheduledAt ? new Date(scheduledAt) : null;
-  if (!parsed || Number.isNaN(parsed.getTime())) {
-    return { date: 'TBD', time: 'TBD' };
-  }
+const getConsultationStatus = ({ appointmentStatus, isPaid, room }) => {
+  const value = String(appointmentStatus || '').toLowerCase();
+  if (value === 'completed' || room?.is_closed) return 'Completed';
+  if (room?.video_meeting_id && !room?.is_closed) return 'In Progress';
+  if (isPaid) return 'Scheduled';
+  return null;
+};
 
-  return {
-    date: parsed.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }),
-    time: parsed.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', hour12: true }),
-  };
+const formatDateLabel = (value) => {
+  const parsed = value ? new Date(value) : null;
+  if (!parsed || Number.isNaN(parsed.getTime())) return 'TBD';
+  return parsed.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
 const formatDurationLabel = (minutes) => `${Number(minutes || 60)} min`;
@@ -104,14 +105,13 @@ const Consultations = ({ onNavigate }) => {
           .filter((row) => String(row.status || '').toLowerCase() !== 'cancelled')
           .map((row) => {
             const room = roomByAppointment.get(row.id);
-            const status = getConsultationSessionStatus({
+            const status = getConsultationStatus({
               appointmentStatus: row.status,
               isPaid: paidAppointmentIds.has(row.id),
               room,
             });
             if (!status) return null;
             const feedback = feedbackByAppointment.get(row.id);
-            const { date, time } = formatScheduleForUi(row.scheduled_at);
             return {
               id: row.id,
               title: row.title || 'Consultation',
@@ -120,8 +120,7 @@ const Consultations = ({ onNavigate }) => {
               status,
               client: row.client?.full_name || 'Client',
               attorney: row.attorney?.full_name || 'Attorney',
-              date,
-              time,
+              date: formatDateLabel(row.scheduled_at),
               duration: formatDurationLabel(row.duration_minutes),
               rating: feedback?.rating || 0,
               notes: feedback?.comment || row.notes || '',
@@ -276,15 +275,14 @@ const Consultations = ({ onNavigate }) => {
                     </div>
                     <div className="client-info">
                       <p>Client: <strong>{s.client}</strong></p>
-                      <p>Date: <strong>{s.date}</strong></p>
-                      <p>Time: <strong>{s.time}</strong></p>
-                      {s.rating > 0 ? (
+                      <p>Date: {s.date}</p>
+                      {s.rating && (
                         <div className="rating">
                           Rating: {[...Array(5)].map((_, i) => (
                             <Star key={i} size={14} fill={i < s.rating ? "#eab308" : "none"} color={i < s.rating ? "#eab308" : "#cbd5e1"} />
                           ))}
                         </div>
-                      ) : null}
+                      )}
                     </div>
                   </div>
                   <div className="session-right">

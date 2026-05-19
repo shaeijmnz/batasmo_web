@@ -100,7 +100,7 @@ function MyNotarialRequests({ onNavigate, profile }) {
   // Payment state
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('qrph');
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [paymentCode, setPaymentCode] = useState('');
   const [paymentProcessing, setPaymentProcessing] = useState(false);
@@ -214,7 +214,7 @@ function MyNotarialRequests({ onNavigate, profile }) {
   const openPaymentModal = (req) => {
     setSelectedRequest(req);
     setShowPaymentModal(true);
-    setSelectedPaymentMethod('qrph');
+    setSelectedPaymentMethod('');
     setPhoneNumber('');
     setPaymentCode('');
     setPaymentError('');
@@ -224,7 +224,7 @@ function MyNotarialRequests({ onNavigate, profile }) {
   const closePaymentModal = () => {
     setShowPaymentModal(false);
     setSelectedRequest(null);
-    setSelectedPaymentMethod('qrph');
+    setSelectedPaymentMethod('');
     setPhoneNumber('');
     setPaymentCode('');
     setPaymentError('');
@@ -543,15 +543,40 @@ function MyNotarialRequests({ onNavigate, profile }) {
             </div>
 
             <div className="mnr-payment-modal__methods">
-              <h3>Payment Method</h3>
+              <h3>Select Payment Method</h3>
               <div className="mnr-payment-modal__options">
-                <div className="mnr-payment-option mnr-payment-option--selected">
+                <div
+                  className={`mnr-payment-option ${selectedPaymentMethod === 'gcash' ? 'mnr-payment-option--selected' : ''}`}
+                  onClick={() => setSelectedPaymentMethod('gcash')}
+                >
+                  <div className="mnr-payment-option__icon mnr-payment-option__icon--gcash">G</div>
+                  <div className="mnr-payment-option__info">
+                    <span className="mnr-payment-option__name">GCash</span>
+                    <span className="mnr-payment-option__desc">Pay with GCash e-wallet</span>
+                  </div>
+                  <div className={`mnr-payment-option__radio ${selectedPaymentMethod === 'gcash' ? 'mnr-payment-option__radio--active' : ''}`} />
+                </div>
+                <div
+                  className={`mnr-payment-option ${selectedPaymentMethod === 'maya' ? 'mnr-payment-option--selected' : ''}`}
+                  onClick={() => setSelectedPaymentMethod('maya')}
+                >
+                  <div className="mnr-payment-option__icon mnr-payment-option__icon--maya">M</div>
+                  <div className="mnr-payment-option__info">
+                    <span className="mnr-payment-option__name">Maya</span>
+                    <span className="mnr-payment-option__desc">Pay with Maya e-wallet</span>
+                  </div>
+                  <div className={`mnr-payment-option__radio ${selectedPaymentMethod === 'maya' ? 'mnr-payment-option__radio--active' : ''}`} />
+                </div>
+                <div
+                  className={`mnr-payment-option ${selectedPaymentMethod === 'qrph' ? 'mnr-payment-option--selected' : ''}`}
+                  onClick={() => setSelectedPaymentMethod('qrph')}
+                >
                   <div className="mnr-payment-option__icon mnr-payment-option__icon--qrph">Q</div>
                   <div className="mnr-payment-option__info">
                     <span className="mnr-payment-option__name">QR Ph</span>
                     <span className="mnr-payment-option__desc">Pay via any QR Ph–enabled bank or e-wallet</span>
                   </div>
-                  <div className="mnr-payment-option__radio mnr-payment-option__radio--active" />
+                  <div className={`mnr-payment-option__radio ${selectedPaymentMethod === 'qrph' ? 'mnr-payment-option__radio--active' : ''}`} />
                 </div>
               </div>
             </div>
@@ -626,7 +651,7 @@ function MyNotarialRequests({ onNavigate, profile }) {
               </div>
               <div className="mnr-confirm-receipt__row">
                 <span>Payment Method</span>
-                <span>'QR Ph'</span>
+                <span>{selectedPaymentMethod === 'gcash' ? 'GCash' : selectedPaymentMethod === 'maya' ? 'Maya' : 'QR Ph'}</span>
               </div>
               <div className="mnr-confirm-receipt__row">
                 <span>Date</span>

@@ -89,7 +89,7 @@ function MyAppointments({ onNavigate, profile }) {
   const [appointments, setAppointments] = useState([]);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedAppointmentForPayment, setSelectedAppointmentForPayment] = useState(null);
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('qrph');
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [paymentCode, setPaymentCode] = useState('');
   const [paymentProcessing, setPaymentProcessing] = useState(false);
@@ -810,29 +810,80 @@ function MyAppointments({ onNavigate, profile }) {
 
               {/* Payment Methods */}
               <div className="ma-payment-methods">
-                <h4>Payment Method</h4>
+                <h4>Select Payment Method</h4>
                 <div className="ma-payment-options">
-                  <div className="ma-payment-option ma-payment-option--selected">
-                    <div className="ma-payment-option-logo" style={{ background: 'linear-gradient(135deg, #152238, #243652)', color: '#fff' }}>
-                      <span>Q</span>
+                  <div 
+                    className={`ma-payment-option ${selectedPaymentMethod === 'gcash' ? 'ma-payment-option--selected' : ''}`}
+                    onClick={() => setSelectedPaymentMethod('gcash')}
+                  >
+                    <div className="ma-payment-option-logo ma-gcash-logo">
+                      <span>G</span>
                     </div>
                     <div className="ma-payment-option-info">
-                      <strong>QR Ph</strong>
-                      <small>Pay via any QR Ph–enabled bank or e-wallet</small>
+                      <strong>GCash</strong>
+                      <small>Pay via GCash e-wallet</small>
                     </div>
-                    <div className="ma-payment-option-check"><span>✓</span></div>
+                    <div className="ma-payment-option-check">
+                      {selectedPaymentMethod === 'gcash' && <span>✓</span>}
+                    </div>
+                  </div>
+
+                  <div 
+                    className={`ma-payment-option ${selectedPaymentMethod === 'maya' ? 'ma-payment-option--selected' : ''}`}
+                    onClick={() => setSelectedPaymentMethod('maya')}
+                  >
+                    <div className="ma-payment-option-logo ma-maya-logo">
+                      <span>M</span>
+                    </div>
+                    <div className="ma-payment-option-info">
+                      <strong>Maya</strong>
+                      <small>Pay via Maya e-wallet</small>
+                    </div>
+                    <div className="ma-payment-option-check">
+                      {selectedPaymentMethod === 'maya' && <span>✓</span>}
+                    </div>
                   </div>
                 </div>
               </div>
 
               {/* Payment Details */}
-              <div className="ma-payment-details-form">
-                <h4>Secure checkout</h4>
-                <div className="ma-payment-link-info">
-                  <span className="ma-link-icon">🔗</span>
-                  <span>You will be redirected to complete payment with QR Ph.</span>
+              {selectedPaymentMethod && (
+                <div className="ma-payment-details-form">
+                  <h4>Enter {selectedPaymentMethod === 'gcash' ? 'GCash' : 'Maya'} Details</h4>
+                  
+                  <div className="ma-payment-link-info">
+                    <span className="ma-link-icon">🔗</span>
+                    <span>Connecting to {selectedPaymentMethod === 'gcash' ? 'GCash' : 'Maya'} payment gateway...</span>
+                  </div>
+
+                  <div className="ma-form-group">
+                    <label>Mobile Number</label>
+                    <div className="ma-phone-input-wrapper">
+                      <span className="ma-phone-prefix">+63</span>
+                      <input
+                        type="tel"
+                        className="ma-form-input ma-phone-input"
+                        placeholder="9XX XXX XXXX"
+                        maxLength="11"
+                        value={phoneNumber}
+                        onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="ma-form-group">
+                    <label>{selectedPaymentMethod === 'gcash' ? 'GCash' : 'Maya'} Authentication Code</label>
+                    <input
+                      type="password"
+                      className="ma-form-input"
+                      placeholder="Enter your authentication code"
+                      value={paymentCode}
+                      onChange={(e) => setPaymentCode(e.target.value)}
+                    />
+                    <small>Enter the code sent to your registered {selectedPaymentMethod === 'gcash' ? 'GCash' : 'Maya'} number</small>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {paymentError && (
                 <div className="ma-error-message">{paymentError}</div>
@@ -871,7 +922,7 @@ function MyAppointments({ onNavigate, profile }) {
               <h2 className="ma-confirm-title">Payment Successful!</h2>
 
               <div className="ma-confirm-message">
-                <p>Your payment of <strong>{selectedAppointmentForPayment.fee}</strong> has been received via <strong>QR Ph</strong>.</p>
+                <p>Your payment of <strong>{selectedAppointmentForPayment.fee}</strong> has been received via <strong>{selectedPaymentMethod === 'gcash' ? 'GCash' : 'Maya'}</strong>.</p>
               </div>
 
               <div className="ma-payment-receipt">
@@ -890,7 +941,7 @@ function MyAppointments({ onNavigate, profile }) {
                 </div>
                 <div className="ma-receipt-row">
                   <span>Payment Method:</span>
-                  <span>QR Ph</span>
+                  <span>{selectedPaymentMethod === 'gcash' ? 'GCash' : 'Maya'}</span>
                 </div>
                 <div className="ma-receipt-row">
                   <span>Account:</span>

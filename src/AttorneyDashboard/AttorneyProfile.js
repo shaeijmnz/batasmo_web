@@ -59,6 +59,7 @@ const initialProfile = {
   bio: '',
   consultations: 0,
   notarials: 0,
+  rating: 'N/A',
 };
 
 export default function AttorneyProfile({ onNavigate, profile: sessionProfile, onSignOut, onProfileUpdated }) {
@@ -87,6 +88,7 @@ export default function AttorneyProfile({ onNavigate, profile: sessionProfile, o
           bio: data.attorney?.bio || '',
           consultations: data.consultationCount || 0,
           notarials: data.notarialCount || 0,
+          rating: 'N/A',
         };
 
         setProfile(merged);
@@ -228,6 +230,10 @@ export default function AttorneyProfile({ onNavigate, profile: sessionProfile, o
           <div className="ap-stat">
             <span className="ap-stat__value">{profile.notarials}</span>
             <span className="ap-stat__label">Notarials</span>
+          </div>
+          <div className="ap-stat">
+            <span className="ap-stat__value">{profile.rating}</span>
+            <span className="ap-stat__label">Rating</span>
           </div>
         </div>
 

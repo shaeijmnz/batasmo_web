@@ -1,10 +1,8 @@
 import { Suspense, lazy, useState, useRef, useEffect, useMemo } from 'react';
 import './AttorneyMessages.css';
 import './AttorneyTheme.css';
-import './AttorneyMessagesPalette.css';
-import ConsultationWaitingPopup from '../components/ConsultationWaitingPopup';
-import { attachConsultationChatPresence } from '../lib/consultationChatPresence';
 import {
+  deleteAppointmentMessage,
   endConsultationSession,
   fetchAppointmentMessages,
   fetchAttorneyUpcomingAppointments,
@@ -25,22 +23,8 @@ import {
 import { getConsultationBranchesForAttorney } from '../lib/consultationBranches';
 import { consultationSummaryHasContent, parseConsultationSummary } from '../lib/consultationSummaryFormat';
 import ConsultationSummaryForm from '../components/ConsultationSummaryForm';
-import ConsultationChatErrorBoundary from '../components/ConsultationChatErrorBoundary';
 import { attachLiveDataRefresh } from '../lib/liveDataRefresh';
 const VideoCallModal = lazy(() => import('../components/VideoCallModal'));
-
-const buildInitials = (name, fallback = 'CL') => {
-  const parts = String(name || '')
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-  if (!parts.length) return fallback;
-  return parts
-    .map((part) => part[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
-};
 
 const CONSULTATION_TIMER_TOTAL_SECONDS = 60 * 60;
 
@@ -128,20 +112,18 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
   );
 
   const postSessionBranchRequired = consultationBranches.length > 0;
+  const [deletingMessageId, setDeletingMessageId] = useState('');
   const [signedUrlsByMessageId, setSignedUrlsByMessageId] = useState({});
   const [remainingSeconds, setRemainingSeconds] = useState(CONSULTATION_TIMER_TOTAL_SECONDS);
   const [videoCall, setVideoCall] = useState(null);
   const [videoCallLoading, setVideoCallLoading] = useState(false);
   const [videoCallError, setVideoCallError] = useState('');
+  const videoCallRef = useRef(null);
   const messagesEndRef = useRef(null);
-  const otherPartyNameRef = useRef('Client');
   const imagePickerRef = useRef(null);
   const filePickerRef = useRef(null);
   const timerStartedAtByAppointmentRef = useRef({});
   const tenMinuteReminderSentByAppointmentRef = useRef({});
-  const videoMeetingSnapshotRef = useRef({ initialized: false, meetingId: null });
-  const videoCallRef = useRef(null);
-  const [waitingPopup, setWaitingPopup] = useState(null);
 
   const mergeRealtimeMessage = (incoming) => {
     setMessages((previous) => {
@@ -182,17 +164,13 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
   }, [profile?.id]);
 
   useEffect(() => {
-    setAppointments([]);
-    setMessages([]);
-    setActiveAppointmentId(initialAppointmentId ? String(initialAppointmentId) : '');
-    setIsClosed(false);
-    setLoadError('');
-    setSignedUrlsByMessageId({});
-    videoMeetingSnapshotRef.current = { initialized: false, meetingId: null };
-    videoCallRef.current = null;
-    setVideoCall(null);
-    setVideoCallError('');
-  }, [profile?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- reset only when attorney account changes
+    setAppointments([])
+    setMessages([])
+    setActiveAppointmentId('')
+    setIsClosed(false)
+    setLoadError('')
+    setSignedUrlsByMessageId({})
+  }, [profile?.id])
 
   useEffect(() => {
     let isMounted = true;
@@ -212,36 +190,17 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
             paymentStatus: row.paymentStatus || 'unpaid',
           }),
         );
-
-        let mergedRows = activeRows;
-        if (initialAppointmentId) {
-          const pinned = rows.find((row) => String(row.id) === String(initialAppointmentId));
-          if (
-            pinned &&
-            !activeRows.some((row) => String(row.id) === String(initialAppointmentId)) &&
-            isConsultationChatWindowOpen({
-              status: pinned.status,
-              scheduledAt: pinned.scheduledAt,
-              slotDate: pinned.slotDate,
-              slotTime: pinned.slotTime,
-              paymentStatus: pinned.paymentStatus || 'unpaid',
-            })
-          ) {
-            mergedRows = [pinned, ...activeRows];
-          }
-        }
-
-        setAppointments(mergedRows);
+        setAppointments(activeRows);
         setActiveAppointmentId((prev) => {
-          if (!mergedRows.length) return '';
-          if (initialAppointmentId && mergedRows.some((row) => String(row.id) === String(initialAppointmentId))) {
-            return String(initialAppointmentId);
+          if (!activeRows.length) return ''
+          if (initialAppointmentId && activeRows.some((row) => String(row.id) === String(initialAppointmentId))) {
+            return String(initialAppointmentId)
           }
-          if (prev && mergedRows.some((row) => String(row.id) === String(prev))) return prev;
-          return String(mergedRows[0].id);
-        });
+          if (prev && activeRows.some((row) => String(row.id) === String(prev))) return prev
+          return String(activeRows[0].id)
+        })
 
-        if (!mergedRows.length) {
+        if (!activeRows.length) {
           setLoadError('Consultation chat opens at the scheduled appointment time.');
         } else {
           setLoadError('');
@@ -464,40 +423,6 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
   }, [activeAppointmentId, isClosed]);
 
   useEffect(() => {
-    const activeRow = appointments.find((item) => String(item.id) === String(activeAppointmentId));
-    otherPartyNameRef.current = activeRow?.name || 'Client';
-  }, [activeAppointmentId, appointments]);
-
-  useEffect(() => {
-    if (!activeAppointmentId || !profile?.id || isClosed) {
-      setWaitingPopup(null);
-      return undefined;
-    }
-
-    const detachPresence = attachConsultationChatPresence({
-      appointmentId: activeAppointmentId,
-      role: 'attorney',
-      userId: profile.id,
-      displayName: profile.full_name || profile.name || profile.email || 'Attorney',
-      otherPartyName: otherPartyNameRef.current,
-      onWaitingPopup: (payload) => setWaitingPopup(payload),
-    });
-
-    return () => {
-      setWaitingPopup(null);
-      detachPresence();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- presence channel only when appointment changes
-  }, [activeAppointmentId, profile?.id, isClosed]);
-
-  const handleWaitingGoToChatroom = () => {
-    setWaitingPopup(null);
-    window.setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 50);
-  };
-
-  useEffect(() => {
     if (!activeAppointmentId) return undefined;
 
     let cancelled = false;
@@ -643,6 +568,29 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
       setLoadError(error.message || 'Failed to upload attachment.');
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleDeleteMessage = async (messageId) => {
+    if (!activeAppointmentId || !messageId || deletingMessageId) return;
+    const shouldDelete = window.confirm('Delete this message/photo?');
+    if (!shouldDelete) return;
+
+    try {
+      setDeletingMessageId(String(messageId));
+      await deleteAppointmentMessage({ appointmentId: activeAppointmentId, messageId });
+      setMessages((previous) => previous.filter((item) => String(item.id) !== String(messageId)));
+      setSignedUrlsByMessageId((previous) => {
+        const next = { ...previous };
+        delete next[messageId];
+        delete next[String(messageId)];
+        return next;
+      });
+      setLoadError('');
+    } catch (error) {
+      setLoadError(error.message || 'Failed to delete message.');
+    } finally {
+      setDeletingMessageId('');
     }
   };
 
@@ -796,7 +744,13 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
 
   const activeAppointment = appointments.find((item) => String(item.id) === String(activeAppointmentId)) || null;
   const chatName = activeAppointment?.name || 'Client';
-  const chatInitials = buildInitials(chatName, 'CL');
+  const chatInitials = chatName
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
   const timerLabel = formatTimerLabel(remainingSeconds);
   const isTenMinuteWindow = remainingSeconds <= 10 * 60;
 
@@ -826,52 +780,29 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
     setVideoCall(null);
   };
 
-  // Auto-join only when client starts a NEW call (ignore stale meeting id on first load).
+  // Auto-open video call when client starts one (video_meeting_id appears in DB)
   useEffect(() => {
     if (!activeAppointmentId) return undefined;
-
-    videoMeetingSnapshotRef.current = { initialized: false, meetingId: null };
 
     const unsubscribe = subscribeToConsultationRoomStatus(
       activeAppointmentId,
       async ({ videoMeetingId, consultationRoomId }) => {
-        const snapshot = videoMeetingSnapshotRef.current;
-        const meetingId = videoMeetingId || null;
-
-        if (!snapshot.initialized) {
-          videoMeetingSnapshotRef.current = { initialized: true, meetingId };
-          return;
-        }
-
-        const previousMeetingId = snapshot.meetingId;
-        videoMeetingSnapshotRef.current = { initialized: true, meetingId };
-
-        if (!meetingId || videoCallRef.current || meetingId === previousMeetingId) {
-          return;
-        }
-
+        if (!videoMeetingId || videoCallRef.current) return;
         try {
           const token = await getVideoSdkToken();
           openVideoCall({
-            meetingId,
+            meetingId: videoMeetingId,
             roomId: consultationRoomId,
             token,
           });
-        } catch (error) {
-          setVideoCallError(
-            error?.message || 'Incoming call is ready. Tap "Video Call" to join.',
-          );
+        } catch {
+          // Attorney can still tap "Video Call" to join the shared room.
         }
       },
     );
 
     return () => unsubscribe();
   }, [activeAppointmentId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (!activeAppointmentId || isClosed || videoCall) return;
-    getVideoSdkToken().catch(() => {});
-  }, [activeAppointmentId, isClosed, videoCall]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Prefetch VideoSDK token in the background so the first time the attorney
   // hits "Video Call" the join is noticeably faster (token is cached 110 min).
@@ -882,16 +813,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
     });
   }, [activeAppointmentId, isClosed]);
 
-  if (!profile?.id) {
-    return (
-      <div className="am-page" style={{ display: 'grid', placeItems: 'center', minHeight: '60vh' }}>
-        <p>Loading consultation room…</p>
-      </div>
-    );
-  }
-
   return (
-    <ConsultationChatErrorBoundary>
     <div className="am-page">
       {/* Sidebar overlay */}
       {sidebarOpen && <div className="am-sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
@@ -931,7 +853,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
           <div className="am-topbar__user">
             <span className="am-topbar__user-name">{profile?.full_name || 'Attorney'}</span>
           </div>
-          <div className="am-topbar__avatar">{buildInitials(profile?.full_name, 'AT')}</div>
+          <div className="am-topbar__avatar">{(profile?.full_name || 'AT').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase()}</div>
         </div>
       </header>
 
@@ -956,24 +878,6 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
             </div>
           ) : null}
         </div>
-
-        {appointments.length > 1 ? (
-          <div className="am-chat-actions" style={{ justifyContent: 'flex-start', paddingBottom: 0 }}>
-            <select
-              id="am-thread-select"
-              className="am-thread-select"
-              value={activeAppointmentId}
-              onChange={(e) => setActiveAppointmentId(e.target.value)}
-              aria-label="Active consultation"
-            >
-              {appointments.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name} — {item.date} {item.time}
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : null}
 
         {activeAppointmentId && !isClosed ? (
           <div className="am-chat-actions">
@@ -1017,7 +921,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
           {messages.map((msg, idx) => {
             const showDate = idx === 0 || messages[idx - 1].date !== msg.date;
             return (
-              <div key={msg.id || `msg-${idx}`}>
+              <div key={msg.id}>
                 {showDate && (
                   <div className="am-date-divider">
                     <span>{msg.date}</span>
@@ -1029,7 +933,28 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
                   )}
                   <div className={`am-bubble ${msg.sender === 'attorney' ? 'am-bubble--attorney' : 'am-bubble--admin'}`}>
                     {renderMessageBody(msg, msg.sender === 'attorney')}
-                    <span className="am-bubble__time">{msg.time}</span>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <span className="am-bubble__time">{msg.time}</span>
+                      {msg.sender === 'attorney' ? (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteMessage(msg.id)}
+                          disabled={deletingMessageId === String(msg.id)}
+                          style={{
+                            border: '1px solid rgba(239, 68, 68, 0.5)',
+                            background: 'rgba(239, 68, 68, 0.12)',
+                            color: '#ef4444',
+                            cursor: 'pointer',
+                            fontSize: 12,
+                            fontWeight: 700,
+                            borderRadius: 8,
+                            padding: '2px 8px',
+                          }}
+                        >
+                          {deletingMessageId === String(msg.id) ? 'Deleting...' : 'Delete'}
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1186,15 +1111,6 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
         </div>
       ) : null}
 
-      {waitingPopup ? (
-        <ConsultationWaitingPopup
-          title={waitingPopup.title}
-          body={waitingPopup.body}
-          onClose={() => setWaitingPopup(null)}
-          onGoToChatroom={handleWaitingGoToChatroom}
-        />
-      ) : null}
-
       {videoCall ? (
         <Suspense fallback={null}>
           <VideoCallModal
@@ -1206,6 +1122,5 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
         </Suspense>
       ) : null}
     </div>
-    </ConsultationChatErrorBoundary>
   );
 }

@@ -167,7 +167,7 @@ function BookAppointment({ onNavigate, profile }) {
   const [availableSlots, setAvailableSlots] = useState([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [hiddenPastSlotsCount, setHiddenPastSlotsCount] = useState(0);
-  const [paymentMethod] = useState('QRPh');
+  const [paymentMethod, setPaymentMethod] = useState('GCash');
   const [isPaying, setIsPaying] = useState(false);
   const [confirmedSlot, setConfirmedSlot] = useState(null);
   const [loadError, setLoadError] = useState('');
@@ -297,6 +297,7 @@ function BookAppointment({ onNavigate, profile }) {
     if (attachmentInputRef.current) attachmentInputRef.current.value = '';
     setAvailableSlots([]);
     setHiddenPastSlotsCount(0);
+    setPaymentMethod('GCash');
     setShowBooking(true);
   };
 
@@ -318,6 +319,7 @@ function BookAppointment({ onNavigate, profile }) {
       if (attachmentInputRef.current) attachmentInputRef.current.value = '';
       setAvailableSlots([]);
       setHiddenPastSlotsCount(0);
+      setPaymentMethod('GCash');
       setConfirmedSlot(null);
     });
   };
@@ -901,18 +903,15 @@ function BookAppointment({ onNavigate, profile }) {
                   <>
                     <div className="ba-form-group">
                       <label className="ba-form-label">💳 Payment Method</label>
-                      <div
+                      <select
                         className="ba-form-input"
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 10,
-                          cursor: 'default',
-                        }}
+                        value={paymentMethod}
+                        onChange={(e) => setPaymentMethod(e.target.value)}
                       >
-                        <span aria-hidden="true">Q</span>
-                        <span>QR Ph — pay via any QR Ph–enabled bank or e-wallet</span>
-                      </div>
+                        <option value="GCash">GCash</option>
+                        <option value="Maya">Maya</option>
+                        <option value="QRPh">QR Ph</option>
+                      </select>
                     </div>
 
                     <div className="ba-form-group">

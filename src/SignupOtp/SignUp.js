@@ -1,13 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import './SignUp.css';
 import {
   OTP_RESUME_SIGNUP_KEY,
   PENDING_OTP_CHANNEL_KEY,
-  PENDING_SIGNUP_ID_KEY,
   PENDING_SIGNUP_USER_ID_KEY,
   PENDING_SMS_PHONE_KEY,
-  SIGNUP_OTP_SENT_KEY,
-  SIGNUP_PROFILE_KEY,
   signUpWithEmail,
 } from '../lib/authApi';
 import {
@@ -71,28 +68,8 @@ const getErrorMessage = (error, fallback) => {
   return fallback;
 };
 
-const clearStaleSignupPendingKeys = () => {
-  localStorage.removeItem('batasmo_pending_otp_email');
-  localStorage.removeItem('batasmo_pending_otp_role');
-  localStorage.removeItem(PENDING_OTP_CHANNEL_KEY);
-  localStorage.removeItem(PENDING_SIGNUP_ID_KEY);
-  localStorage.removeItem(PENDING_SIGNUP_USER_ID_KEY);
-  localStorage.removeItem(PENDING_SMS_PHONE_KEY);
-  localStorage.removeItem(SIGNUP_OTP_SENT_KEY);
-  try {
-    sessionStorage.removeItem(OTP_RESUME_SIGNUP_KEY);
-    sessionStorage.removeItem(SIGNUP_PROFILE_KEY);
-  } catch {
-    /* ignore */
-  }
-};
-
 function SignUp({ onNavigate, onEmailChange }) {
   const [otpDelivery, setOtpDelivery] = useState('email');
-
-  useEffect(() => {
-    clearStaleSignupPendingKeys();
-  }, []);
   const [form, setForm] = useState({
     fullName: '',
     sex: 'male',
@@ -230,56 +207,18 @@ function SignUp({ onNavigate, onEmailChange }) {
         preferredOtpChannel: otpDelivery,
       });
 
-      clearStaleSignupPendingKeys();
       localStorage.setItem('batasmo_pending_otp_email', normalizedEmail);
       localStorage.setItem('batasmo_pending_otp_role', 'Client');
       localStorage.setItem(PENDING_OTP_CHANNEL_KEY, otpDelivery);
       localStorage.setItem(PENDING_SMS_PHONE_KEY, form.contact.trim());
-      if (result?.pendingId) {
-        localStorage.setItem(PENDING_SIGNUP_ID_KEY, String(result.pendingId));
-      } else {
-        localStorage.removeItem(PENDING_SIGNUP_ID_KEY);
-      }
       if (result?.user?.id) {
         localStorage.setItem(PENDING_SIGNUP_USER_ID_KEY, String(result.user.id));
-      } else {
-        localStorage.removeItem(PENDING_SIGNUP_USER_ID_KEY);
-      }
-      if (otpDelivery === 'email' && result?.otpSent) {
-        localStorage.setItem(SIGNUP_OTP_SENT_KEY, normalizedEmail);
-      } else {
-        localStorage.removeItem(SIGNUP_OTP_SENT_KEY);
-      }
-      if (result?.resendHint) {
-        try {
-          sessionStorage.setItem('batasmo_signup_email_warning', result.resendHint);
-        } catch {
-          /* ignore */
-        }
       }
       try {
         sessionStorage.setItem(
           OTP_RESUME_SIGNUP_KEY,
           JSON.stringify({ email: normalizedEmail, password: form.password }),
         );
-        if (otpDelivery === 'email') {
-          sessionStorage.setItem(
-            SIGNUP_PROFILE_KEY,
-            JSON.stringify({
-              fullName: form.fullName.trim(),
-              role: 'Client',
-              sex: form.sex,
-              phone: form.contact.trim(),
-              age: parsedAge,
-              address: form.address.trim(),
-              guardianName: parsedAge < 18 ? form.guardianName.trim() : null,
-              guardianContact: parsedAge < 18 ? form.guardianContact.trim() : null,
-              password: form.password,
-            }),
-          );
-        } else {
-          sessionStorage.removeItem(SIGNUP_PROFILE_KEY);
-        }
       } catch {
         /* ignore */
       }
