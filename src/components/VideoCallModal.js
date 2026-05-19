@@ -1,4 +1,4 @@
-import { Component, useCallback, useEffect, useRef, useState } from 'react';
+import { Component, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   MeetingProvider,
   useMeeting,
@@ -7,11 +7,14 @@ import {
   createMicrophoneAudioTrack,
 } from '@videosdk.live/react-sdk';
 import './VideoCallModal.css';
+import { isLowPowerVideoDevice } from '../lib/videoCallHelpers';
 
-// Build HD video + cleaned-up audio tracks before joining so we don't fall
-// back to VideoSDK's lowest-common-denominator defaults. We try the highest
-// preset that the user's hardware can deliver and degrade gracefully.
-const VIDEO_QUALITY_PRESETS = ['h720p_w1280p', 'h540p_w960p', 'h360p_w640p'];
+const JOIN_TIMEOUT_MS = 25_000;
+const LAYOUT_DEBOUNCE_MS = 280;
+
+const VIDEO_QUALITY_PRESETS = isLowPowerVideoDevice()
+  ? ['h360p_w640p']
+  : ['h540p_w960p', 'h360p_w640p'];
 
 async function createPreferredCameraTrack() {
   for (const encoderConfig of VIDEO_QUALITY_PRESETS) {
@@ -19,7 +22,7 @@ async function createPreferredCameraTrack() {
       const track = await createCameraVideoTrack({
         encoderConfig,
         facingMode: 'user',
-        optimizationMode: 'motion',
+        optimizationMode: 'detail',
         multiStream: false,
       });
       if (track) return track;
@@ -46,9 +49,20 @@ async function createPreferredAudioTrack() {
   }
 }
 
-// ─── Error boundary ──────────────────────────────────────────────────────────
-// Catches VideoSDK internal crashes (e.g. "Cannot read properties of null
-// (reading 'emit')") and recovers without taking down the entire app.
+const attachMediaTrack = (element, track, enabled) => {
+  if (!element) return;
+  if (enabled && track) {
+    const stream = new MediaStream([track]);
+    if (element.srcObject !== stream) {
+      element.srcObject = stream;
+    }
+    element.play().catch(() => {});
+    return;
+  }
+  if (element.srcObject) {
+    element.srcObject = null;
+  }
+};
 
 class VideoErrorBoundary extends Component {
   constructor(props) {
@@ -78,48 +92,42 @@ class VideoErrorBoundary extends Component {
   }
 }
 
-// ─── Participant tile ────────────────────────────────────────────────────────
-
-function ParticipantView({ participantId }) {
+const ParticipantView = memo(function ParticipantView({ participantId }) {
   const micRef = useRef(null);
   const videoRef = useRef(null);
   const participant = useParticipant(participantId);
   const { webcamStream, micStream, webcamOn, micOn, isLocal, displayName } = participant || {};
   const hasLiveVideo = Boolean(webcamOn && webcamStream?.track);
+  const videoTrackId = webcamStream?.track?.id;
+  const micTrackId = micStream?.track?.id;
 
   useEffect(() => {
     const el = micRef.current;
-    if (!el) return;
-    const track = micStream?.track;
-    if (micOn && track) {
-      const stream = new MediaStream([track]);
-      el.srcObject = stream;
-      el.play().catch(() => {});
-    } else {
-      el.srcObject = null;
-    }
-  }, [micOn, micStream, micStream?.track?.id]);
+    attachMediaTrack(el, micStream?.track, Boolean(micOn && micStream?.track));
+    return () => {
+      if (el?.srcObject) el.srcObject = null;
+    };
+  }, [micOn, micTrackId, micStream?.track]);
 
   useEffect(() => {
     const el = videoRef.current;
-    if (!el) return;
-    const track = webcamStream?.track;
-    if (webcamOn && track) {
-      const stream = new MediaStream([track]);
-      el.srcObject = stream;
-      el.play().catch(() => {});
-    } else {
-      el.srcObject = null;
-    }
-  }, [webcamOn, webcamStream, webcamStream?.track?.id]);
+    attachMediaTrack(el, webcamStream?.track, Boolean(webcamOn && webcamStream?.track));
+    return () => {
+      if (el?.srcObject) el.srcObject = null;
+    };
+  }, [webcamOn, videoTrackId, webcamStream?.track]);
 
-  const initials = (displayName || '?')
-    .split(' ')
-    .filter(Boolean)
-    .map((part) => part[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
+  const initials = useMemo(
+    () =>
+      (displayName || '?')
+        .split(' ')
+        .filter(Boolean)
+        .map((part) => part[0])
+        .slice(0, 2)
+        .join('')
+        .toUpperCase(),
+    [displayName],
+  );
 
   return (
     <div className="vc-participant">
@@ -134,24 +142,25 @@ function ParticipantView({ participantId }) {
         style={{ display: hasLiveVideo ? 'block' : 'none' }}
       />
 
-      {!hasLiveVideo && (
-        <div className="vc-participant__avatar">{initials}</div>
-      )}
+      {!hasLiveVideo && <div className="vc-participant__avatar">{initials}</div>}
 
       <div className="vc-participant__label">
-        {displayName || 'Participant'}{isLocal ? ' (You)' : ''}
+        {displayName || 'Participant'}
+        {isLocal ? ' (You)' : ''}
       </div>
 
       <div className="vc-participant__status">
-        {!micOn && <span className="vc-participant__mic-off" title="Muted">🔇</span>}
+        {!micOn && (
+          <span className="vc-participant__mic-off" title="Muted">
+            🔇
+          </span>
+        )}
       </div>
     </div>
   );
-}
+});
 
-// ─── Controls bar ─────────────────────────────────────────────────────────────
-
-function Controls({ onLeave, micOn, webcamOn, toggleMic, toggleWebcam }) {
+const Controls = memo(function Controls({ onLeave, micOn, webcamOn, toggleMic, toggleWebcam }) {
   return (
     <div className="vc-controls">
       <button
@@ -200,12 +209,7 @@ function Controls({ onLeave, micOn, webcamOn, toggleMic, toggleWebcam }) {
         <span>{webcamOn ? 'Stop Video' : 'Start Video'}</span>
       </button>
 
-      <button
-        type="button"
-        className="vc-ctrl-btn vc-ctrl-btn--leave"
-        onClick={onLeave}
-        title="Leave Call"
-      >
+      <button type="button" className="vc-ctrl-btn vc-ctrl-btn--leave" onClick={onLeave} title="Leave Call">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.42 19.42 0 0 1 4.43 9.88a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.34 1h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.3 8.9" />
           <line x1="23" y1="1" x2="1" y2="23" />
@@ -214,11 +218,7 @@ function Controls({ onLeave, micOn, webcamOn, toggleMic, toggleWebcam }) {
       </button>
     </div>
   );
-}
-
-// ─── Meeting view ─────────────────────────────────────────────────────────────
-
-const JOIN_TIMEOUT_MS = 25_000;
+});
 
 const buildTwoParticipantLayout = (participantIds, localParticipantId) => {
   if (!Array.isArray(participantIds) || participantIds.length === 0) {
@@ -226,7 +226,10 @@ const buildTwoParticipantLayout = (participantIds, localParticipantId) => {
   }
   const remoteIds = participantIds.filter((pid) => String(pid) !== String(localParticipantId));
   const ordered = [...remoteIds];
-  if (localParticipantId && participantIds.some((pid) => String(pid) === String(localParticipantId))) {
+  if (
+    localParticipantId &&
+    participantIds.some((pid) => String(pid) === String(localParticipantId))
+  ) {
     ordered.push(localParticipantId);
   }
   return {
@@ -235,17 +238,73 @@ const buildTwoParticipantLayout = (participantIds, localParticipantId) => {
   };
 };
 
+function MeetingStage({ participantIds, localParticipantId }) {
+  const { primary, secondary } = useMemo(
+    () => buildTwoParticipantLayout(participantIds, localParticipantId),
+    [participantIds, localParticipantId],
+  );
+
+  if (!primary) return null;
+
+  if (participantIds.length <= 2) {
+    return (
+      <div className="vc-stage">
+        <div className="vc-stage__primary">
+          <VideoErrorBoundary>
+            <ParticipantView participantId={primary} />
+          </VideoErrorBoundary>
+        </div>
+        {secondary ? (
+          <div className="vc-stage__pip">
+            <VideoErrorBoundary>
+              <ParticipantView participantId={secondary} />
+            </VideoErrorBoundary>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className={`vc-grid ${participantIds.length <= 2 ? 'vc-grid--sm' : 'vc-grid--lg'}`}>
+      {participantIds.map((pid) => (
+        <VideoErrorBoundary key={pid}>
+          <ParticipantView participantId={pid} />
+        </VideoErrorBoundary>
+      ))}
+    </div>
+  );
+}
+
 function MeetingView({ meetingId, onLeave }) {
   const [joinState, setJoinState] = useState('IDLE');
   const [joinError, setJoinError] = useState('');
-  const [participantLayoutEpoch, setParticipantLayoutEpoch] = useState(0);
+  const [participantIds, setParticipantIds] = useState([]);
   const hasJoinedRef = useRef(false);
   const timeoutRef = useRef(null);
   const retryCountRef = useRef(0);
+  const layoutTimerRef = useRef(null);
+  const participantsRef = useRef(null);
 
-  const bumpParticipantLayout = useCallback(() => {
-    setParticipantLayoutEpoch((value) => value + 1);
+  const syncParticipantIds = useCallback(() => {
+    const map = participantsRef.current;
+    if (!map) return;
+    const next = [...map.keys()].sort();
+    setParticipantIds((prev) => {
+      if (prev.length === next.length && prev.every((id, index) => id === next[index])) {
+        return prev;
+      }
+      return next;
+    });
   }, []);
+
+  const scheduleParticipantSync = useCallback(() => {
+    if (layoutTimerRef.current) window.clearTimeout(layoutTimerRef.current);
+    layoutTimerRef.current = window.setTimeout(() => {
+      layoutTimerRef.current = null;
+      syncParticipantIds();
+    }, LAYOUT_DEBOUNCE_MS);
+  }, [syncParticipantIds]);
 
   const {
     join,
@@ -261,18 +320,11 @@ function MeetingView({ meetingId, onLeave }) {
       clearTimeout(timeoutRef.current);
       retryCountRef.current = 0;
       setJoinState('JOINED');
-      bumpParticipantLayout();
+      syncParticipantIds();
     },
     onMeetingLeft: onLeave,
-    onParticipantJoined: () => {
-      bumpParticipantLayout();
-    },
-    onParticipantLeft: () => {
-      bumpParticipantLayout();
-    },
-    onVideoStateChanged: () => {
-      bumpParticipantLayout();
-    },
+    onParticipantJoined: scheduleParticipantSync,
+    onParticipantLeft: scheduleParticipantSync,
     onWebcamRequested: ({ accept }) => {
       if (typeof accept === 'function') accept();
     },
@@ -285,7 +337,7 @@ function MeetingView({ meetingId, onLeave }) {
         retryCountRef.current += 1;
         setJoinState('JOINING');
         setJoinError('');
-        setTimeout(() => {
+        window.setTimeout(() => {
           try {
             join();
           } catch {
@@ -295,13 +347,15 @@ function MeetingView({ meetingId, onLeave }) {
         return;
       }
       setJoinError(
-        (error && (error.message || error.code))
+        error && (error.message || error.code)
           ? String(error.message || error.code)
-          : 'Failed to connect to the video call.'
+          : 'Failed to connect to the video call.',
       );
       setJoinState('ERROR');
     },
   });
+
+  participantsRef.current = participants;
 
   useEffect(() => {
     if (hasJoinedRef.current) return;
@@ -309,7 +363,7 @@ function MeetingView({ meetingId, onLeave }) {
     setJoinState('JOINING');
     join();
 
-    timeoutRef.current = setTimeout(() => {
+    timeoutRef.current = window.setTimeout(() => {
       setJoinState((prev) => {
         if (prev === 'JOINING') {
           if (retryCountRef.current < 1) {
@@ -328,14 +382,30 @@ function MeetingView({ meetingId, onLeave }) {
       });
     }, JOIN_TIMEOUT_MS);
 
-    return () => clearTimeout(timeoutRef.current);
+    return () => {
+      clearTimeout(timeoutRef.current);
+      if (layoutTimerRef.current) {
+        window.clearTimeout(layoutTimerRef.current);
+        layoutTimerRef.current = null;
+      }
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleLeave = () => {
+  const handleLeave = useCallback(() => {
     clearTimeout(timeoutRef.current);
-    leave();
+    if (layoutTimerRef.current) {
+      window.clearTimeout(layoutTimerRef.current);
+      layoutTimerRef.current = null;
+    }
+    try {
+      leave();
+    } catch {
+      // SDK may already be torn down.
+    }
     onLeave();
-  };
+  }, [leave, onLeave]);
+
+  const localParticipantId = localParticipant?.id || null;
 
   return (
     <div className="vc-meeting">
@@ -354,46 +424,9 @@ function MeetingView({ meetingId, onLeave }) {
         </div>
       )}
 
-      {joinState === 'JOINED' && (() => {
-        const participantIds = [...participants.keys()];
-        const localParticipantId = localParticipant?.id || null;
-        const { primary: primaryParticipantId, secondary: secondaryParticipantId } = buildTwoParticipantLayout(
-          participantIds,
-          localParticipantId,
-        );
-
-        if (participantIds.length <= 2 && primaryParticipantId) {
-          return (
-            <div className="vc-stage" key={`vc-stage-${participantLayoutEpoch}-${participantIds.length}`}>
-              <div className="vc-stage__primary">
-                <VideoErrorBoundary key={`eb-primary-${primaryParticipantId}`}>
-                  <ParticipantView key={primaryParticipantId} participantId={primaryParticipantId} />
-                </VideoErrorBoundary>
-              </div>
-              {secondaryParticipantId ? (
-                <div className="vc-stage__pip">
-                  <VideoErrorBoundary key={`eb-secondary-${secondaryParticipantId}`}>
-                    <ParticipantView key={secondaryParticipantId} participantId={secondaryParticipantId} />
-                  </VideoErrorBoundary>
-                </div>
-              ) : null}
-            </div>
-          );
-        }
-
-        return (
-          <div
-            className={`vc-grid ${participantIds.length <= 2 ? 'vc-grid--sm' : 'vc-grid--lg'}`}
-            key={`vc-grid-${participantLayoutEpoch}-${participantIds.length}`}
-          >
-            {participantIds.map((pid) => (
-              <VideoErrorBoundary key={`eb-${pid}`}>
-                <ParticipantView key={pid} participantId={pid} />
-              </VideoErrorBoundary>
-            ))}
-          </div>
-        );
-      })()}
+      {joinState === 'JOINED' && participantIds.length > 0 ? (
+        <MeetingStage participantIds={participantIds} localParticipantId={localParticipantId} />
+      ) : null}
 
       {joinState === 'JOINED' ? (
         <Controls
@@ -423,18 +456,22 @@ function MeetingView({ meetingId, onLeave }) {
   );
 }
 
-// ─── Public modal wrapper ────────────────────────────────────────────────────
-
 export default function VideoCallModal({ meetingId, token, participantName, onClose }) {
   const [preparedTracks, setPreparedTracks] = useState(null);
   const [tracksReady, setTracksReady] = useState(false);
   const [tracksError, setTracksError] = useState('');
   const trackCleanupRef = useRef(null);
+  const useSdkDefaultTracks = isLowPowerVideoDevice();
 
-  // Build HD tracks before mounting MeetingProvider so the participant joins
-  // directly at the preferred quality, instead of falling back to SDK defaults.
   useEffect(() => {
     if (!meetingId || !token) return undefined;
+
+    if (useSdkDefaultTracks) {
+      setPreparedTracks(null);
+      setTracksReady(true);
+      setTracksError('');
+      return undefined;
+    }
 
     let cancelled = false;
     setTracksReady(false);
@@ -447,20 +484,36 @@ export default function VideoCallModal({ meetingId, token, participantName, onCl
       ]);
 
       if (cancelled) {
-        try { videoTrack?.stop?.(); } catch { /* noop */ }
-        try { audioTrack?.stop?.(); } catch { /* noop */ }
+        try {
+          videoTrack?.stop?.();
+        } catch {
+          /* noop */
+        }
+        try {
+          audioTrack?.stop?.();
+        } catch {
+          /* noop */
+        }
         return;
       }
 
       trackCleanupRef.current = () => {
-        try { videoTrack?.stop?.(); } catch { /* noop */ }
-        try { audioTrack?.stop?.(); } catch { /* noop */ }
+        try {
+          videoTrack?.stop?.();
+        } catch {
+          /* noop */
+        }
+        try {
+          audioTrack?.stop?.();
+        } catch {
+          /* noop */
+        }
       };
       setPreparedTracks({ videoTrack, audioTrack });
       setTracksReady(true);
 
       if (!videoTrack && !audioTrack) {
-        setTracksError('Using default camera/microphone (HD preset unavailable).');
+        setTracksError('Using default camera/microphone.');
       }
     })();
 
@@ -471,15 +524,32 @@ export default function VideoCallModal({ meetingId, token, participantName, onCl
         trackCleanupRef.current = null;
       }
     };
-  }, [meetingId, token]);
+  }, [meetingId, token, useSdkDefaultTracks]);
 
-  const handleLeave = () => {
+  const handleLeave = useCallback(() => {
     if (typeof trackCleanupRef.current === 'function') {
       trackCleanupRef.current();
       trackCleanupRef.current = null;
     }
     if (typeof onClose === 'function') onClose();
-  };
+  }, [onClose]);
+
+  const meetingConfig = useMemo(
+    () => ({
+      meetingId,
+      micEnabled: true,
+      webcamEnabled: true,
+      name: participantName || 'Participant',
+      multiStream: false,
+      ...(preparedTracks?.videoTrack
+        ? { customCameraVideoTrack: preparedTracks.videoTrack }
+        : {}),
+      ...(preparedTracks?.audioTrack
+        ? { customMicrophoneAudioTrack: preparedTracks.audioTrack }
+        : {}),
+    }),
+    [meetingId, participantName, preparedTracks?.audioTrack, preparedTracks?.videoTrack],
+  );
 
   return (
     <div className="vc-overlay" role="dialog" aria-modal="true" aria-label="Video Call">
@@ -499,19 +569,9 @@ export default function VideoCallModal({ meetingId, token, participantName, onCl
         <VideoErrorBoundary>
           {tracksReady ? (
             <MeetingProvider
-              config={{
-                meetingId,
-                micEnabled: true,
-                webcamEnabled: true,
-                name: participantName || 'Participant',
-                // Two-party consultations join faster and look sharper without
-                // simulcast layers. The SDK still adapts to bandwidth.
-                multiStream: false,
-                customCameraVideoTrack: preparedTracks?.videoTrack || undefined,
-                customMicrophoneAudioTrack: preparedTracks?.audioTrack || undefined,
-              }}
+              config={meetingConfig}
               token={token}
-              joinWithoutUserInteraction={false}
+              joinWithoutUserInteraction
               reinitialiseMeetingOnConfigChange={false}
             >
               <MeetingView meetingId={meetingId} onLeave={handleLeave} />
@@ -519,9 +579,11 @@ export default function VideoCallModal({ meetingId, token, participantName, onCl
           ) : (
             <div className="vc-connecting">
               <div className="vc-connecting__spinner" />
-              <p>Preparing HD camera & microphone…</p>
+              <p>Preparing camera & microphone…</p>
               {tracksError ? (
-                <p className="vc-error-msg" style={{ marginTop: 6 }}>{tracksError}</p>
+                <p className="vc-error-msg" style={{ marginTop: 6 }}>
+                  {tracksError}
+                </p>
               ) : null}
             </div>
           )}

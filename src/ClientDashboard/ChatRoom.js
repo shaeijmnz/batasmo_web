@@ -574,19 +574,8 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
     setIncomingCallData(null);
   };
 
-  const warmupMediaPermissions = async () => {
-    if (!navigator?.mediaDevices?.getUserMedia) return;
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-      stream.getTracks().forEach((track) => track.stop());
-    } catch {
-      // Keep call flow working even when prompt is dismissed.
-    }
-  };
-
   const tryOpenIncomingCall = async (callData) => {
     setIncomingCallData(callData);
-    await warmupMediaPermissions();
     openVideoCall(callData);
   };
 
@@ -602,7 +591,6 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
     setVideoCallError('');
     try {
       const { meetingId, roomId, token } = await getOrCreateVideoMeeting(activeAppointmentId);
-      await warmupMediaPermissions();
       openVideoCall({ meetingId, roomId, token });
     } catch (err) {
       setVideoCallError(err.message || 'Failed to start video call.');
@@ -633,11 +621,8 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
 
   useEffect(() => {
     if (!activeAppointmentId || isClosed || videoCall) return;
-    warmupMediaPermissions();
-    // Prefetch VideoSDK token so the first call's join is faster (110m cache).
-    getVideoSdkToken().catch(() => {
-      // Ignore prefetch failure; will retry on actual call.
-    });
+    // Prefetch token only — camera/mic are opened once inside VideoCallModal.
+    getVideoSdkToken().catch(() => {});
   }, [activeAppointmentId, isClosed, videoCall]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
