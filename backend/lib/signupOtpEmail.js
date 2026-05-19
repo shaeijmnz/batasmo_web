@@ -1,11 +1,10 @@
 /**
- * Signup verification OTP email (6-digit code) — uses Render SMTP/Resend.
+ * Signup verification OTP email (6-digit code) — Resend API (recommended on Render) or Gmail SMTP.
  */
 
 import dns from 'dns'
 import { isWelcomeEmailConfigured } from './welcomeEmail.js'
 
-/** Prefer IPv4 — some hosts (e.g. Render) have flaky IPv6 routes to Gmail. */
 const smtpLookup = (hostname, options, callback) => {
   dns.lookup(hostname, { ...options, family: 4 }, callback)
 }
@@ -17,8 +16,35 @@ const SMTP_PORT = Number(process.env.SMTP_PORT || 465)
 const SMTP_USER = String(process.env.SMTP_USER || '').trim()
 const SMTP_PASS = String(process.env.SMTP_PASS || '').trim()
 const APP_LOGIN_URL = String(process.env.APP_LOGIN_URL || 'https://batasmo-web.vercel.app/login').trim()
+const OTP_EMAIL_PREFER = String(process.env.OTP_EMAIL_PREFER || 'auto').trim().toLowerCase()
 
 export const isSignupOtpEmailConfigured = () => isWelcomeEmailConfigured()
+
+const smtpReady = () => Boolean(SMTP_HOST && SMTP_USER && SMTP_PASS && WELCOME_EMAIL_FROM)
+const resendReady = () => Boolean(RESEND_API_KEY && WELCOME_EMAIL_FROM)
+const isResendSandboxFrom = () => WELCOME_EMAIL_FROM.toLowerCase().includes('onboarding@resend.dev')
+
+export const getSignupOtpEmailStatus = () => {
+  const smtp = smtpReady()
+  const resend = resendReady()
+  const sandbox = resend && isResendSandboxFrom() && !smtp
+  let primary = 'none'
+  if (resend && !sandbox && (OTP_EMAIL_PREFER === 'resend' || OTP_EMAIL_PREFER === 'auto' || !smtp)) {
+    primary = 'resend'
+  } else if (smtp) {
+    primary = 'smtp'
+  } else if (resend) {
+    primary = 'resend'
+  }
+  return {
+    configured: smtp || resend,
+    primary,
+    smtp,
+    resend,
+    resendSandboxOnly: sandbox,
+    recommendResendOnRender: smtp && !resend,
+  }
+}
 
 const escapeHtml = (value) =>
   String(value || '')
@@ -121,6 +147,21 @@ const buildSignupOtpText = ({ otp, fullName }) =>
     'If you did not create an account, you can ignore this email.',
   ].join('\n')
 
+const RESEND_TIMEOUT_MS = 20_000
+const SMTP_ATTEMPT_MS = 14_000
+
+const withTimeout = async (promise, ms, message) => {
+  let timeoutId
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), ms)
+  })
+  try {
+    return await Promise.race([promise, timeout])
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
 const sendViaResend = async ({ to, subject, html, text }) => {
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -145,23 +186,6 @@ const sendViaResend = async ({ to, subject, html, text }) => {
   return payload
 }
 
-const SMTP_SEND_MS = 35_000
-
-const withSendTimeout = async (promise, ms = SMTP_SEND_MS) => {
-  let timeoutId
-  const timeout = new Promise((_, reject) => {
-    timeoutId = setTimeout(
-      () => reject(new Error('Email send timed out. Tap Resend on the next screen.')),
-      ms,
-    )
-  })
-  try {
-    return await Promise.race([promise, timeout])
-  } finally {
-    clearTimeout(timeoutId)
-  }
-}
-
 const isTransientSmtpFailure = (err) => {
   const msg = String(err?.message || err?.code || '').toLowerCase()
   return (
@@ -170,7 +194,7 @@ const isTransientSmtpFailure = (err) => {
     msg.includes('econnreset') ||
     msg.includes('greeting') ||
     msg.includes('socket') ||
-    msg.includes('connection closed')
+    msg.includes('connection')
   )
 }
 
@@ -181,61 +205,70 @@ const sendViaSmtpOnce = async ({ to, subject, html, text, port, secure, requireT
     port,
     secure,
     requireTLS: Boolean(requireTLS),
-    connectionTimeout: 18_000,
-    greetingTimeout: 18_000,
-    socketTimeout: SMTP_SEND_MS,
-    auth: {
-      user: SMTP_USER,
-      pass: SMTP_PASS,
-    },
+    connectionTimeout: 12_000,
+    greetingTimeout: 12_000,
+    socketTimeout: SMTP_ATTEMPT_MS,
+    auth: { user: SMTP_USER, pass: SMTP_PASS },
     tls: { minVersion: 'TLSv1.2' },
     lookup: smtpLookup,
   })
 
   try {
-    await transport.sendMail({
-      from: WELCOME_EMAIL_FROM,
-      to,
-      subject,
-      html,
-      text,
-    })
+    await transport.sendMail({ from: WELCOME_EMAIL_FROM, to, subject, html, text })
   } finally {
     transport.close?.()
   }
 }
 
-/**
- * Try configured port first; for Gmail on 465, retry 587 STARTTLS (often works when 465 hangs from cloud hosts).
- */
 const sendViaSmtp = async ({ to, subject, html, text }) => {
   const hostLower = SMTP_HOST.toLowerCase()
   const isGmailHost = hostLower.includes('gmail.com') || hostLower.includes('googlemail.com')
   const configuredPort = Number(SMTP_PORT) || 465
 
-  const attempts = [{ port: configuredPort, secure: configuredPort === 465, requireTLS: false }]
-  if (isGmailHost && configuredPort === 465) {
-    attempts.push({ port: 587, secure: false, requireTLS: true })
-  }
-  if (isGmailHost && configuredPort === 587) {
-    attempts.push({ port: 465, secure: true, requireTLS: false })
+  const attempts = []
+  if (isGmailHost) {
+    if (configuredPort !== 587) {
+      attempts.push({ port: 587, secure: false, requireTLS: true })
+    }
+    if (configuredPort !== 465) {
+      attempts.push({ port: 465, secure: true, requireTLS: false })
+    }
+    if (attempts.length === 0) {
+      attempts.push({ port: configuredPort, secure: configuredPort === 465, requireTLS: false })
+    }
+  } else {
+    attempts.push({ port: configuredPort, secure: configuredPort === 465, requireTLS: false })
   }
 
   let lastError = null
   for (const a of attempts) {
     try {
-      await sendViaSmtpOnce({ to, subject, html, text, ...a })
+      await withTimeout(
+        sendViaSmtpOnce({ to, subject, html, text, ...a }),
+        SMTP_ATTEMPT_MS,
+        'SMTP connection timed out',
+      )
       return
     } catch (err) {
       lastError = err
-      if (attempts.length === 1 || !isTransientSmtpFailure(err)) {
-        throw err
-      }
-      // More attempts left; try next (e.g. 587 after 465 connection timeout).
+      if (!isTransientSmtpFailure(err)) throw err
     }
   }
   throw lastError || new Error('SMTP send failed.')
 }
+
+const smtpFailureHelp =
+  'Gmail SMTP from Render is not connecting. Fix: (1) Add RESEND_API_KEY on Render (free at resend.com — works for all Gmail addresses). (2) Or set SMTP_PORT=587 and redeploy. (3) Or use SMS verification on sign up.'
+
+const shouldTryResendFirst = () => {
+  if (!resendReady()) return false
+  if (isResendSandboxFrom() && smtpReady()) return false
+  if (OTP_EMAIL_PREFER === 'smtp') return false
+  if (OTP_EMAIL_PREFER === 'resend') return true
+  return true
+}
+
+const shouldTrySmtp = () => smtpReady() && OTP_EMAIL_PREFER !== 'resend'
 
 /**
  * @returns {{ sent: boolean, skipped?: boolean, error?: string }}
@@ -248,49 +281,68 @@ export async function sendSignupOtpEmail({ email, otp, fullName }) {
   }
 
   if (!isSignupOtpEmailConfigured()) {
-    console.warn('[signup-otp-email] not configured — set SMTP_* or RESEND_API_KEY in backend env')
     return { sent: false, skipped: true, error: 'Verification email is not configured on the server.' }
+  }
+
+  if (isResendSandboxFrom() && !smtpReady()) {
+    return {
+      sent: false,
+      error:
+        'Resend test sender (onboarding@resend.dev) only delivers to the Resend account email. Add Gmail SMTP or verify a domain on Resend.',
+    }
   }
 
   const subject = 'Your BatasMo verification code'
   const html = buildSignupOtpHtml({ otp: code, fullName })
   const text = buildSignupOtpText({ otp: code, fullName })
+  const mail = { to, subject, html, text }
 
-  const smtpReady = Boolean(SMTP_HOST && SMTP_USER && SMTP_PASS && WELCOME_EMAIL_FROM)
-  const resendSandboxOnly =
-    !smtpReady &&
-    WELCOME_EMAIL_FROM.toLowerCase().includes('onboarding@resend.dev')
+  const errors = []
 
-  if (resendSandboxOnly) {
-    return {
-      sent: false,
-      error:
-        'Resend test sender only delivers to one inbox. Configure Gmail SMTP on Render (SMTP_HOST, SMTP_USER, SMTP_PASS, WELCOME_EMAIL_FROM).',
+  if (shouldTryResendFirst()) {
+    try {
+      await withTimeout(
+        sendViaResend(mail),
+        RESEND_TIMEOUT_MS,
+        'Resend API timed out',
+      )
+      console.info('[signup-otp-email] sent via Resend to', to)
+      return { sent: true, transport: 'resend' }
+    } catch (err) {
+      const msg = err?.message || String(err)
+      console.warn('[signup-otp-email] Resend failed:', msg)
+      errors.push(`Resend: ${msg}`)
+      if (!shouldTrySmtp()) {
+        return { sent: false, error: msg }
+      }
     }
   }
 
-  try {
-    if (smtpReady) {
-      try {
-        await withSendTimeout(sendViaSmtp({ to, subject, html, text }))
-        return { sent: true }
-      } catch (smtpError) {
-        console.warn('[signup-otp-email] SMTP failed:', smtpError?.message || smtpError)
-        if (RESEND_API_KEY) {
-          await withSendTimeout(sendViaResend({ to, subject, html, text }))
-          return { sent: true }
-        }
-        throw smtpError
-      }
+  if (shouldTrySmtp()) {
+    try {
+      await sendViaSmtp(mail)
+      console.info('[signup-otp-email] sent via SMTP to', to)
+      return { sent: true, transport: 'smtp' }
+    } catch (err) {
+      const msg = err?.message || String(err)
+      console.warn('[signup-otp-email] SMTP failed:', msg)
+      errors.push(`SMTP: ${msg}`)
     }
-    if (RESEND_API_KEY) {
-      await withSendTimeout(sendViaResend({ to, subject, html, text }))
-    } else {
-      return { sent: false, skipped: true, error: 'Verification email is not configured on the server.' }
+  }
+
+  if (resendReady() && !shouldTryResendFirst()) {
+    try {
+      await withTimeout(sendViaResend(mail), RESEND_TIMEOUT_MS, 'Resend API timed out')
+      return { sent: true, transport: 'resend' }
+    } catch (err) {
+      errors.push(`Resend: ${err?.message || err}`)
     }
-    return { sent: true }
-  } catch (error) {
-    console.error('[signup-otp-email] send failed', error?.message || error)
-    return { sent: false, error: error?.message || 'Failed to send verification email.' }
+  }
+
+  const combined = errors.join(' | ') || 'Failed to send verification email.'
+  const isTimeout = combined.toLowerCase().includes('timeout')
+  return {
+    sent: false,
+    error: isTimeout && !resendReady() ? `${combined}. ${smtpFailureHelp}` : combined,
   }
 }

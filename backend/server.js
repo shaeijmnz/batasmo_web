@@ -5,7 +5,7 @@ import dotenv from 'dotenv'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import jwt from 'jsonwebtoken'
 import { isWelcomeEmailConfigured, sendAttorneyWelcomeEmail } from './lib/welcomeEmail.js'
-import { isSignupOtpEmailConfigured } from './lib/signupOtpEmail.js'
+import { isSignupOtpEmailConfigured, getSignupOtpEmailStatus } from './lib/signupOtpEmail.js'
 import {
   startPendingClientSignup,
   resendPendingSignupOtp,
@@ -2423,6 +2423,7 @@ app.get('/health', (req, res) => {
     modelCandidates: GEMINI_MODEL_CANDIDATES,
     welcomeEmailConfigured: isWelcomeEmailConfigured(),
     signupOtpEmailConfigured: isSignupOtpEmailConfigured(),
+    signupOtpEmail: getSignupOtpEmailStatus(),
   })
 })
 

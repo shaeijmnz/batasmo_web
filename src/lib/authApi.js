@@ -36,11 +36,16 @@ const humanizeSignupEmailError = (message) => {
   const raw = String(message || '').trim()
   const m = raw.toLowerCase()
   if (!raw) return 'Failed to send verification email.'
-  if (m.includes('connection timeout') || m.includes('etimedout') || m.includes('econnrefused')) {
+  if (
+    m.includes('timeout') ||
+    m.includes('etimedout') ||
+    m.includes('econnrefused') ||
+    m.includes('render is not connecting')
+  ) {
     return (
-      'Could not reach the mail server in time (connection timeout). Tap Resend. ' +
-      'If it keeps failing, in Render try Gmail with SMTP_PORT=587 (same host, user, and App Password), ' +
-      'or add RESEND_API_KEY as a backup sender.'
+      'Email could not be sent (server mail timeout). Tap Resend after redeploy. ' +
+      'Admin fix on Render: add RESEND_API_KEY from resend.com (recommended), or change SMTP_PORT to 587. ' +
+      'You can also sign up using SMS verification instead of Email.'
     )
   }
   return raw
