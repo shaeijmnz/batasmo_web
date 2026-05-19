@@ -474,7 +474,6 @@ function SecretaryConsole({ profile, onNavigate, onSignOut, initialPage = 'Dashb
       );
     }
 
-    const welcomeName = displayName.split(' ').filter(Boolean)[0] || 'Secretary';
     const nextConsultation = consultations[0];
 
     return (
@@ -487,7 +486,7 @@ function SecretaryConsole({ profile, onNavigate, onSignOut, initialPage = 'Dashb
               aria-hidden="true"
             />
             <p className="sec-kicker">OPERATIONS OVERVIEW</p>
-            <h1>Welcome back, {welcomeName}</h1>
+            <h1>Welcome back, secretary</h1>
             <p>
               Monitor consultations, assist attorneys, manage client requests, and keep
               operations running smoothly from one dashboard.
