@@ -10,6 +10,7 @@ const SMTP_HOST = String(process.env.SMTP_HOST || '').trim()
 const SMTP_PORT = Number(process.env.SMTP_PORT || 465)
 const SMTP_USER = String(process.env.SMTP_USER || '').trim()
 const SMTP_PASS = String(process.env.SMTP_PASS || '').trim()
+const APP_LOGIN_URL = String(process.env.APP_LOGIN_URL || 'https://batasmo-web.vercel.app/login').trim()
 
 export const isSignupOtpEmailConfigured = () => isWelcomeEmailConfigured()
 
@@ -20,38 +21,78 @@ const escapeHtml = (value) =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
 
+const formatOtpForDisplay = (otp) =>
+  String(otp || '')
+    .replace(/\D/g, '')
+    .slice(0, 6)
+    .split('')
+    .join(' ')
+
+const resolveAppBaseUrl = () => {
+  const fromLogin = APP_LOGIN_URL.replace(/\/login\/?$/i, '')
+  if (fromLogin) return fromLogin
+  return 'https://batasmo-web.vercel.app'
+}
+
 const buildSignupOtpHtml = ({ otp, fullName }) => {
-  const safeOtp = escapeHtml(otp)
+  const safeOtp = escapeHtml(formatOtpForDisplay(otp))
   const safeName = escapeHtml(fullName || 'there')
+  const appBase = resolveAppBaseUrl()
+  const logoUrl = `${appBase}/auth/logo.jpg`
+  const verifyUrl = appBase
 
   return `<!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
-<body style="margin:0;padding:0;background:#eef2f7;font-family:Arial,Helvetica,sans-serif;color:#1f2937;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef2f7;padding:24px 12px;">
-    <tr><td align="center">
-      <table role="presentation" width="100%" style="max-width:620px;background:#fff;border-radius:14px;border:1px solid #e5e7eb;overflow:hidden;">
-        <tr><td style="background:linear-gradient(135deg,#080d12,#102035);padding:20px 24px;">
-          <div style="font-size:30px;font-weight:800;color:#fff;">BatasMo</div>
-        </td></tr>
-        <tr><td style="padding:28px 26px;text-align:center;">
-          <p style="margin:0 0 8px;font-size:16px;color:#4b5563;">Hi ${safeName},</p>
-          <p style="margin:0;font-size:16px;line-height:1.55;color:#4b5563;">Your verification code for BatasMo:</p>
-        </td></tr>
-        <tr><td style="padding:0 26px 12px;">
-          <div style="background:#f6f8fb;border:1px solid #dbe4f0;border-radius:12px;padding:18px;text-align:center;">
-            <div style="font-size:12px;letter-spacing:1px;font-weight:700;color:#6b7280;">YOUR OTP CODE</div>
-            <div style="margin-top:8px;font-size:42px;letter-spacing:6px;font-weight:800;color:#102035;">${safeOtp}</div>
-            <p style="margin-top:10px;font-size:13px;color:#6b7280;">Expires in <strong>10 minutes</strong>.</p>
-          </div>
-        </td></tr>
-        <tr><td style="padding:8px 26px 24px;">
-          <div style="background:#fff9ec;border:1px solid #f4deb0;border-radius:10px;padding:14px;font-size:14px;color:#7a5a23;">
-            <strong>Keep this code private.</strong> BatasMo will never ask for your OTP by phone or chat.
-          </div>
-        </td></tr>
-      </table>
-    </td></tr>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BatasMo OTP Verification</title>
+</head>
+<body style="margin:0;padding:0;background-color:#0b1018;font-family:Georgia,'Times New Roman',serif;color:#f5f5f5;">
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#0b1018;padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <div style="font-size:42px;line-height:1.1;font-style:italic;font-weight:700;color:#d4af37;letter-spacing:1px;margin:0 0 20px;">BatasMo!</div>
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:560px;background:linear-gradient(180deg,#121a26 0%,#0d131c 100%);border-radius:16px;border:1px solid #2a3544;overflow:hidden;box-shadow:0 24px 48px rgba(0,0,0,0.45);">
+          <tr>
+            <td style="padding:32px 28px 12px;text-align:center;">
+              <img src="${logoUrl}" alt="Anarna Law" width="88" height="88" style="display:block;margin:0 auto 18px;border-radius:12px;object-fit:contain;" />
+              <h1 style="margin:0 0 12px;font-size:28px;font-weight:700;color:#ffffff;font-family:Georgia,'Times New Roman',serif;">
+                Welcome to BatasMo!
+              </h1>
+              <p style="margin:0;font-size:15px;line-height:1.6;color:#b8c0cc;font-family:Arial,Helvetica,sans-serif;">
+                Hi ${safeName}, we're excited to have you on board. To secure your account, please use the One-Time Password (OTP) below to verify your email address.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 28px 20px;">
+              <div style="border:2px solid #d4af37;border-radius:12px;padding:22px 16px;text-align:center;background:rgba(212,175,55,0.06);">
+                <div style="font-size:36px;font-weight:700;letter-spacing:10px;color:#d4af37;font-family:'Courier New',Courier,monospace;line-height:1.2;">
+                  ${safeOtp}
+                </div>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 28px 28px;text-align:center;">
+              <a href="${verifyUrl}" style="display:inline-block;background:linear-gradient(180deg,#e8c96a 0%,#c9a227 100%);color:#1a1208;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:800;letter-spacing:0.12em;padding:14px 32px;border-radius:8px;text-transform:uppercase;">
+                Verify and proceed
+              </a>
+              <p style="margin:18px 0 0;font-size:13px;color:#8b95a3;font-family:Arial,Helvetica,sans-serif;">
+                This code will expire in <strong style="color:#d4af37;">10 minutes</strong>.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 24px;background:#080d12;text-align:center;font-size:12px;line-height:1.5;color:#7d8796;font-family:Arial,Helvetica,sans-serif;">
+              Need help? <a href="mailto:support@batasmo.ph" style="color:#d4af37;text-decoration:none;">support@batasmo.ph</a><br />
+              © ${new Date().getFullYear()} BatasMo. All rights reserved.
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
   </table>
 </body>
 </html>`
@@ -61,29 +102,18 @@ const buildSignupOtpText = ({ otp, fullName }) =>
   [
     `Hi ${fullName || 'there'},`,
     '',
-    'Your BatasMo verification code is:',
+    'Welcome to BatasMo!',
+    '',
+    'Your verification code is:',
     '',
     String(otp || ''),
     '',
     'This code expires in 10 minutes.',
+    '',
+    `Open BatasMo: ${resolveAppBaseUrl()}`,
+    '',
+    'If you did not create an account, you can ignore this email.',
   ].join('\n')
-
-const formatResendError = (payload, status) => {
-  const raw = String(payload?.message || payload?.error || `Resend error (${status})`)
-  const lower = raw.toLowerCase()
-  if (
-    lower.includes('only send') ||
-    lower.includes('verify a domain') ||
-    lower.includes('testing emails') ||
-    lower.includes('onboarding@resend.dev')
-  ) {
-    return (
-      'Email could not be delivered to this address. On Render, configure Gmail SMTP (SMTP_HOST, SMTP_USER, SMTP_PASS) ' +
-      'or verify your domain in Resend — the test sender only delivers to one inbox.'
-    )
-  }
-  return raw
-}
 
 const sendViaResend = async ({ to, subject, html, text }) => {
   const response = await fetch('https://api.resend.com/emails', {
@@ -92,12 +122,21 @@ const sendViaResend = async ({ to, subject, html, text }) => {
       Authorization: `Bearer ${RESEND_API_KEY}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ from: WELCOME_EMAIL_FROM, to: [to], subject, html, text }),
+    body: JSON.stringify({
+      from: WELCOME_EMAIL_FROM,
+      to: [to],
+      subject,
+      html,
+      text,
+    }),
   })
+
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) {
-    throw new Error(formatResendError(payload, response.status))
+    const msg = payload?.message || payload?.error || `Resend error (${response.status})`
+    throw new Error(String(msg))
   }
+  return payload
 }
 
 const sendViaSmtp = async ({ to, subject, html, text }) => {
@@ -106,47 +145,64 @@ const sendViaSmtp = async ({ to, subject, html, text }) => {
     host: SMTP_HOST,
     port: SMTP_PORT,
     secure: SMTP_PORT === 465,
-    auth: { user: SMTP_USER, pass: SMTP_PASS },
+    auth: {
+      user: SMTP_USER,
+      pass: SMTP_PASS,
+    },
   })
-  await transport.sendMail({ from: WELCOME_EMAIL_FROM, to, subject, html, text })
+
+  await transport.sendMail({
+    from: WELCOME_EMAIL_FROM,
+    to,
+    subject,
+    html,
+    text,
+  })
 }
 
+/**
+ * @returns {{ sent: boolean, skipped?: boolean, error?: string }}
+ */
 export async function sendSignupOtpEmail({ email, otp, fullName }) {
   const to = String(email || '').trim().toLowerCase()
-  const code = String(otp || '').replace(/\D/g, '')
-  if (!to || code.length < 6) {
+  const code = String(otp || '').replace(/\D/g, '').slice(0, 6)
+  if (!to || code.length !== 6) {
     return { sent: false, error: 'Missing email or OTP.' }
   }
+
   if (!isSignupOtpEmailConfigured()) {
-    return { sent: false, skipped: true, error: 'Email not configured on server (SMTP_* on Render).' }
+    console.warn('[signup-otp-email] not configured — set SMTP_* or RESEND_API_KEY in backend env')
+    return { sent: false, skipped: true, error: 'Verification email is not configured on the server.' }
   }
 
-  const subject = `${code} is your BatasMo verification code`
+  const subject = 'Your BatasMo verification code'
   const html = buildSignupOtpHtml({ otp: code, fullName })
   const text = buildSignupOtpText({ otp: code, fullName })
-  const smtpReady = Boolean(SMTP_HOST && SMTP_USER && SMTP_PASS && WELCOME_EMAIL_FROM)
-  const resendSandboxFrom = WELCOME_EMAIL_FROM.toLowerCase().includes('resend.dev')
 
-  if (!smtpReady && RESEND_API_KEY && resendSandboxFrom) {
+  const smtpReady = Boolean(SMTP_HOST && SMTP_USER && SMTP_PASS && WELCOME_EMAIL_FROM)
+  const resendSandboxOnly =
+    !smtpReady &&
+    WELCOME_EMAIL_FROM.toLowerCase().includes('onboarding@resend.dev')
+
+  if (resendSandboxOnly) {
     return {
       sent: false,
       error:
-        'Signup email is not fully configured. The server must use Gmail SMTP (SMTP_HOST, SMTP_USER, SMTP_PASS) ' +
-        'so verification codes can be sent to any @gmail.com address.',
+        'Resend test sender only delivers to one inbox. Configure Gmail SMTP on Render (SMTP_HOST, SMTP_USER, SMTP_PASS, WELCOME_EMAIL_FROM).',
     }
   }
 
   try {
-    // Prefer SMTP — delivers to any Gmail. Resend test sender only reaches the Resend account inbox.
     if (smtpReady) {
       await sendViaSmtp({ to, subject, html, text })
     } else if (RESEND_API_KEY) {
       await sendViaResend({ to, subject, html, text })
     } else {
-      return { sent: false, skipped: true, error: 'Email not configured on server.' }
+      return { sent: false, skipped: true, error: 'Verification email is not configured on the server.' }
     }
-    return { sent: true, sentTo: to }
+    return { sent: true }
   } catch (error) {
+    console.error('[signup-otp-email] send failed', error?.message || error)
     return { sent: false, error: error?.message || 'Failed to send verification email.' }
   }
 }
