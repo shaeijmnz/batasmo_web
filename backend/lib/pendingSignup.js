@@ -8,6 +8,22 @@ import { sendSignupOtpEmail, isSignupOtpEmailConfigured } from './signupOtpEmail
 const OTP_TTL_MS = 10 * 60 * 1000
 const MAX_SENDS_PER_HOUR = 8
 const MIN_MS_BETWEEN_SENDS = 55_000
+const SUPABASE_FETCH_MS = 30_000
+
+const fetchWithTimeout = async (url, options = {}, ms = SUPABASE_FETCH_MS) => {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), ms)
+  try {
+    return await fetch(url, { ...options, signal: controller.signal })
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error('Database request timed out. Please try again in a moment.')
+    }
+    throw error
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
 const IPROG_OTP_SEND = 'https://sms.iprogtech.com/api/v1/otp/send_otp'
 const IPROG_OTP_VERIFY = 'https://sms.iprogtech.com/api/v1/otp/verify_otp'
 const SMS_EXPIRES_MINUTES = 15
@@ -57,7 +73,7 @@ const authHeaders = (serviceKey) => ({
 })
 
 async function restSelect({ supabaseUrl, serviceKey, table, query }) {
-  const res = await fetch(`${supabaseUrl}/rest/v1/${table}?${query}`, {
+  const res = await fetchWithTimeout(`${supabaseUrl}/rest/v1/${table}?${query}`, {
     headers: restHeaders(serviceKey),
   })
   const rows = await res.json().catch(() => [])
@@ -168,7 +184,7 @@ async function upsertPending({ supabaseUrl, serviceKey, row }) {
   const nowIso = new Date().toISOString()
 
   if (existing?.id) {
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `${supabaseUrl}/rest/v1/pending_client_signups?id=eq.${encodeURIComponent(existing.id)}`,
       {
         method: 'PATCH',
@@ -181,7 +197,7 @@ async function upsertPending({ supabaseUrl, serviceKey, row }) {
     return Array.isArray(payload) ? payload[0] : { ...existing, ...row }
   }
 
-  const res = await fetch(`${supabaseUrl}/rest/v1/pending_client_signups`, {
+  const res = await fetchWithTimeout(`${supabaseUrl}/rest/v1/pending_client_signups`, {
     method: 'POST',
     headers: restHeaders(serviceKey),
     body: JSON.stringify({ ...row, created_at: nowIso, updated_at: nowIso }),
@@ -193,14 +209,16 @@ async function upsertPending({ supabaseUrl, serviceKey, row }) {
 
 async function sendEmailOtpForPending({ pending, otp }) {
   if (!isSignupOtpEmailConfigured()) {
-    throw new Error('Verification email is not configured on the server (Gmail SMTP on Render).')
+    return {
+      sent: false,
+      error: 'Verification email is not configured on the server (Gmail SMTP on Render).',
+    }
   }
-  const result = await sendSignupOtpEmail({
+  return sendSignupOtpEmail({
     email: pending.email_norm,
     otp,
     fullName: pending.full_name,
   })
-  if (!result.sent) throw new Error(result.error || 'Failed to send verification email.')
 }
 
 async function createSupabaseClientAccount({ supabaseUrl, serviceKey, pending, password }) {
@@ -305,23 +323,33 @@ export async function startPendingClientSignup({
 
   await checkSendRateLimit({ supabaseUrl, serviceKey, pendingId: pending.id })
 
+  let emailSendError = null
+  let otpSent = false
+
   if (channel === 'email') {
-    await sendEmailOtpForPending({ pending, otp })
-    const patchRes = await fetch(
-      `${supabaseUrl}/rest/v1/pending_client_signups?id=eq.${encodeURIComponent(pending.id)}`,
-      {
-        method: 'PATCH',
-        headers: restHeaders(serviceKey),
-        body: JSON.stringify({ otp_sent_at: new Date().toISOString(), updated_at: new Date().toISOString() }),
-      },
-    )
-    if (!patchRes.ok) throw new Error('Could not update send timestamp.')
+    const emailResult = await sendEmailOtpForPending({ pending, otp })
+    otpSent = Boolean(emailResult?.sent)
+    if (!otpSent) {
+      emailSendError = emailResult?.error || 'Failed to send verification email.'
+      console.warn('[signup] OTP email not sent:', emailSendError)
+    } else {
+      const patchRes = await fetchWithTimeout(
+        `${supabaseUrl}/rest/v1/pending_client_signups?id=eq.${encodeURIComponent(pending.id)}`,
+        {
+          method: 'PATCH',
+          headers: restHeaders(serviceKey),
+          body: JSON.stringify({ otp_sent_at: new Date().toISOString(), updated_at: new Date().toISOString() }),
+        },
+      )
+      if (!patchRes.ok) console.warn('[signup] could not update otp_sent_at')
+    }
   } else {
     if (!iprogApiKey) throw new Error('SMS verification is not configured (IPROG_API_KEY).')
     if (!phone) throw new Error('A valid Philippine mobile number is required for SMS OTP.')
     const sent = await iprogSendOtp(iprogApiKey, phone)
     if (!sent.ok) throw new Error(sent.message || 'Could not send SMS code.')
-    await fetch(
+    otpSent = true
+    await fetchWithTimeout(
       `${supabaseUrl}/rest/v1/pending_client_signups?id=eq.${encodeURIComponent(pending.id)}`,
       {
         method: 'PATCH',
@@ -337,7 +365,8 @@ export async function startPendingClientSignup({
     pendingId: pending.id,
     email,
     preferredOtpChannel: channel,
-    otpSent: channel === 'email' || channel === 'sms',
+    otpSent,
+    emailSendError: emailSendError || undefined,
   }
 }
 
@@ -362,8 +391,11 @@ export async function resendPendingSignupOtp({
   if (channel === 'email') {
     const otp = generateOtp()
     const otpExpires = new Date(Date.now() + OTP_TTL_MS).toISOString()
-    await sendEmailOtpForPending({ pending, otp })
-    await fetch(
+    const emailResult = await sendEmailOtpForPending({ pending, otp })
+    if (!emailResult?.sent) {
+      throw new Error(emailResult?.error || 'Failed to send verification email.')
+    }
+    await fetchWithTimeout(
       `${supabaseUrl}/rest/v1/pending_client_signups?id=eq.${encodeURIComponent(pending.id)}`,
       {
         method: 'PATCH',

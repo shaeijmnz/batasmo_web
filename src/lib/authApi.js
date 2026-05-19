@@ -137,7 +137,8 @@ export async function signUpWithEmail({
     pendingId: payload?.pendingId,
     email: payload?.email || normalizedEmail,
     preferredOtpChannel: payload?.preferredOtpChannel || otpChannel,
-    otpSent: payload?.otpSent !== false,
+    otpSent: payload?.otpSent === true,
+    emailSendError: payload?.emailSendError || null,
   }
 }
 

@@ -145,6 +145,9 @@ const sendViaSmtp = async ({ to, subject, html, text }) => {
     host: SMTP_HOST,
     port: SMTP_PORT,
     secure: SMTP_PORT === 465,
+    connectionTimeout: 20_000,
+    greetingTimeout: 15_000,
+    socketTimeout: 20_000,
     auth: {
       user: SMTP_USER,
       pass: SMTP_PASS,

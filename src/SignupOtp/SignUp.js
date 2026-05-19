@@ -236,8 +236,10 @@ function SignUp({ onNavigate, onEmailChange }) {
       if (result?.pendingId) {
         localStorage.setItem(PENDING_SIGNUP_ID_KEY, String(result.pendingId));
       }
-      if (otpDelivery === 'email' && result?.otpSent !== false) {
+      if (otpDelivery === 'email' && result?.otpSent) {
         localStorage.setItem(SIGNUP_OTP_SENT_KEY, normalizedEmail);
+      } else {
+        localStorage.removeItem(SIGNUP_OTP_SENT_KEY);
       }
       try {
         sessionStorage.setItem(
@@ -253,6 +255,16 @@ function SignUp({ onNavigate, onEmailChange }) {
       }
 
       onNavigate('otp');
+      if (otpDelivery === 'email' && result?.otpSent === false && result?.emailSendError) {
+        try {
+          sessionStorage.setItem(
+            'batasmo_signup_email_warning',
+            String(result.emailSendError),
+          );
+        } catch {
+          /* ignore */
+        }
+      }
     } catch (error) {
       setErrors({ form: getErrorMessage(error, 'Failed to create account.') });
     } finally {

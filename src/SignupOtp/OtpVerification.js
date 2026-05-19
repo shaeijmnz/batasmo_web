@@ -81,6 +81,15 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
     localStorage.setItem('batasmo_pending_otp_email', routeEmail);
     emailAutoTriedRef.current = false;
     smsAutoTriedRef.current = false;
+    try {
+      const warn = sessionStorage.getItem('batasmo_signup_email_warning');
+      if (warn) {
+        setErrorText(warn);
+        sessionStorage.removeItem('batasmo_signup_email_warning');
+      }
+    } catch {
+      /* ignore */
+    }
   }, [routeEmail]);
 
   const maskedEmail = pendingEmail
