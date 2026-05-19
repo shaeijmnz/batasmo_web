@@ -860,9 +860,6 @@
 .al-page .al-msg p,
 .al-page .al-item__meta p,
 .al-page .al-item__meta span,
-.ap-page .ap-profile-card__role,
-.ap-page .ap-detail__label,
-.ap-page .ap-detail__value,
 .ma-page .ma-day-card__name,
 .ma-page .ma-slot__to {
   color: #d2e2f5 !important;
@@ -881,10 +878,6 @@
   color: #f4f9ff !important;
 }
 
-.ap-page .ap-details-card h2,
-.ap-page .ap-profile-card__info h1,
-.ap-page .ap-stat__value,
-.ap-page .ap-stat__label,
 .cr-page .cr-card__concern-label,
 .ua-page .ua-section__title,
 .ua-page .ua-summary__label,
@@ -1712,9 +1705,6 @@
   color: #1b2432 !important;
 }
 
-.ap-page .ap-detail__label,
-.ap-page .ap-bio,
-.ap-page .ap-stat__label,
 .att-page .att-queue-item__date-block {
   background: linear-gradient(180deg, #fffaf3 0%, #f0e4d3 100%) !important;
   border-color: #d4c4ad !important;
@@ -1939,4 +1929,36 @@
 .am-end-session-btn--top {
   background: linear-gradient(135deg, #152238 0%, #243652 100%) !important;
   color: #fff !important;
+}
+
+/* Attorney profile page: dark readable text + centered stat cards on cream theme */
+.ap-page .ap-details-card h2,
+.ap-page .ap-profile-card__info h1,
+.ap-page .ap-detail__value,
+.ap-page .ap-stat__value {
+  color: #1b2432 !important;
+}
+
+.ap-page .ap-detail__label,
+.ap-page .ap-stat__label,
+.ap-page .ap-profile-card__role,
+.ap-page .ap-bio,
+.ap-page .ap-spec-tag {
+  color: #5f6672 !important;
+  background: transparent !important;
+}
+
+.ap-page .ap-stats {
+  display: flex !important;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  max-width: 720px;
+  margin-inline: auto;
+  width: 100%;
+}
+
+.ap-page .ap-stat {
+  flex: 1 1 240px;
+  max-width: 320px;
 }
