@@ -1553,21 +1553,7 @@ export async function fetchAttorneyHomeData(userId, options = {}) {
   }).length
 
   const consultations = appointments
-    .filter((a) => {
-      const status = String(a.status || '').toLowerCase()
-      if (
-        status === 'pending' ||
-        status === 'confirmed' ||
-        status === 'rescheduled' ||
-        status === 'started' ||
-        status === 'in_progress' ||
-        status === 'in-progress' ||
-        status === 'active'
-      ) {
-        return true
-      }
-      return isRecentlyCancelledAppointment(a)
-    })
+    .filter((a) => isAttorneyQueueAppointmentStatus(a.status) || isRecentlyCancelledAppointment(a))
     .map((a) => ({
     id: a.id,
     name: a.client_name || 'Client',
@@ -2214,7 +2200,23 @@ const CHAT_ACTIVE_APPOINTMENT_STATUSES = new Set([
   'active',
   'confirmed',
   'rescheduled',
+  'approved',
 ])
+
+/** Appointments that should appear on attorney queue / upcoming lists (incl. mobile statuses). */
+const ATTORNEY_QUEUE_APPOINTMENT_STATUSES = new Set([
+  'pending',
+  'approved',
+  'confirmed',
+  'rescheduled',
+  'started',
+  'in_progress',
+  'in-progress',
+  'active',
+])
+
+const isAttorneyQueueAppointmentStatus = (status) =>
+  ATTORNEY_QUEUE_APPOINTMENT_STATUSES.has(String(status || '').toLowerCase())
 
 const CHAT_ACCESS_BLOCKED_MESSAGE =
   'Consultation chat is unavailable until the appointment status is marked as started/active.'
@@ -2319,11 +2321,25 @@ const validateChatAttachment = (sizeBytes, mime) => {
 export const isConsultationChatActiveStatus = (status) =>
   CHAT_ACTIVE_APPOINTMENT_STATUSES.has(String(status || '').toLowerCase())
 
-export const isConsultationChatWindowOpen = ({ status, scheduledAt, slotDate, slotTime, nowValue } = {}) => {
+export const isConsultationChatWindowOpen = ({
+  status,
+  scheduledAt,
+  slotDate,
+  slotTime,
+  nowValue,
+  paymentStatus,
+} = {}) => {
   // DEV BYPASS — remove this line before going to production
   if (process.env.REACT_APP_BYPASS_CHAT_WINDOW === 'true') return true
 
-  if (!isConsultationChatActiveStatus(status)) return false
+  const normalizedStatus = String(status || '').toLowerCase()
+  const paid = String(paymentStatus || '').toLowerCase() === 'paid'
+
+  // Paid consultations may still be pending/approved until status sync — allow chat + video.
+  const paidAwaitingConfirm =
+    paid && (normalizedStatus === 'pending' || normalizedStatus === 'approved' || normalizedStatus === '')
+
+  if (!paidAwaitingConfirm && !isConsultationChatActiveStatus(status)) return false
 
   // Admin-controlled override: when "Enforce Scheduled Chat Time" is OFF,
   // any active consultation can enter the chat regardless of the start time.
@@ -2825,7 +2841,7 @@ export async function notifyAttorneyOfPaidBooking({ appointmentId }) {
       .eq('id', appointmentId)
       .maybeSingle()
     const currentStatus = String(currentAppt?.status || '').toLowerCase()
-    if (currentStatus === 'pending' || currentStatus === '') {
+    if (currentStatus === 'pending' || currentStatus === 'approved' || currentStatus === '') {
       const { error: statusError } = await supabase
         .from('appointments')
         .update({ status: 'confirmed', updated_at: nowIso })
@@ -3447,7 +3463,7 @@ export async function assertNoActiveAppointmentForClient(clientId) {
 
 const normalizeNotarialStatus = (status) => {
   const value = (status || '').toLowerCase()
-  if (value === 'approved') return 'APPROVED'
+  if (value === 'approved' || value === 'accepted') return 'APPROVED'
   if (value === 'completed') return 'COMPLETED'
   if (value === 'rejected' || value === 'cancelled') return 'REJECTED'
   return 'PENDING'
@@ -3488,7 +3504,14 @@ export async function fetchClientNotarialRequests(userId) {
       payment: paymentStatus === 'paid' ? 'PAID' : 'UNPAID',
       fee: `PHP ${Number(item.amount || 0).toFixed(2)}`,
       amount: Number(item.amount || 0),
-      message: status === 'COMPLETED' ? 'Notarization Completed' : status === 'APPROVED' ? 'Ready for Payment' : 'Waiting for Review',
+      message:
+        status === 'COMPLETED'
+          ? 'Notarization Completed'
+          : status === 'APPROVED'
+            ? 'In Process'
+            : paymentStatus === 'paid'
+              ? 'Paid — waiting for admin review'
+              : 'Waiting for Review',
       detail: item.notes || 'Request submitted for review.',
       assignedTo: item.attorney?.full_name || null,
       attorneyId: item.attorney_id || null,
@@ -3512,12 +3535,8 @@ export async function payForNotarialRequest({ requestId, clientId, attorneyId, a
 
   if (txError) throw txError
 
-  const { error: reqError } = await supabase
-    .from('notarial_requests')
-    .update({ status: 'approved', updated_at: now })
-    .eq('id', requestId)
-
-  if (reqError) throw reqError
+  // Keep request_status as pending until admin moves it to accepted/completed.
+  // Payment visibility comes from the transactions row above.
 
   try {
     const { data: row } = await supabase
@@ -3730,21 +3749,7 @@ export async function fetchAttorneyConsultationRequests(userId, options = {}) {
   if (paidTransactionsRes.error) throw paidTransactionsRes.error
 
   const requests = appointments
-    .filter((item) => {
-      const status = String(item.status || '').toLowerCase()
-      if (
-        status === 'pending' ||
-        status === 'confirmed' ||
-        status === 'rescheduled' ||
-        status === 'started' ||
-        status === 'in_progress' ||
-        status === 'in-progress' ||
-        status === 'active'
-      ) {
-        return true
-      }
-      return isRecentlyCancelledAppointment(item)
-    })
+    .filter((item) => isAttorneyQueueAppointmentStatus(item.status) || isRecentlyCancelledAppointment(item))
     .sort((a, b) => {
       const aTime = a.parsed_scheduled_at?.getTime() || 0
       const bTime = b.parsed_scheduled_at?.getTime() || 0
@@ -3763,7 +3768,7 @@ export async function fetchAttorneyConsultationRequests(userId, options = {}) {
       area: item.title || 'Consultation',
       date: item.date_label,
       time: item.time_label,
-      payment: Number(item.amount || 0) > 0 ? 'Paid' : 'Unpaid',
+      payment: item.consultationPaid ? 'Paid' : 'Unpaid',
       status: 'Approved',
       concern: item.notes || 'No additional notes provided.',
       attachmentUrl: item.attachment_url || '',
@@ -4485,7 +4490,7 @@ export async function createAppointmentBooking({
     }
   }
 
-  invalidateAttorneyAppointmentsCache()
+  invalidateAttorneyAppointmentsCache(normalizedPayload.attorney_id)
 
   return { success: true, appointmentId, payload: normalizedPayload }
 }
@@ -4561,7 +4566,15 @@ async function getOrCreateConsultationRoom(appointmentId) {
   const status = String(appointment?.status || '').toLowerCase()
 
   if (!devBypass && !isConsultationChatActiveStatus(status)) {
-    throw new Error(CHAT_ACCESS_BLOCKED_MESSAGE)
+    const awaitingPaymentConfirm = status === 'pending' || status === 'approved' || status === ''
+    if (awaitingPaymentConfirm) {
+      const paidIds = await fetchPaidAppointmentIdsForIdList([appointmentId])
+      if (!paidIds.has(appointmentId)) {
+        throw new Error(CHAT_ACCESS_BLOCKED_MESSAGE)
+      }
+    } else {
+      throw new Error(CHAT_ACCESS_BLOCKED_MESSAGE)
+    }
   }
 
   if (
@@ -5577,13 +5590,7 @@ export async function fetchAttorneyUpcomingAppointments(userId, options = {}) {
   const appointments = await fetchAttorneyAppointments(userId, options)
 
   return appointments
-    .filter((item) => {
-      const status = String(item.status || '').toLowerCase()
-      if (status === 'pending' || status === 'confirmed' || status === 'rescheduled') {
-        return true
-      }
-      return isRecentlyCancelledAppointment(item)
-    })
+    .filter((item) => isAttorneyQueueAppointmentStatus(item.status) || isRecentlyCancelledAppointment(item))
     .sort((a, b) => {
       const aTime = a.parsed_scheduled_at?.getTime() || 0
       const bTime = b.parsed_scheduled_at?.getTime() || 0
@@ -5602,7 +5609,7 @@ export async function fetchAttorneyUpcomingAppointments(userId, options = {}) {
       return {
         id: item.id,
         name: item.client_name || 'Client',
-        initials: (item.client_name || 'CL')
+        initials: (item.client_name || 'Client')
           .split(' ')
           .map((part) => part[0])
           .slice(0, 2)
@@ -5615,6 +5622,7 @@ export async function fetchAttorneyUpcomingAppointments(userId, options = {}) {
         slotDate: item.slot_date || null,
         slotTime: item.slot_time || null,
         status: item.status,
+        paymentStatus: item.consultationPaid ? 'paid' : 'unpaid',
         color: '#6366f1',
         concern: item.notes || '',
         attachmentUrl: item.attachment_url || '',

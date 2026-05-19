@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react';
 import './MyNotarialRequests.css';
 import './ClientTheme.css';
-import { cancelNotarialRequest, fetchClientNotarialRequests, payForNotarialRequest, replaceClientNotarialRequestDocument } from '../lib/userApi';
+import {
+  cancelNotarialRequest,
+  fetchClientNotarialRequests,
+  payForNotarialRequest,
+  replaceClientNotarialRequestDocument,
+  subscribeToClientNotarialRequests,
+} from '../lib/userApi';
+import { attachLiveDataRefresh } from '../lib/liveDataRefresh';
 import { isValidPhoneNumber, VALID_PHONE_MESSAGE } from '../lib/validators';
 
 const ScalesIcon = ({ size = 24, color = '#f5a623' }) => (
@@ -133,8 +140,16 @@ function MyNotarialRequests({ onNavigate, profile }) {
 
     loadRequests();
 
+    const detachLiveRefresh = attachLiveDataRefresh({
+      enabled: Boolean(profile?.id),
+      reload: loadRequests,
+      subscribe: (onRealtime) => subscribeToClientNotarialRequests(profile.id, onRealtime),
+      pollMs: 8000,
+    });
+
     return () => {
       isMounted = false;
+      detachLiveRefresh();
     };
   }, [profile?.id]);
 

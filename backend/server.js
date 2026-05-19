@@ -1663,6 +1663,50 @@ const supabaseInsertNotification = async ({ userId, title, body, type = 'general
   }
 }
 
+const notifyAttorneyConsultationPaidFromBackend = async ({ appointmentId }) => {
+  if (!appointmentId) return
+  try {
+    const appointment = await supabaseSelectSingle({
+      table: 'appointments',
+      query: new URLSearchParams({
+        id: `eq.${appointmentId}`,
+        select: 'id,title,attorney_id,client_id,scheduled_at',
+      }).toString(),
+    })
+    if (!appointment?.attorney_id) return
+
+    let clientName = 'Client'
+    if (appointment.client_id) {
+      const client = await supabaseSelectSingle({
+        table: 'profiles',
+        query: new URLSearchParams({
+          id: `eq.${appointment.client_id}`,
+          select: 'full_name',
+        }).toString(),
+      })
+      clientName = client?.full_name || clientName
+    }
+
+    const whenLabel = appointment.scheduled_at
+      ? new Date(appointment.scheduled_at).toLocaleString('en-PH', {
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+        })
+      : 'scheduled time TBD'
+
+    await supabaseInsertNotification({
+      userId: appointment.attorney_id,
+      title: 'Consultation payment received',
+      body: `${clientName} paid for ${appointment.title || 'a consultation'} on ${whenLabel}.`,
+      type: 'consultation',
+    })
+  } catch (err) {
+    console.warn('[payments] attorney paid notification failed', err?.message || err)
+  }
+}
+
 const createPaymongoCheckoutSession = async ({
   amount,
   appointmentId,
@@ -2495,6 +2539,9 @@ app.get('/payments/appointments/status/:transactionId', async (req, res) => {
 
       if (effectiveStatus === 'paid' && tx.appointment_id) {
         await supabaseConfirmAppointment({ appointmentId: tx.appointment_id })
+        if (previousStatus !== 'paid') {
+          await notifyAttorneyConsultationPaidFromBackend({ appointmentId: tx.appointment_id })
+        }
       }
 
       if (effectiveStatus === 'paid' && previousStatus !== 'paid' && tx.client_id) {
