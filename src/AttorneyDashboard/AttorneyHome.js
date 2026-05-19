@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import './AttorneyHome.css';
 import './AttorneyTheme.css';
 import {
@@ -11,6 +11,8 @@ import {
   runAttorneyConsultationScheduleNotifications,
 } from '../lib/userApi';
 import { attachLiveDataRefresh } from '../lib/liveDataRefresh';
+import { watchConsultationPresenceAlerts } from '../lib/consultationChatPresence';
+import ConsultationWaitingPopup from '../components/ConsultationWaitingPopup';
 import AttorneyNotificationDropdown from './AttorneyNotificationDropdown';
 
 /* ── Icons ── */
@@ -92,6 +94,7 @@ function AttorneyHome({ onNavigate, profile }) {
     myAppointmentCount: 0,
   });
   const [loadError, setLoadError] = useState('');
+  const [waitingPopup, setWaitingPopup] = useState(null);
 
   useEffect(() => {
     if (!profile?.id) {
@@ -164,6 +167,37 @@ function AttorneyHome({ onNavigate, profile }) {
   ];
 
   const sortedConsultations = [...consultations].sort((a, b) => new Date(a.date) - new Date(b.date));
+  const presenceWatches = useMemo(
+    () =>
+      sortedConsultations
+        .filter((item) =>
+          isConsultationChatWindowOpen({
+            status: item.status,
+            scheduledAt: item.scheduledAt,
+            slotDate: item.slotDate,
+            slotTime: item.slotTime,
+            paymentStatus: item.paymentStatus || 'unpaid',
+          }),
+        )
+        .map((item) => ({
+          appointmentId: item.id,
+          otherPartyName: item.name || 'Client',
+        })),
+    [sortedConsultations],
+  );
+  const presenceWatchKey = presenceWatches.map((item) => item.appointmentId).join(',');
+
+  useEffect(() => {
+    if (!profile?.id || !presenceWatches.length) {
+      return undefined;
+    }
+    return watchConsultationPresenceAlerts({
+      watches: presenceWatches,
+      role: 'attorney',
+      onWaitingPopup: (payload) => setWaitingPopup(payload),
+    });
+  }, [profile?.id, presenceWatchKey, presenceWatches]);
+
   const upcomingCount = sortedConsultations.length;
   const cutoffTime = markAllReadCutoffIso ? new Date(markAllReadCutoffIso).getTime() : 0;
   const displayNotifications = notifications.map((n) => {
@@ -431,6 +465,14 @@ function AttorneyHome({ onNavigate, profile }) {
           </div>
         </div>
       </main>
+
+      {waitingPopup ? (
+        <ConsultationWaitingPopup
+          title={waitingPopup.title}
+          body={waitingPopup.body}
+          onClose={() => setWaitingPopup(null)}
+        />
+      ) : null}
     </div>
   );
 }

@@ -289,7 +289,6 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
     });
 
     return () => {
-      setWaitingPopup(null);
       detachPresence();
     };
   }, [activeAppointmentId, profile?.id, profile?.full_name, profile?.email, isClosed, activeThread?.name]);

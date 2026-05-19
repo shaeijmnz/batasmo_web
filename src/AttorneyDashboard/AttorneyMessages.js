@@ -443,10 +443,9 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
     });
 
     return () => {
-      setWaitingPopup(null);
       detachPresence();
     };
-  }, [activeAppointmentId, appointments, profile?.id, profile?.full_name, profile?.name, profile?.email, isClosed]);
+  }, [activeAppointmentId, profile?.id, profile?.full_name, profile?.name, profile?.email, isClosed]);
 
   useEffect(() => {
     if (!activeAppointmentId) return undefined;
