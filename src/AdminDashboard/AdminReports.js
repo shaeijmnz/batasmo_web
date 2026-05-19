@@ -13,7 +13,6 @@ import {
   ImagePlus,
   X,
   TrendingUp,
-  DollarSign,
   UserCheck,
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
@@ -38,7 +37,13 @@ const getLastSixMonths = () => {
   return result;
 };
 
-const formatCurrency = (value) => `PHP ${Number(value || 0).toLocaleString()}`;
+const formatCurrency = (value) => `₱${Number(value || 0).toLocaleString()}`;
+
+const PesoSign = ({ size = 20 }) => (
+  <span className="peso-sign-icon" style={{ fontSize: size }} aria-hidden>
+    ₱
+  </span>
+);
 
 const normalizeNotarialStatus = (status) => {
   const value = String(status || '').toLowerCase();
@@ -367,10 +372,10 @@ const Reports = ({ onNavigate }) => {
   const reportStats = useMemo(() => [
     {
       label: 'Total Revenue',
-      value: `PHP ${Math.round(reportMetrics.totalRevenue).toLocaleString()}`,
+      value: `₱${Math.round(reportMetrics.totalRevenue).toLocaleString()}`,
       change: percentChange(reportMetrics.currentRevenue, reportMetrics.previousRevenue),
       caption: 'current month vs previous',
-      icon: <DollarSign />,
+      icon: <PesoSign />,
       color: '#1e3a8a',
     },
     {

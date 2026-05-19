@@ -1263,7 +1263,7 @@ const Dashboard = ({ onNavigate }) => {
           <section className="grid-split charts-row">
             <section className="info-card chart-card">
               <div className="card-header">
-                <h4>PHP Revenue Overview</h4>
+                <h4>₱ Revenue Overview</h4>
               </div>
               <SimpleLineChart values={revenueData} labels={monthLabels} />
             </section>

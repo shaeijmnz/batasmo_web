@@ -485,6 +485,13 @@
   stroke-width: 2.2;
 }
 
+.stat-icon-wrapper .peso-sign-icon {
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+  font-family: inherit;
+}
+
 /* ============================================================
    CHART CARDS
    ============================================================ */
