@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200" viewBox="0 0 900 1200" role="img" aria-label="Atty. Jeanne Luz Castillo-Anarna placeholder">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0e2f4e"/>
+      <stop offset="100%" stop-color="#07213a"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="1200" fill="url(#bg)"/>
+  <circle cx="450" cy="430" r="180" fill="#1d4467"/>
+  <rect x="220" y="620" width="460" height="340" rx="28" fill="#1a3d5e"/>
+  <text x="450" y="1010" text-anchor="middle" fill="#f4f7fb" font-family="Georgia, serif" font-size="42">Atty. Jeanne</text>
+  <text x="450" y="1060" text-anchor="middle" fill="#e2bf65" font-family="Arial, sans-serif" font-size="26" letter-spacing="3">PHOTO PLACEHOLDER</text>
+</svg>

@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: batasmo-backend
+    runtime: node
+    rootDir: backend
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: CHATBOT_PROVIDER_MODE
+        value: auto
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: VIDEOSDK_API_KEY
+        sync: false
+      - key: VIDEOSDK_API_SECRET
+        sync: false
+      - key: PAYMONGO_SECRET_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: ALLOWED_ORIGIN
+        sync: false
+      - key: PAYMENT_SUCCESS_URL
+        sync: false
+      - key: PAYMENT_CANCEL_URL
+        sync: false

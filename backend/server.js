@@ -736,17 +736,32 @@ const verifySupabaseUserJwt = async (jwt) => {
   return payload
 }
 
-const verifyCallerIsAdmin = async (jwt) => {
+const getCallerProfileRole = async (jwt) => {
   const user = await verifySupabaseUserJwt(jwt)
   const profile = await supabaseSelectSingle({
     table: 'profiles',
     query: new URLSearchParams({ id: `eq.${user.id}` }).toString(),
   })
   const role = String(profile?.role || '').toLowerCase()
+  return { userId: user.id, role }
+}
+
+/** Admin or Secretary — operational desk tasks (clients, scheduling, support). */
+const verifyCallerIsStaff = async (jwt) => {
+  const { userId, role } = await getCallerProfileRole(jwt)
+  if (role !== 'admin' && role !== 'secretary') {
+    throw new Error('Only Admin or Secretary users can perform this action.')
+  }
+  return userId
+}
+
+/** Admin only — sensitive configuration and attorney account creation. */
+const verifyCallerIsAdmin = async (jwt) => {
+  const { userId, role } = await getCallerProfileRole(jwt)
   if (role !== 'admin') {
     throw new Error('Only Admin users can perform this action.')
   }
-  return user.id
+  return userId
 }
 
 const WALK_IN_PASSWORD_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
@@ -1938,7 +1953,7 @@ app.get('/admin/clients/:clientId/active-appointments', async (req, res) => {
     const authHeader = String(req.headers.authorization || '').trim()
     const jwt = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
     if (!jwt) return res.status(401).json({ error: 'Authorization Bearer token is required.' })
-    await verifyCallerIsAdmin(jwt)
+    await verifyCallerIsStaff(jwt)
 
     const clientId = String(req.params?.clientId || '').trim()
     if (!clientId) return res.status(400).json({ error: 'clientId is required.' })
@@ -2005,7 +2020,7 @@ app.post('/admin/clients/walk-in', async (req, res) => {
       return res.status(401).json({ error: 'Authorization Bearer token is required.' })
     }
 
-    await verifyCallerIsAdmin(jwt)
+    await verifyCallerIsStaff(jwt)
 
     const email = String(req.body?.email || '').trim()
     const password = String(req.body?.password || '')
@@ -2109,7 +2124,7 @@ app.post('/admin/appointments/reschedule', async (req, res) => {
       return res.status(401).json({ error: 'Authorization Bearer token is required.' })
     }
 
-    await verifyCallerIsAdmin(jwt)
+    await verifyCallerIsStaff(jwt)
 
     const appointmentId = String(req.body?.appointmentId || '').trim()
     const newSlotId = String(req.body?.newSlotId || '').trim()

@@ -1,0 +1,46 @@
+:root {
+  /* Background Colors */
+  --ui-bg-dark: #F5F1EB;
+  --ui-bg-darker: #ECE6DE;
+  --ui-bg-midnight: #F5F1EB;
+  --ui-bg-charcoal: #ECE6DE;
+  --ui-bg-card: rgba(255, 255, 255, 0.96);
+  --ui-bg-card-hover: rgba(255, 255, 255, 1);
+
+  /* Accent Colors */
+  --ui-accent: #152238;
+  --ui-accent-hover: #1e2d45;
+  --ui-accent-light: #2a3a55;
+  --ui-accent-dark: #0B0F19;
+  --ui-accent-glow: rgba(21, 34, 56, 0.12);
+  --ui-accent-glow-hover: rgba(21, 34, 56, 0.18);
+
+  /* Text Colors */
+  --ui-text-primary: #0B0F19;
+  --ui-text-secondary: #4B5563;
+  --ui-text-muted: #6B7280;
+
+  /* Border Colors */
+  --ui-border: #D1D5DB;
+  --ui-glass-border: rgba(21, 34, 56, 0.15);
+
+  /* Glassmorphism */
+  --ui-glass-bg: rgba(255, 255, 255, 0.85);
+  --ui-glass-blur: 8px;
+
+  /* Gradients */
+  --ui-gradient-primary: linear-gradient(135deg, #152238 0%, #1e2d45 100%);
+  --ui-gradient-secondary: linear-gradient(135deg, #ECE6DE 0%, #F5F1EB 100%);
+
+  /* Shadows */
+  --ui-shadow-sm: 0 2px 4px rgba(21, 34, 56, 0.05);
+  --ui-shadow-md: 0 4px 12px rgba(21, 34, 56, 0.08);
+  --ui-shadow-lg: 0 8px 24px rgba(21, 34, 56, 0.12);
+  --ui-shadow-xl: 0 16px 48px rgba(21, 34, 56, 0.15);
+
+  /* Animations */
+  --ui-transition-fast: 0.15s ease;
+  --ui-transition-normal: 0.25s ease;
+  --ui-transition-slow: 0.4s ease;
+  --ui-transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}

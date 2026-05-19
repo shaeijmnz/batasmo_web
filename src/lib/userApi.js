@@ -214,13 +214,13 @@ export const resetUserApiRuntimeState = () => {
 /** Appointment statuses treated as an active live consultation (chat alerts suppressed for client). */
 const CONSULTATION_IN_CALL_STATUSES = new Set(['started', 'in_progress', 'in-progress', 'active'])
 
-async function fetchAdminUserIds() {
-  const { data, error } = await supabase.from('profiles').select('id').eq('role', 'Admin')
+async function fetchStaffUserIds() {
+  const { data, error } = await supabase.from('profiles').select('id').in('role', ['Admin', 'Secretary'])
   if (error) {
-    console.warn('[notify] fetchAdminUserIds failed', error)
+    console.warn('[notify] fetchStaffUserIds failed', error)
     return []
   }
-  return (data || []).map((row) => row?.id).filter(Boolean)
+  return (data || []).map((row) => row.id).filter(Boolean)
 }
 
 /* ============================================================================
@@ -311,8 +311,8 @@ export async function sendClientSupportMessage({ clientId, message }) {
 
   try {
     const clientName = await resolveClientDisplayName(clientId)
-    const adminIds = await fetchAdminUserIds()
-    await insertNotificationsForUserIds(adminIds, {
+    const staffIds = await fetchStaffUserIds()
+    await insertNotificationsForUserIds(staffIds, {
       title: 'New support message',
       body: `${clientName}: ${body.slice(0, 140)} [support:${clientId}]`,
       type: 'admin_general',
@@ -664,7 +664,7 @@ export async function fetchClientActiveAppointmentsForAdmin(clientId) {
 export async function adminCreateWalkInClient({ email, password, fullName }) {
   const session = (await supabase.auth.getSession())?.data?.session
   if (!session?.access_token) {
-    throw new Error('You must be signed in as admin to add a client.')
+    throw new Error('You must be signed in as admin or secretary to add a client.')
   }
   const baseUrl = resolvePaymentApiBaseUrl()
   const body = {
@@ -942,8 +942,8 @@ async function insertNotificationsForUserIds(userIds, { title, body, type = 'gen
 /** One notification per admin user, skipped if that admin already has this marker in any notification body. */
 async function notifyAdminsWithBodyMarker({ title, body, type = 'admin_general', marker }) {
   if (!marker) return
-  const adminIds = await fetchAdminUserIds()
-  for (const uid of adminIds) {
+  const staffIds = await fetchStaffUserIds()
+  for (const uid of staffIds) {
     try {
       const { data: existing } = await supabase
         .from('notifications')
@@ -1182,6 +1182,7 @@ const resolveAttorneyImage = (name, preferredImageUrl) => {
 export function normalizeRole(roleText) {
   const role = (roleText || '').toLowerCase()
   if (role === 'admin') return 'Admin'
+  if (role === 'secretary') return 'Secretary'
   if (role === 'attorney') return 'Attorney'
   return 'Client'
 }
@@ -1189,6 +1190,7 @@ export function normalizeRole(roleText) {
 export function pageFromRole(roleText) {
   const role = normalizeRole(roleText)
   if (role === 'Admin') return 'admin-home'
+  if (role === 'Secretary') return 'secretary-home'
   if (role === 'Attorney') return 'attorney-home'
   return 'home-logged'
 }
