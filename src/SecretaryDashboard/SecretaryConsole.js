@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import StaffConsultationsPanel from '../components/StaffConsultationsPanel';
 import AdminRescheduleRequests from '../AdminDashboard/AdminRescheduleRequests';
 import AdminSupportDrawer from '../AdminDashboard/AdminSupportDrawer';
 import '../AdminDashboard/AdminSupportDrawer.css';
@@ -9,7 +10,6 @@ import {
   loadSecretaryNotarialRequests,
   loadSecretaryOverview,
   updateNotarialStatus,
-  updateSecretaryConsultationStatus,
 } from '../lib/secretaryData';
 import {
   adminCreateWalkInClient,
@@ -25,7 +25,7 @@ import ladyJusticeImage from '../AdminDashboard/lady-justice.jpg';
 
 const NAV_PAGES = [
   'Dashboard',
-  'Consultation Management',
+  'Consultations',
   'Notarial Requests',
   'Registered Clients',
   'Messages',
@@ -46,11 +46,6 @@ const CalendarIcon = () => (
 );
 
 const PesoIcon = () => <span className="sec-peso-icon">PHP</span>;
-
-const isConsultationPending = (status) => {
-  const value = String(status || '').toLowerCase();
-  return value === 'pending' || value === 'requested' || value === 'awaiting';
-};
 
 const isNotarialAwaitingProcess = (status) => {
   const value = String(status || '').toLowerCase();
@@ -169,19 +164,6 @@ function SecretaryConsole({ profile, onNavigate, onSignOut, initialPage = 'Dashb
     else onNavigate?.('login');
   };
 
-  const handleApproveConsultation = async (item) => {
-    if (!item?.id || actionBusyId) return;
-    setActionBusyId(item.id);
-    try {
-      await updateSecretaryConsultationStatus(item.id, 'confirmed');
-      await refreshAll();
-    } catch (error) {
-      window.alert(error?.message || 'Could not update consultation.');
-    } finally {
-      setActionBusyId('');
-    }
-  };
-
   const handleNotarialStatus = async (item, nextStatus) => {
     if (!item?.id || actionBusyId) return;
     setActionBusyId(item.id);
@@ -224,6 +206,13 @@ function SecretaryConsole({ profile, onNavigate, onSignOut, initialPage = 'Dashb
     setSummaryOpen(false);
     setAddClientOpen(false);
     setActivePage('Registered Clients');
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  };
+
+  const openConsultationsPage = () => {
+    setSummaryOpen(false);
+    setAddClientOpen(false);
+    setActivePage('Consultations');
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   };
 
@@ -378,44 +367,13 @@ function SecretaryConsole({ profile, onNavigate, onSignOut, initialPage = 'Dashb
       );
     }
 
-    if (activePage === 'Consultation Management') {
+    if (activePage === 'Consultations') {
       return renderPageShell(
-        'Consultation Management',
-        'Track booking status, assign follow-ups, and coordinate attorney schedules.',
-        <div className="sec-page-grid sec-page-grid--two">
-          <div className="sec-subcard">
-            <h3>Consultations</h3>
-            <div className="sec-table-list">
-              {consultations.length > 0 ? (
-                consultations.map((item) => (
-                  <div key={item.id} className="sec-table-row">
-                    <div>
-                      <strong>{item.clientName}</strong>
-                      <p>{item.area}</p>
-                      <p className="sec-muted">Attorney: {item.attorneyName}</p>
-                    </div>
-                    <div className="sec-table-row__meta">
-                      <span>{item.date} · {item.time}</span>
-                      <span className={statusClass(item.status)}>{item.status}</span>
-                      {isConsultationPending(item.status) ? (
-                        <button
-                          type="button"
-                          className="sec-view-btn"
-                          disabled={actionBusyId === item.id}
-                          onClick={() => handleApproveConsultation(item)}
-                        >
-                          Approve
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="sec-muted">No consultations in queue.</p>
-              )}
-            </div>
-          </div>
-          <div className="sec-subcard">
+        'Consultations',
+        'View and manage all consultation sessions',
+        <div className="sec-consultations-page">
+          <StaffConsultationsPanel />
+          <div className="sec-subcard sec-reschedule-block">
             <h3>Reschedule Requests</h3>
             <AdminRescheduleRequests adminUserId={profile?.id} />
           </div>
@@ -600,11 +558,17 @@ function SecretaryConsole({ profile, onNavigate, onSignOut, initialPage = 'Dashb
             <h2 className="sec-stat-value">{stats.clientCount}</h2>
             <span className="sec-stat-hint">View all clients</span>
           </button>
-          <div className="sec-stat-card">
+          <button
+            type="button"
+            className="sec-stat-card sec-stat-card--clickable"
+            onClick={openConsultationsPage}
+            aria-label="View all consultations"
+          >
             <div className="sec-stat-icon"><CalendarIcon /></div>
             <p className="sec-stat-label">CONSULTATIONS IN QUEUE</p>
             <h2 className="sec-stat-value">{consultations.length}</h2>
-          </div>
+            <span className="sec-stat-hint">View all consultations</span>
+          </button>
           <div className="sec-stat-card">
             <div className="sec-stat-icon"><PesoIcon /></div>
             <p className="sec-stat-label">NOTARIAL QUEUE</p>
@@ -621,7 +585,7 @@ function SecretaryConsole({ profile, onNavigate, onSignOut, initialPage = 'Dashb
             <button
               type="button"
               className="sec-view-all-btn"
-              onClick={() => handleNavigation('Consultation Management')}
+              onClick={openConsultationsPage}
             >
               View All
             </button>

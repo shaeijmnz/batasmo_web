@@ -72,7 +72,7 @@ const SecretaryConsole = lazy(() => import('./SecretaryDashboard/SecretaryConsol
 
 const SECRETARY_INITIAL_PAGE = {
   'secretary-home': 'Dashboard',
-  'secretary-consultations': 'Consultation Management',
+  'secretary-consultations': 'Consultations',
   'secretary-requests': 'Notarial Requests',
   'secretary-clients': 'Registered Clients',
   'secretary-messages': 'Messages',
