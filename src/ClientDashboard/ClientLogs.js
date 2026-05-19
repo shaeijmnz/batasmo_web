@@ -4,11 +4,6 @@ import './ClientTheme.css';
 import { fetchClientConsultationLogs, fetchConsultationTranscriptForAppointment } from '../lib/userApi';
 import ConsultationSummaryView from '../components/ConsultationSummaryView';
 
-const renderStars = (rating) => {
-  const safe = Math.max(0, Math.min(5, Number(rating || 0)));
-  return '★★★★★'.slice(0, safe) + '☆☆☆☆☆'.slice(0, 5 - safe);
-};
-
 export default function ClientLogs({ profile, initialAppointmentId = '' }) {
   const [logs, setLogs] = useState([]);
   const [loadError, setLoadError] = useState('');
@@ -101,7 +96,7 @@ export default function ClientLogs({ profile, initialAppointmentId = '' }) {
     <div className="clogs-page">
       <div className="clogs-header">
         <h1>Consultation Logs</h1>
-        <p>Completed consultations, your ratings, and your attorney&apos;s session summary.</p>
+        <p>Completed consultations and your attorney&apos;s session summary.</p>
       </div>
 
       {loadError ? <p className="clogs-error">{loadError}</p> : null}
@@ -122,13 +117,6 @@ export default function ClientLogs({ profile, initialAppointmentId = '' }) {
                 <h3>{item.attorneyName}</h3>
                 <p>{item.title}</p>
                 <span>{item.dateLabel} • {item.timeLabel}</span>
-              </div>
-
-              <div className="clogs-item__rating">
-                <strong>Your Rating</strong>
-                <div className={`clogs-stars ${item.rating > 0 ? 'is-rated' : ''}`}>
-                  {item.rating > 0 ? renderStars(item.rating) : 'Not rated'}
-                </div>
               </div>
 
               <button type="button" className="clogs-transcript-btn" onClick={() => openTranscript(item)}>
