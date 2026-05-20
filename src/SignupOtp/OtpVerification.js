@@ -175,7 +175,10 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
     sendEmailOtp()
       .catch((err) => {
         setErrorText(
-          getErrorMessage(err, 'Could not send verification email. Tap Resend or check spam.'),
+          getErrorMessage(
+            err,
+            'Could not send verification email. Tap Resend Code below or use a new Gmail if you already tried signing up.',
+          ),
         );
       })
       .finally(() => {

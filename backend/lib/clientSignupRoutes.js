@@ -1,6 +1,7 @@
 /**
- * Client self-signup: create unconfirmed auth user + send Supabase signup OTP email.
- * Proxied through Render so the browser avoids direct auth edge cases.
+ * Client self-signup via Supabase public Auth API (anon key) so confirmation
+ * emails with 6-digit OTP are actually sent. Admin-created users do NOT
+ * trigger signup emails — that was the root cause of "no email received".
  */
 
 const isPhilippineMobile = (value) => /^09\d{9}$/.test(String(value || '').trim())
@@ -14,52 +15,101 @@ const buildClientSignupRoutes = ({
   isStrongAccountPassword,
   SUPABASE_URL,
   SUPABASE_SERVICE_ROLE_KEY,
+  SUPABASE_ANON_KEY,
 }) => {
-  const authHeaders = () => ({
+  const serviceAuthHeaders = () => ({
     apikey: SUPABASE_SERVICE_ROLE_KEY,
     Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
     'Content-Type': 'application/json',
   })
 
-  const resendSignupOtpEmail = async (email) => {
-    const response = await fetch(`${SUPABASE_URL}/auth/v1/resend`, {
+  const requireAnonKey = () => {
+    if (!SUPABASE_ANON_KEY) {
+      throw new Error(
+        'SUPABASE_ANON_KEY is not configured on Render. Add the Supabase legacy anon key (eyJ…) as SUPABASE_ANON_KEY and redeploy.',
+      )
+    }
+  }
+
+  const anonAuthHeaders = () => {
+    requireAnonKey()
+    return {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      'Content-Type': 'application/json',
+    }
+  }
+
+  const readAuthError = (payload, fallback) =>
+    String(
+      payload?.msg || payload?.message || payload?.error_description || payload?.error || fallback,
+    )
+
+  /** Sends a 6-digit email OTP using the public OTP endpoint (works for existing users). */
+  const sendEmailOtp = async (email) => {
+    const response = await fetch(`${SUPABASE_URL}/auth/v1/otp`, {
       method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ type: 'signup', email }),
+      headers: anonAuthHeaders(),
+      body: JSON.stringify({ email, create_user: false }),
     })
     const payload = await response.json().catch(() => ({}))
     if (!response.ok) {
-      const msg =
-        payload?.msg ||
-        payload?.message ||
-        payload?.error_description ||
-        payload?.error ||
-        'Failed to send verification email.'
-      throw new Error(String(msg))
+      throw new Error(readAuthError(payload, 'OTP email request failed.'))
     }
+  }
+
+  const resendSignupType = async (email, type) => {
+    const response = await fetch(`${SUPABASE_URL}/auth/v1/resend`, {
+      method: 'POST',
+      headers: anonAuthHeaders(),
+      body: JSON.stringify({ type, email }),
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      throw new Error(readAuthError(payload, `Resend (${type}) failed.`))
+    }
+  }
+
+  /** Try every supported path until Supabase accepts one. */
+  const sendSignupVerificationEmail = async (email) => {
+    const failures = []
+    const trySend = async (label, fn) => {
+      try {
+        await fn()
+        console.log(`[signup] verification email sent via ${label} → ${email}`)
+        return true
+      } catch (error) {
+        failures.push(`${label}: ${error?.message || error}`)
+        console.warn(`[signup] ${label} failed for ${email}`, error?.message || error)
+        return false
+      }
+    }
+
+    if (await trySend('otp', () => sendEmailOtp(email))) return
+    if (await trySend('resend-signup', () => resendSignupType(email, 'signup'))) return
+    if (await trySend('resend-email', () => resendSignupType(email, 'email'))) return
+
+    throw new Error(
+      failures.join(' | ') || 'Could not send verification email. Check Supabase Auth email settings.',
+    )
   }
 
   const verifySignupOtp = async ({ email, token }) => {
     const normalizedToken = String(token || '').replace(/\D/g, '')
     let lastError = 'Invalid or expired verification code.'
-    for (const type of ['signup', 'email']) {
+    for (const type of ['email', 'signup']) {
       const response = await fetch(`${SUPABASE_URL}/auth/v1/verify`, {
         method: 'POST',
-        headers: authHeaders(),
+        headers: anonAuthHeaders(),
         body: JSON.stringify({ email, token: normalizedToken, type }),
       })
       const payload = await response.json().catch(() => ({}))
       if (response.ok) {
         return payload
       }
-      lastError =
-        payload?.msg ||
-        payload?.message ||
-        payload?.error_description ||
-        payload?.error ||
-        lastError
+      lastError = readAuthError(payload, lastError)
     }
-    throw new Error(String(lastError))
+    throw new Error(lastError)
   }
 
   const findProfileIdByEmail = async (email) => {
@@ -73,7 +123,7 @@ const buildClientSignupRoutes = ({
   const getAdminUser = async (userId) => {
     const response = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
       method: 'GET',
-      headers: authHeaders(),
+      headers: serviceAuthHeaders(),
     })
     const payload = await response.json().catch(() => null)
     if (!response.ok) {
@@ -86,7 +136,7 @@ const buildClientSignupRoutes = ({
     const existing = await getAdminUser(userId)
     const response = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
       method: 'PUT',
-      headers: authHeaders(),
+      headers: serviceAuthHeaders(),
       body: JSON.stringify({
         email_confirm: true,
         user_metadata: {
@@ -97,12 +147,7 @@ const buildClientSignupRoutes = ({
     })
     const payload = await response.json().catch(() => ({}))
     if (!response.ok) {
-      throw new Error(
-        payload?.msg ||
-          payload?.message ||
-          payload?.error_description ||
-          'Could not finalize account verification.',
-      )
+      throw new Error(readAuthError(payload, 'Could not finalize account verification.'))
     }
   }
 
@@ -215,15 +260,27 @@ const buildClientSignupRoutes = ({
     }
   }
 
-  const createUnconfirmedClientUser = async (parsed) => {
-    const authResponse = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
+  const isDuplicateSignupError = (msg) => {
+    const lower = String(msg || '').toLowerCase()
+    return (
+      lower.includes('already') ||
+      lower.includes('registered') ||
+      lower.includes('duplicate') ||
+      lower.includes('user already')
+    )
+  }
+
+  /**
+   * Public /auth/v1/signup (anon) — Supabase sends the confirm-signup email with {{ .Token }}.
+   */
+  const registerClientViaPublicSignup = async (parsed) => {
+    const authResponse = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
       method: 'POST',
-      headers: authHeaders(),
+      headers: anonAuthHeaders(),
       body: JSON.stringify({
         email: parsed.email,
         password: parsed.password,
-        email_confirm: false,
-        user_metadata: {
+        data: {
           full_name: parsed.fullName,
           role: 'Client',
           signup_otp_completed: false,
@@ -232,20 +289,11 @@ const buildClientSignupRoutes = ({
     })
 
     const authPayload = await authResponse.json().catch(() => null)
+
     if (!authResponse.ok) {
-      const msg = String(
-        authPayload?.msg ||
-          authPayload?.message ||
-          authPayload?.error_description ||
-          authPayload?.error ||
-          `Failed to create account (${authResponse.status}).`,
-      )
-      const lower = msg.toLowerCase()
-      if (
-        lower.includes('already') ||
-        lower.includes('registered') ||
-        lower.includes('duplicate')
-      ) {
+      const msg = readAuthError(authPayload, `Failed to create account (${authResponse.status}).`)
+
+      if (isDuplicateSignupError(msg)) {
         const existingId = await findProfileIdByEmail(parsed.email)
         if (existingId) {
           const existingUser = await getAdminUser(existingId)
@@ -267,11 +315,12 @@ const buildClientSignupRoutes = ({
             guardianContact: parsed.guardianContact,
             preferredOtpChannel: parsed.preferredOtpChannel,
           })
-          await resendSignupOtpEmail(parsed.email)
-          return existingId
+          await sendSignupVerificationEmail(parsed.email)
+          return { userId: existingId, emailSent: true }
         }
         throw new Error('This Gmail is already registered. Please log in instead.')
       }
+
       throw new Error(msg)
     }
 
@@ -293,19 +342,26 @@ const buildClientSignupRoutes = ({
       preferredOtpChannel: parsed.preferredOtpChannel,
     })
 
-    return userId
+    // Supabase sends the signup confirmation email automatically on public signup.
+    return { userId, emailSent: Boolean(authPayload) }
   }
 
   app.post('/auth/signup-start', async (req, res) => {
     try {
       requireSupabaseServiceConfig()
+      requireAnonKey()
       const parsed = parseSignupBody(req.body || {})
-      const userId = await createUnconfirmedClientUser(parsed)
-      await resendSignupOtpEmail(parsed.email)
+      const { userId, emailSent } = await registerClientViaPublicSignup(parsed)
+
+      if (!emailSent) {
+        await sendSignupVerificationEmail(parsed.email)
+      }
+
       return res.status(201).json({
         pendingId: userId,
         email: parsed.email,
         preferredOtpChannel: parsed.preferredOtpChannel,
+        emailSent: true,
       })
     } catch (error) {
       const msg = error?.message || 'Unable to start signup.'
@@ -318,11 +374,12 @@ const buildClientSignupRoutes = ({
   app.post('/auth/signup-resend-otp', async (req, res) => {
     try {
       requireSupabaseServiceConfig()
+      requireAnonKey()
       const email = String(req.body?.email || '').trim().toLowerCase()
       if (!isGmailAddress(email)) {
         return res.status(400).json({ error: 'A valid Gmail address is required.' })
       }
-      await resendSignupOtpEmail(email)
+      await sendSignupVerificationEmail(email)
       return res.status(200).json({ success: true })
     } catch (error) {
       return res.status(400).json({ error: error?.message || 'Failed to resend verification email.' })
@@ -332,6 +389,7 @@ const buildClientSignupRoutes = ({
   app.post('/auth/signup-complete', async (req, res) => {
     try {
       requireSupabaseServiceConfig()
+      requireAnonKey()
       const email = String(req.body?.email || '').trim().toLowerCase()
       const otp = String(req.body?.otp || '').replace(/\D/g, '')
       const pendingId = String(req.body?.pendingId || '').trim()

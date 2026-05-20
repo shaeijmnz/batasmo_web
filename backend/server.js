@@ -29,6 +29,11 @@ const CORS_ALLOWED_ORIGINS = [
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').trim()
 const SUPABASE_SERVICE_ROLE_KEY = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
+const SUPABASE_ANON_KEY = String(
+  process.env.SUPABASE_ANON_KEY ||
+    process.env.REACT_APP_SUPABASE_ANON_KEY ||
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNqbW15cWVxaWlnbWNsY2djYWRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI4MDY2MDEsImV4cCI6MjA4ODM4MjYwMX0.pBslZg2JQqoqRKNhaOE-uWHpWxSf0jULvV0awyC0NUI',
+).trim()
 const PAYMONGO_SECRET_KEY = String(process.env.PAYMONGO_SECRET_KEY || '').trim()
 const AZURE_FACE_KEY = String(process.env.AZURE_FACE_KEY || '').trim()
 const AZURE_FACE_ENDPOINT = String(process.env.AZURE_FACE_ENDPOINT || '').trim().replace(/\/+$/, '')
@@ -2713,6 +2718,7 @@ buildClientSignupRoutes({
   isStrongAccountPassword,
   SUPABASE_URL,
   SUPABASE_SERVICE_ROLE_KEY,
+  SUPABASE_ANON_KEY,
 })
 
 app.get('/health', (req, res) => {

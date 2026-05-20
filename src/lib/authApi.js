@@ -332,9 +332,14 @@ export async function sendSignupVerificationEmail({ email, pendingId }) {
       if (response.ok) {
         return payload
       }
-      console.warn('[signup] backend resend failed, falling back to Supabase email OTP', payload?.error || '')
+      throw new Error(
+        payload?.error || payload?.message || `Failed to send verification email (${response.status}).`,
+      )
     } catch (backendError) {
-      console.warn('[signup] backend resend error, falling back to Supabase', backendError?.message || backendError)
+      const msg = String(backendError?.message || '')
+      if (msg && !msg.includes('Load failed') && !msg.includes('Failed to fetch')) {
+        throw backendError
+      }
     }
   }
 
@@ -342,14 +347,18 @@ export async function sendSignupVerificationEmail({ email, pendingId }) {
     throw new Error('Email is required.')
   }
 
-  const { error } = await supabase.auth.resend({
-    type: 'signup',
-    email: normalizedEmail,
-  })
-  if (error) {
-    throw new Error(error.message || 'Failed to send verification email.')
+  try {
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: normalizedEmail,
+    })
+    if (error) {
+      throw new Error(error.message || 'Failed to send verification email.')
+    }
+    return { success: true }
+  } catch (networkError) {
+    throw new Error(normalizeAuthNetworkError(networkError))
   }
-  return { success: true }
 }
 
 /**
