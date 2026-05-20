@@ -1,6 +1,10 @@
 import { supabase } from './supabaseClient'
 import { parseNotificationImageUrl } from './announcementImages'
-import { isSignupVerificationComplete, signOutIfSignupIncomplete } from './signupVerification'
+import {
+  isSignupVerificationComplete,
+  isSignupOtpFinishing,
+  signOutIfSignupIncomplete,
+} from './signupVerification'
 import {
   getConsultationBranchesForAttorney,
   parseConsultationBranchFromTitle,
@@ -1253,7 +1257,7 @@ export async function getCurrentSessionProfile() {
     return sessionProfileCache
   }
 
-  if (!isSignupVerificationComplete(session.user)) {
+  if (!isSignupVerificationComplete(session.user) && !isSignupOtpFinishing()) {
     await signOutIfSignupIncomplete(session.user)
     sessionProfileCache = { session: null, profile: null }
     lastSessionProfileTime = now

@@ -17,7 +17,11 @@ import {
 } from '../lib/authApi';
 import { supabase } from '../lib/supabaseClient';
 import { getCurrentSessionProfile, pageFromRole } from '../lib/userApi';
-import { isSignupVerificationComplete } from '../lib/signupVerification';
+import {
+  beginSignupOtpFinishing,
+  endSignupOtpFinishing,
+  isSignupVerificationComplete,
+} from '../lib/signupVerification';
 import { isValidPhoneNumber, maskPhilippinePhone, sanitizePhoneInput, VALID_PHONE_MESSAGE } from '../lib/validators';
 
 const ScalesIcon = ({ size = 24, color = '#f5a623' }) => (
@@ -289,6 +293,7 @@ function OtpVerification({ onNavigate, onAuthSuccess, email = '', role = 'Client
       return;
     }
 
+    beginSignupOtpFinishing();
     try {
       setErrorText('');
       setIsVerifying(true);
@@ -308,13 +313,16 @@ function OtpVerification({ onNavigate, onAuthSuccess, email = '', role = 'Client
         return;
       }
 
+      let clientProfile = null;
+
       if (delivery === 'email') {
-        await verifySignUpOtp({
+        const verified = await verifySignUpOtp({
           email: pendingEmail,
           token,
           password: resume.password,
           pendingId: pendingSignupId || undefined,
-        })
+        });
+        clientProfile = verified?.profile || null;
       } else if (Boolean(getBackendApiBase() && pendingSignupId)) {
         await completePendingSignup({
           email: pendingEmail,
@@ -325,8 +333,10 @@ function OtpVerification({ onNavigate, onAuthSuccess, email = '', role = 'Client
         await signInWithEmail({
           email: resume.email || pendingEmail,
           password: resume.password,
-        })
-        await supabase.auth.refreshSession()
+        });
+        await supabase.auth.refreshSession();
+        const loaded = await getCurrentSessionProfile();
+        clientProfile = loaded?.profile || null;
       } else {
         const uid = localStorage.getItem(PENDING_SIGNUP_USER_ID_KEY) || ''
         await verifySignupSmsOtp({ userId: uid || undefined, email: pendingEmail, token })
@@ -337,8 +347,10 @@ function OtpVerification({ onNavigate, onAuthSuccess, email = '', role = 'Client
           await signInWithEmail({
             email: resume.email || pendingEmail,
             password: resume.password,
-          })
+          });
         }
+        const loaded = await getCurrentSessionProfile();
+        clientProfile = loaded?.profile || null;
       }
 
       localStorage.removeItem('batasmo_pending_otp_email');
@@ -349,20 +361,25 @@ function OtpVerification({ onNavigate, onAuthSuccess, email = '', role = 'Client
       localStorage.removeItem(PENDING_SMS_PHONE_KEY);
       clearOtpResumeSecrets();
 
-      const { profile } = await getCurrentSessionProfile();
-      if (!profile?.id) {
+      if (!clientProfile?.id) {
+        const loaded = await getCurrentSessionProfile();
+        clientProfile = loaded?.profile || null;
+      }
+
+      if (!clientProfile?.id) {
         throw new Error('Account verified but profile did not load. Please try logging in once.');
       }
 
       if (typeof onAuthSuccess === 'function') {
-        onAuthSuccess(profile);
+        onAuthSuccess(clientProfile);
         return;
       }
 
-      onNavigate(pageFromRole(profile?.role || pendingRole));
+      onNavigate(pageFromRole(clientProfile?.role || pendingRole));
     } catch (error) {
       setErrorText(getErrorMessage(error, 'Invalid or expired OTP code.'));
     } finally {
+      endSignupOtpFinishing();
       setIsVerifying(false);
     }
   };

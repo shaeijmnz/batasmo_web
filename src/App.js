@@ -554,6 +554,7 @@ function App() {
   }, [page, currentProfile?.id, currentProfile?.role])
 
   const handleAuthSuccess = useCallback((profile, options = {}) => {
+    resetUserApiRuntimeState();
     clearTransientAuthState({ includeRecovery: true });
     setSignupContext({ email: '', role: 'Client', otpChannel: 'email' });
     setCurrentProfile(profile);
