@@ -18,7 +18,19 @@ export function isSignupVerificationComplete(user) {
   if (meta.signup_otp_completed === true) return true
   if (meta.signup_otp_completed === false) return false
 
-  // Legacy client accounts created before signup_otp_completed existed.
+  const pendingEmail = String(
+    typeof localStorage !== 'undefined' ? localStorage.getItem('batasmo_pending_otp_email') : '',
+  )
+    .trim()
+    .toLowerCase()
+  const userEmail = String(user.email || '')
+    .trim()
+    .toLowerCase()
+  if (pendingEmail && userEmail && pendingEmail === userEmail) {
+    return false
+  }
+
+  // Legacy accounts created before signup_otp_completed existed.
   if (isClientAccount(user)) {
     return Boolean(user.email_confirmed_at)
   }

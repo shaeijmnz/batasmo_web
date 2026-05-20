@@ -295,6 +295,20 @@ function App() {
           if (!sessionUserId) {
             clearTransientAuthState({ includeRecovery: true });
             setCurrentProfile(null);
+          } else if (!isSignupVerificationComplete(session.user)) {
+            const pendingEmail =
+              localStorage.getItem(PENDING_OTP_EMAIL_KEY) || session.user.email || '';
+            if (pendingEmail) {
+              localStorage.setItem(PENDING_OTP_EMAIL_KEY, pendingEmail);
+            }
+            await signOutIfSignupIncomplete(session.user);
+            setCurrentProfile(null);
+            setSignupContext((prev) => ({
+              ...prev,
+              email: pendingEmail,
+              role: normalizeRole(session.user.user_metadata?.role || 'Client'),
+            }));
+            setPage('otp');
           } else {
             clearTransientAuthState();
             setCurrentProfile(profile);
@@ -623,8 +637,7 @@ function App() {
         if (cancelled) return
         if (!session?.user) return
 
-        const emailConfirmed = Boolean(session.user.email_confirmed_at)
-        if (!emailConfirmed && (page === 'otp' || page === 'signup')) {
+        if (!isSignupVerificationComplete(session.user) && (page === 'otp' || page === 'signup')) {
           return
         }
 

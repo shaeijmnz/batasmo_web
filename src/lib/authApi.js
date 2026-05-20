@@ -22,7 +22,7 @@ export const PENDING_SMS_PHONE_KEY = 'batasmo_pending_sms_phone'
 export const OTP_RESUME_LOGIN_KEY = 'batasmo_otp_resume_login'
 export const OTP_RESUME_SIGNUP_KEY = 'batasmo_otp_resume_signup'
 
-const getBackendApiBase = () =>
+export const getBackendApiBase = () =>
   String(
     process.env.REACT_APP_PAYMENT_API_URL ||
       process.env.REACT_APP_CHATBOT_API_URL ||
@@ -30,6 +30,125 @@ const getBackendApiBase = () =>
   )
     .trim()
     .replace(/\/+$/, '')
+
+const signupProfilePayload = ({
+  userId,
+  normalizedEmail,
+  fullName,
+  normalizedRole,
+  safeSex,
+  phone,
+  parsedAge,
+  address,
+  guardianName,
+  guardianContact,
+  otpChannel,
+}) => ({
+  id: userId,
+  email: normalizedEmail,
+  full_name: fullName,
+  role: normalizedRole,
+  sex: safeSex,
+  phone: phone || null,
+  age: parsedAge,
+  address: address || null,
+  guardian_name: guardianName || null,
+  guardian_contact: guardianContact || null,
+  preferred_otp_channel: otpChannel,
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+})
+
+async function signUpWithSupabaseOtp({
+  normalizedEmail,
+  password,
+  fullName,
+  normalizedRole,
+  safeSex,
+  phone,
+  parsedAge,
+  address,
+  guardianName,
+  guardianContact,
+  otpChannel,
+}) {
+  const { data, error } = await supabase.auth.signUp({
+    email: normalizedEmail,
+    password,
+    options: {
+      data: {
+        full_name: fullName,
+        role: normalizedRole,
+        signup_otp_completed: false,
+      },
+    },
+  })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  if (data?.user?.id) {
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .upsert(
+        signupProfilePayload({
+          userId: data.user.id,
+          normalizedEmail,
+          fullName,
+          normalizedRole,
+          safeSex,
+          phone,
+          parsedAge,
+          address,
+          guardianName,
+          guardianContact,
+          otpChannel,
+        }),
+        { onConflict: 'id' },
+      )
+
+    if (profileError) {
+      console.error('[signup] profile upsert failed', profileError)
+    }
+
+    if (normalizedRole === 'Attorney') {
+      const { error: attorneyProfileError } = await supabase
+        .from('attorney_profiles')
+        .upsert(
+          {
+            user_id: data.user.id,
+            is_verified: false,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'user_id' },
+        )
+
+      if (attorneyProfileError) {
+        console.error('[signup] attorney profile upsert failed', attorneyProfileError)
+      }
+    }
+  }
+
+  // Never keep a session before OTP — even when Supabase auto-confirms email.
+  await supabase.auth.signOut()
+
+  if (otpChannel === 'email' && normalizedEmail) {
+    const { error: resendError } = await supabase.auth.resend({
+      type: 'signup',
+      email: normalizedEmail,
+    })
+    if (resendError) {
+      console.warn('[signup] resend signup OTP email failed', resendError.message)
+    }
+  }
+
+  return {
+    userId: data?.user?.id || null,
+    email: normalizedEmail,
+    preferredOtpChannel: otpChannel,
+  }
+}
 
 const normalizeRole = (role) => {
   const value = String(role || '').trim().toLowerCase()
@@ -101,41 +220,75 @@ export async function signUpWithEmail({
       ? normalizedSex
       : null
 
-  const base = getBackendApiBase()
-  if (!base) {
-    throw new Error(
-      'Signup is not configured. Set REACT_APP_PAYMENT_API_URL on Vercel to your Render backend URL.',
-    )
+  const signupBody = {
+    email: normalizedEmail,
+    password,
+    fullName,
+    role: normalizedRole,
+    sex: safeSex,
+    phone: phone || null,
+    age: parsedAge,
+    address: address || null,
+    guardianName: guardianName || null,
+    guardianContact: guardianContact || null,
+    preferredOtpChannel: otpChannel,
   }
 
-  const response = await fetch(`${base}/auth/signup-start`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      email: normalizedEmail,
-      password,
-      fullName,
-      role: normalizedRole,
-      sex: safeSex,
-      phone: phone || null,
-      age: parsedAge,
-      address: address || null,
-      guardianName: guardianName || null,
-      guardianContact: guardianContact || null,
-      preferredOtpChannel: otpChannel,
-    }),
+  const base = getBackendApiBase()
+  if (base) {
+    try {
+      const response = await fetch(`${base}/auth/signup-start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signupBody),
+      })
+
+      const payload = await response.json().catch(() => ({}))
+      if (response.ok && payload?.pendingId) {
+        return {
+          pendingId: payload.pendingId,
+          email: payload?.email || normalizedEmail,
+          preferredOtpChannel: payload?.preferredOtpChannel || otpChannel,
+        }
+      }
+
+      if (response.ok && !payload?.pendingId) {
+        console.warn('[signup] signup-start ok but no pendingId — using Supabase OTP flow')
+      } else if (response.status !== 404 && response.status !== 501) {
+        throw new Error(payload?.error || 'Failed to start signup.')
+      }
+    } catch (backendError) {
+      const msg = String(backendError?.message || '')
+      const isMissingRoute =
+        msg.includes('Failed to start signup') ||
+        msg.includes('404') ||
+        msg.includes('Not Found')
+      if (!isMissingRoute) {
+        throw backendError
+      }
+      console.warn('[signup] backend signup-start unavailable, using Supabase OTP flow')
+    }
+  }
+
+  const supabaseResult = await signUpWithSupabaseOtp({
+    normalizedEmail,
+    password,
+    fullName,
+    normalizedRole,
+    safeSex,
+    phone,
+    parsedAge,
+    address,
+    guardianName,
+    guardianContact,
+    otpChannel,
   })
 
-  const payload = await response.json().catch(() => ({}))
-  if (!response.ok) {
-    throw new Error(payload?.error || 'Failed to start signup.')
+  if (supabaseResult.userId) {
+    localStorage.setItem(PENDING_SIGNUP_USER_ID_KEY, String(supabaseResult.userId))
   }
 
-  return {
-    pendingId: payload?.pendingId,
-    email: payload?.email || normalizedEmail,
-    preferredOtpChannel: payload?.preferredOtpChannel || otpChannel,
-  }
+  return supabaseResult
 }
 
 /**
@@ -146,24 +299,35 @@ export async function sendSignupVerificationEmail({ email, pendingId }) {
   if (!normalizedEmail && !pendingId) throw new Error('Email is required.')
 
   const base = getBackendApiBase()
-  if (!base) {
-    throw new Error('Signup service is not configured (REACT_APP_PAYMENT_API_URL).')
+  if (base && pendingId) {
+    const body = {}
+    if (normalizedEmail) body.email = normalizedEmail
+    body.pendingId = String(pendingId).trim()
+
+    const response = await fetch(`${base}/auth/signup-resend-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (response.ok) {
+      return payload
+    }
+    console.warn('[signup] backend resend failed, falling back to Supabase email OTP')
   }
 
-  const body = {}
-  if (normalizedEmail) body.email = normalizedEmail
-  if (pendingId) body.pendingId = String(pendingId).trim()
+  if (!normalizedEmail) {
+    throw new Error('Email is required.')
+  }
 
-  const response = await fetch(`${base}/auth/signup-resend-otp`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+  const { error } = await supabase.auth.resend({
+    type: 'signup',
+    email: normalizedEmail,
   })
-  const payload = await response.json().catch(() => ({}))
-  if (!response.ok) {
-    throw new Error(payload?.error || 'Failed to send verification email.')
+  if (error) {
+    throw new Error(error.message || 'Failed to send verification email.')
   }
-  return payload
+  return { success: true }
 }
 
 /**
@@ -282,7 +446,9 @@ export async function verifySignupSmsOtp({ userId, email, token }) {
   if (userId) body.userId = String(userId).trim()
 
   // Must match a deployed Edge Function name (see supabase/functions/signup-sms-otp-verify).
-  return invokeOtpFunction('signup-sms-otp-verify', body)
+  const result = await invokeOtpFunction('signup-sms-otp-verify', body)
+  await markSignupOtpCompleted()
+  return result
 }
 
 export async function signInWithEmail({ email, password }) {

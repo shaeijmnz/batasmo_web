@@ -214,8 +214,14 @@ function SignUp({ onNavigate, onEmailChange }) {
       localStorage.setItem(PENDING_SMS_PHONE_KEY, form.contact.trim());
       if (result?.pendingId) {
         localStorage.setItem(PENDING_SIGNUP_ID_KEY, String(result.pendingId));
+        localStorage.removeItem(PENDING_SIGNUP_USER_ID_KEY);
+      } else if (result?.userId) {
+        localStorage.setItem(PENDING_SIGNUP_USER_ID_KEY, String(result.userId));
+        localStorage.removeItem(PENDING_SIGNUP_ID_KEY);
+      } else {
+        localStorage.removeItem(PENDING_SIGNUP_ID_KEY);
+        localStorage.removeItem(PENDING_SIGNUP_USER_ID_KEY);
       }
-      localStorage.removeItem(PENDING_SIGNUP_USER_ID_KEY);
       try {
         sessionStorage.setItem(
           OTP_RESUME_SIGNUP_KEY,

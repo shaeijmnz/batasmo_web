@@ -8,9 +8,12 @@ import {
   OTP_RESUME_LOGIN_KEY,
   OTP_RESUME_SIGNUP_KEY,
   completePendingSignup,
+  getBackendApiBase,
   resendSignUpOtp,
   sendSignupVerificationEmail,
   signInWithEmail,
+  verifySignUpOtp,
+  verifySignupSmsOtp,
 } from '../lib/authApi';
 import { supabase } from '../lib/supabaseClient';
 import { getCurrentSessionProfile, pageFromRole } from '../lib/userApi';
@@ -296,17 +299,43 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
         return;
       }
 
-      await completePendingSignup({
-        email: pendingEmail,
-        pendingId: pendingSignupId || undefined,
-        otp: token,
-        password: resume.password,
-      });
+      const useBackendPending = Boolean(pendingSignupId && getBackendApiBase())
 
-      await signInWithEmail({
-        email: resume.email || pendingEmail,
-        password: resume.password,
-      });
+      if (useBackendPending) {
+        await completePendingSignup({
+          email: pendingEmail,
+          pendingId: pendingSignupId,
+          otp: token,
+          password: resume.password,
+        })
+        await signInWithEmail({
+          email: resume.email || pendingEmail,
+          password: resume.password,
+        })
+      } else if (delivery === 'email') {
+        await verifySignUpOtp({ email: pendingEmail, token })
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+        if (!session?.user) {
+          await signInWithEmail({
+            email: resume.email || pendingEmail,
+            password: resume.password,
+          })
+        }
+      } else {
+        const uid = localStorage.getItem(PENDING_SIGNUP_USER_ID_KEY) || ''
+        await verifySignupSmsOtp({ userId: uid || undefined, email: pendingEmail, token })
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+        if (!session?.user) {
+          await signInWithEmail({
+            email: resume.email || pendingEmail,
+            password: resume.password,
+          })
+        }
+      }
 
       localStorage.removeItem('batasmo_pending_otp_email');
       localStorage.removeItem('batasmo_pending_otp_role');
