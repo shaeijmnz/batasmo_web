@@ -7,13 +7,9 @@ import {
   PENDING_SMS_PHONE_KEY,
   OTP_RESUME_LOGIN_KEY,
   OTP_RESUME_SIGNUP_KEY,
-  completePendingSignup,
-  getBackendApiBase,
   resendSignUpOtp,
   sendSignupVerificationEmail,
-  signInWithEmail,
   verifySignUpOtp,
-  verifySignupSmsOtp,
 } from '../lib/authApi';
 import { supabase } from '../lib/supabaseClient';
 import { getCurrentSessionProfile, pageFromRole } from '../lib/userApi';
@@ -22,7 +18,6 @@ import {
   endSignupOtpFinishing,
   isSignupVerificationComplete,
 } from '../lib/signupVerification';
-import { isValidPhoneNumber, maskPhilippinePhone, sanitizePhoneInput, VALID_PHONE_MESSAGE } from '../lib/validators';
 
 const ScalesIcon = ({ size = 24, color = '#f5a623' }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -49,27 +44,17 @@ const getErrorMessage = (error, fallback) => {
   return fallback;
 };
 
-function OtpVerification({ onNavigate, onAuthSuccess, email = '', role = 'Client', otpChannel: otpChannelProp = 'email' }) {
+/** Email-only OTP (signup). SMS toggle removed per product request. */
+function OtpVerification({ onNavigate, onAuthSuccess, email = '', role = 'Client' }) {
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [timer, setTimer] = useState(59);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const [errorText, setErrorText] = useState('');
   const [successText, setSuccessText] = useState('');
-  const [delivery, setDelivery] = useState(() => {
-    const stored = String(localStorage.getItem(PENDING_OTP_CHANNEL_KEY) || '').toLowerCase();
-    if (stored === 'sms' || stored === 'email') return stored;
-    const p = String(otpChannelProp || 'email').toLowerCase();
-    return p === 'sms' ? 'sms' : 'email';
-  });
-  const [optionalPhone, setOptionalPhone] = useState(() => localStorage.getItem(PENDING_SMS_PHONE_KEY) || '');
-  const [smsInitDone, setSmsInitDone] = useState(false);
   const [emailInitDone, setEmailInitDone] = useState(false);
-  const [smsSending, setSmsSending] = useState(false);
   const [emailSending, setEmailSending] = useState(false);
-  const [needsPhone, setNeedsPhone] = useState(false);
   const inputs = useRef([]);
-  const smsAutoTriedRef = useRef(false);
   const emailAutoTriedRef = useRef(false);
 
   const pendingEmail = String(email || localStorage.getItem('batasmo_pending_otp_email') || '').trim();
@@ -80,15 +65,12 @@ function OtpVerification({ onNavigate, onAuthSuccess, email = '', role = 'Client
     ? pendingEmail.replace(/^(.{4}).*(@.*)$/, '$1***$2')
     : 'your***@email.com';
 
-  const destinationLabel =
-    delivery === 'sms'
-      ? maskPhilippinePhone(optionalPhone || localStorage.getItem(PENDING_SMS_PHONE_KEY) || '')
-      : maskedEmail;
-
-  const persistDelivery = useCallback((next) => {
-    const v = next === 'sms' ? 'sms' : 'email';
-    setDelivery(v);
-    localStorage.setItem(PENDING_OTP_CHANNEL_KEY, v);
+  useEffect(() => {
+    try {
+      localStorage.setItem(PENDING_OTP_CHANNEL_KEY, 'email');
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   useEffect(() => {
@@ -113,10 +95,7 @@ function OtpVerification({ onNavigate, onAuthSuccess, email = '', role = 'Client
         } catch {
           onNavigate(pageFromRole(pendingRole));
         }
-        return;
       }
-
-      // Do not sign out here — verifyOtp needs a stable client; incomplete users are blocked after login.
     };
 
     guardOtpPage();
@@ -147,32 +126,14 @@ function OtpVerification({ onNavigate, onAuthSuccess, email = '', role = 'Client
     );
   }, [pendingEmail, pendingSignupId]);
 
-  const sendSmsOtp = useCallback(async () => {
-    const data = await sendSignupVerificationEmail({
-      email: pendingEmail,
-      pendingId: pendingSignupId || undefined,
-    });
-    if (data?.pendingId) {
-      localStorage.setItem(PENDING_SIGNUP_ID_KEY, String(data.pendingId));
-    }
-    setSmsInitDone(true);
-    setNeedsPhone(false);
-  }, [pendingEmail, pendingSignupId]);
-
   useEffect(() => {
-    if (smsInitDone && delivery === 'sms') {
+    if (emailInitDone) {
       setTimer(59);
     }
-  }, [smsInitDone, delivery]);
+  }, [emailInitDone]);
 
   useEffect(() => {
-    if (emailInitDone && delivery === 'email') {
-      setTimer(59);
-    }
-  }, [emailInitDone, delivery]);
-
-  useEffect(() => {
-    if (delivery !== 'email' || !pendingEmail || emailAutoTriedRef.current) return;
+    if (!pendingEmail || emailAutoTriedRef.current) return;
     emailAutoTriedRef.current = true;
     setErrorText('');
     setEmailSending(true);
@@ -188,30 +149,7 @@ function OtpVerification({ onNavigate, onAuthSuccess, email = '', role = 'Client
       .finally(() => {
         setEmailSending(false);
       });
-  }, [delivery, pendingEmail, sendEmailOtp]);
-
-  useEffect(() => {
-    if (delivery !== 'sms' || !pendingEmail || smsAutoTriedRef.current) return;
-    smsAutoTriedRef.current = true;
-    setErrorText('');
-    setSmsSending(true);
-    setNeedsPhone(false);
-    sendSmsOtp()
-      .catch((err) => {
-        const msg = String(err?.message || '');
-        const needPhone =
-          err?.code === 'PHONE_REQUIRED' || msg.includes('PHONE_REQUIRED') || msg.includes('Add a mobile number');
-        if (needPhone) {
-          setNeedsPhone(true);
-          setSmsInitDone(false);
-        } else {
-          setErrorText(getErrorMessage(err, 'Could not send SMS code.'));
-        }
-      })
-      .finally(() => {
-        setSmsSending(false);
-      });
-  }, [delivery, pendingEmail, sendSmsOtp]);
+  }, [pendingEmail, sendEmailOtp]);
 
   const handleChange = (val, idx) => {
     if (!/^\d?$/.test(val)) return;
@@ -240,30 +178,18 @@ function OtpVerification({ onNavigate, onAuthSuccess, email = '', role = 'Client
       inputs.current[0]?.focus();
     };
 
-    if (delivery === 'email') {
-      resendSignUpOtp({
-        email: pendingEmail,
-        pendingId: pendingSignupId || undefined,
+    resendSignUpOtp({
+      email: pendingEmail,
+      pendingId: pendingSignupId || undefined,
+    })
+      .then(() => {
+        setSuccessText(
+          'Verification email sent. Check Inbox and Spam — look for mail from Supabase Auth.',
+        );
+        done();
       })
-        .then(() => {
-          setSuccessText(
-            'Verification email sent. Check Inbox and Spam — look for mail from Supabase Auth.',
-          );
-          done();
-        })
-        .catch((error) => {
-          setErrorText(getErrorMessage(error, 'Failed to resend OTP.'));
-        })
-        .finally(() => {
-          setIsResending(false);
-        });
-      return;
-    }
-
-    sendSmsOtp()
-      .then(done)
       .catch((error) => {
-        setErrorText(getErrorMessage(error, 'Failed to resend SMS.'));
+        setErrorText(getErrorMessage(error, 'Failed to resend OTP.'));
       })
       .finally(() => {
         setIsResending(false);
@@ -312,45 +238,13 @@ function OtpVerification({ onNavigate, onAuthSuccess, email = '', role = 'Client
         return;
       }
 
-      let clientProfile = null;
-
-      if (delivery === 'email') {
-        const verified = await verifySignUpOtp({
-          email: pendingEmail,
-          token,
-          password: resume.password,
-          pendingId: pendingSignupId || undefined,
-        });
-        clientProfile = verified?.profile || null;
-      } else if (Boolean(getBackendApiBase() && pendingSignupId)) {
-        await completePendingSignup({
-          email: pendingEmail,
-          pendingId: pendingSignupId,
-          otp: token,
-          password: resume.password,
-        })
-        await signInWithEmail({
-          email: resume.email || pendingEmail,
-          password: resume.password,
-        });
-        await supabase.auth.refreshSession();
-        const loaded = await getCurrentSessionProfile();
-        clientProfile = loaded?.profile || null;
-      } else {
-        const uid = localStorage.getItem(PENDING_SIGNUP_USER_ID_KEY) || ''
-        await verifySignupSmsOtp({ userId: uid || undefined, email: pendingEmail, token })
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
-        if (!session?.user) {
-          await signInWithEmail({
-            email: resume.email || pendingEmail,
-            password: resume.password,
-          });
-        }
-        const loaded = await getCurrentSessionProfile();
-        clientProfile = loaded?.profile || null;
-      }
+      const verified = await verifySignUpOtp({
+        email: pendingEmail,
+        token,
+        password: resume.password,
+        pendingId: pendingSignupId || undefined,
+      });
+      let clientProfile = verified?.profile || null;
 
       if (!clientProfile?.id) {
         throw new Error('Account verified but profile did not load. Please try signing up again.');
@@ -374,43 +268,6 @@ function OtpVerification({ onNavigate, onAuthSuccess, email = '', role = 'Client
     } finally {
       endSignupOtpFinishing();
       setIsVerifying(false);
-    }
-  };
-
-  const onDeliveryChange = (next) => {
-    if (next === delivery) return;
-    persistDelivery(next);
-    setOtp(['', '', '', '', '', '']);
-    setErrorText('');
-    setSuccessText('');
-    if (next === 'sms') {
-      smsAutoTriedRef.current = false;
-      setSmsInitDone(false);
-      setNeedsPhone(false);
-      setTimer(59);
-    } else {
-      emailAutoTriedRef.current = false;
-      setEmailInitDone(false);
-      setTimer(59);
-    }
-  };
-
-  const handleSavePhoneAndSend = async (e) => {
-    e.preventDefault();
-    if (!isValidPhoneNumber(optionalPhone)) {
-      setErrorText(VALID_PHONE_MESSAGE);
-      return;
-    }
-    localStorage.setItem(PENDING_SMS_PHONE_KEY, optionalPhone);
-    setErrorText('');
-    try {
-      setSmsSending(true);
-      await sendSmsOtp();
-      setTimer(59);
-    } catch (err) {
-      setErrorText(getErrorMessage(err, 'Could not send SMS.'));
-    } finally {
-      setSmsSending(false);
     }
   };
 
@@ -438,99 +295,42 @@ function OtpVerification({ onNavigate, onAuthSuccess, email = '', role = 'Client
           </div>
           <h2 className="otp-card__title">OTP Verification</h2>
           <p className="otp-card__sub">
-            {delivery === 'email' ? (
-              <>
-                Enter the 6-digit code sent to your email address<br />
-                <span className="otp-card__email">{maskedEmail}</span>
-              </>
-            ) : (
-              <>
-                Enter the 6-digit code sent via SMS to<br />
-                <span className="otp-card__email">{destinationLabel}</span><br />
-                <span style={{ fontSize: 12, color: '#8b9aa7' }}>Code is valid for 15 minutes.</span>
-              </>
-            )}
+            Enter the 6-digit code sent to your email address<br />
+            <span className="otp-card__email">{maskedEmail}</span>
           </p>
 
-          <div className="otp-form" style={{ marginBottom: 12 }}>
-            <p className="otp-card__sub" style={{ marginBottom: 8 }}>Receive code via</p>
-            <label className="otp-delivery-label" style={{ marginRight: 16 }}>
-              <input
-                type="radio"
-                name="otp-delivery"
-                checked={delivery === 'email'}
-                onChange={() => onDeliveryChange('email')}
-              />
-              {' '}Email
-            </label>
-            <label className="otp-delivery-label">
-              <input
-                type="radio"
-                name="otp-delivery"
-                checked={delivery === 'sms'}
-                onChange={() => onDeliveryChange('sms')}
-              />
-              {' '}SMS
-            </label>
-          </div>
-
-          {delivery === 'email' && emailSending ? (
+          {emailSending ? (
             <p className="otp-sms-status">Sending verification code to your Gmail...</p>
           ) : null}
 
-          {delivery === 'sms' && smsSending ? (
-            <p className="otp-sms-status">Sending SMS...</p>
-          ) : null}
+          <form className="otp-form" onSubmit={handleSubmit}>
+            <div className="otp-boxes">
+              {otp.map((digit, i) => (
+                <input
+                  key={i}
+                  ref={(el) => {
+                    inputs.current[i] = el;
+                  }}
+                  className="otp-box"
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={1}
+                  value={digit}
+                  onChange={(e) => handleChange(e.target.value, i)}
+                  onKeyDown={(e) => handleKeyDown(e, i)}
+                />
+              ))}
+            </div>
 
-          {delivery === 'sms' && needsPhone && !smsInitDone && !smsSending ? (
-            <form className="otp-form" onSubmit={handleSavePhoneAndSend}>
-              <p className="otp-card__sub">
-                Add an 11-digit Philippine mobile number (09XXXXXXXXX) to receive SMS. Optional if your account already has one on file.
-              </p>
-              <input
-                type="tel"
-                className="otp-phone-input"
-                value={optionalPhone}
-                onChange={(ev) => setOptionalPhone(sanitizePhoneInput(ev.target.value))}
-                placeholder="09XXXXXXXXX"
-                maxLength={11}
-              />
-              <button type="submit" className="otp-btn" disabled={smsSending}>
-                Save number &amp; send SMS
-              </button>
-            </form>
-          ) : null}
-
-          {delivery === 'email' || smsInitDone ? (
-            <form className="otp-form" onSubmit={handleSubmit}>
-              <div className="otp-boxes">
-                {otp.map((digit, i) => (
-                  <input
-                    key={i}
-                    ref={(el) => {
-                      inputs.current[i] = el;
-                    }}
-                    className="otp-box"
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={1}
-                    value={digit}
-                    onChange={(e) => handleChange(e.target.value, i)}
-                    onKeyDown={(e) => handleKeyDown(e, i)}
-                  />
-                ))}
-              </div>
-
-              <button type="submit" className="otp-btn" disabled={isVerifying}>
-                {isVerifying ? 'Verifying...' : 'Verify OTP'}
-              </button>
-            </form>
-          ) : null}
+            <button type="submit" className="otp-btn" disabled={isVerifying}>
+              {isVerifying ? 'Verifying...' : 'Verify OTP'}
+            </button>
+          </form>
 
           {successText ? <p className="otp-success">{successText}</p> : null}
           {errorText ? <p className="otp-error">{errorText}</p> : null}
 
-          {(delivery === 'email' || smsInitDone) && !smsSending && !emailSending ? (
+          {!emailSending ? (
             <>
               <p className="otp-resend-timer">
                 Resend code in <span>00:{String(timer).padStart(2, '0')}</span>

@@ -5,7 +5,6 @@ import {
   PENDING_OTP_CHANNEL_KEY,
   PENDING_SIGNUP_ID_KEY,
   PENDING_SIGNUP_USER_ID_KEY,
-  PENDING_SMS_PHONE_KEY,
   signUpWithEmail,
 } from '../lib/authApi';
 import {
@@ -70,7 +69,6 @@ const getErrorMessage = (error, fallback) => {
 };
 
 function SignUp({ onNavigate, onEmailChange }) {
-  const [otpDelivery, setOtpDelivery] = useState('email');
   const [form, setForm] = useState({
     fullName: '',
     sex: 'male',
@@ -151,10 +149,6 @@ function SignUp({ onNavigate, onEmailChange }) {
       }
     }
 
-    if (otpDelivery === 'sms' && !isPhilippineMobile(values.contact)) {
-      nextErrors.contact = PH_MOBILE_REQUIRED_MESSAGE;
-    }
-
     if (!agreedToTerms) {
       nextErrors.agreedToTerms = 'Please read and accept the Terms and Conditions to continue.';
     }
@@ -205,13 +199,12 @@ function SignUp({ onNavigate, onEmailChange }) {
         address: form.address.trim(),
         guardianName: parsedAge < 18 ? form.guardianName.trim() : null,
         guardianContact: parsedAge < 18 ? form.guardianContact.trim() : null,
-        preferredOtpChannel: otpDelivery,
+        preferredOtpChannel: 'email',
       });
 
       localStorage.setItem('batasmo_pending_otp_email', normalizedEmail);
       localStorage.setItem('batasmo_pending_otp_role', 'Client');
-      localStorage.setItem(PENDING_OTP_CHANNEL_KEY, otpDelivery);
-      localStorage.setItem(PENDING_SMS_PHONE_KEY, form.contact.trim());
+      localStorage.setItem(PENDING_OTP_CHANNEL_KEY, 'email');
       if (result?.pendingId) {
         localStorage.setItem(PENDING_SIGNUP_ID_KEY, String(result.pendingId));
         localStorage.removeItem(PENDING_SIGNUP_USER_ID_KEY);
@@ -242,7 +235,7 @@ function SignUp({ onNavigate, onEmailChange }) {
       }
 
       if (onEmailChange) {
-        onEmailChange({ email: normalizedEmail, role: 'Client', otpChannel: otpDelivery });
+        onEmailChange({ email: normalizedEmail, role: 'Client', otpChannel: 'email' });
       }
 
       onNavigate('otp');
@@ -417,33 +410,6 @@ function SignUp({ onNavigate, onEmailChange }) {
                 </div>
               </div>
             ) : null}
-
-            <div className="su-input-group su-otp-delivery-group">
-              <label>Send verification code via</label>
-              <div className="su-input-wrap su-otp-delivery-wrap">
-                <label className="su-otp-delivery-option">
-                  <input
-                    type="radio"
-                    name="otp-delivery"
-                    checked={otpDelivery === 'email'}
-                    onChange={() => setOtpDelivery('email')}
-                  />
-                  Email
-                </label>
-                <label className="su-otp-delivery-option">
-                  <input
-                    type="radio"
-                    name="otp-delivery"
-                    checked={otpDelivery === 'sms'}
-                    onChange={() => setOtpDelivery('sms')}
-                  />
-                  SMS
-                </label>
-              </div>
-              <p className="su-otp-delivery-help">
-                Email uses the existing BatasMo email code. SMS uses IPROG and your contact number above.
-              </p>
-            </div>
 
             <div className="su-input-group su-grid-2">
               <div>
