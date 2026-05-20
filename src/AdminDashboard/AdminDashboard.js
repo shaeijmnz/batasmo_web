@@ -26,7 +26,7 @@ import { patchAdminPageCache, readAdminPageCache } from '../lib/adminPageCache';
 import './AdminTheme.css';
 import './dashboard.css';
 
-const DASHBOARD_CACHE_KEY = 'dashboard';
+const DASHBOARD_CACHE_KEY = 'dashboard-v2';
 
 const persistDashboardCache = (patch) => {
   patchAdminPageCache(DASHBOARD_CACHE_KEY, patch);
@@ -275,10 +275,11 @@ const Dashboard = ({ onNavigate }) => {
   };
 
   const fetchPendingNotaryRequests = async () => {
+    /** Only true "new" paid requests — exclude `accepted` / in-process (those belong in Admin Requests tabs). */
     const data = await fetchPaidNotarialRequests({
       select:
         'id, client_id, service_type, document_url, status, preferred_date, created_at, updated_at, notes, client:client_id(full_name)',
-      extraQuery: (query) => query.in('status', ['pending', 'accepted']),
+      extraQuery: (query) => query.eq('status', 'pending'),
     });
 
     const mapped = (data || []).map((item) => {
@@ -1103,7 +1104,7 @@ const Dashboard = ({ onNavigate }) => {
     },
     {
       label: 'Pending Notary',
-      value: pendingNotaryCount,
+      value: pendingNotaryCount > 0 ? pendingNotaryCount : '—',
       color: '#ef4444',
       icon: <FileText size={20}/>,
       page: '/requests',
