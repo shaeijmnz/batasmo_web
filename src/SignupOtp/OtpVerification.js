@@ -17,10 +17,7 @@ import {
 } from '../lib/authApi';
 import { supabase } from '../lib/supabaseClient';
 import { getCurrentSessionProfile, pageFromRole } from '../lib/userApi';
-import {
-  isSignupVerificationComplete,
-  signOutIfSignupIncomplete,
-} from '../lib/signupVerification';
+import { isSignupVerificationComplete } from '../lib/signupVerification';
 import { isValidPhoneNumber, maskPhilippinePhone, sanitizePhoneInput, VALID_PHONE_MESSAGE } from '../lib/validators';
 
 const ScalesIcon = ({ size = 24, color = '#f5a623' }) => (
@@ -115,9 +112,7 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
         return;
       }
 
-      if (user) {
-        await signOutIfSignupIncomplete(user);
-      }
+      // Do not sign out here — verifyOtp needs a stable client; incomplete users are blocked after login.
     };
 
     guardOtpPage();
@@ -144,7 +139,7 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
     setEmailInitDone(true);
     setErrorText('');
     setSuccessText(
-      'Verification email sent. Check Inbox and Spam — look for mail from BatasMo with your 6-digit code.',
+      'Verification email sent. Check Inbox and Spam — look for mail from Supabase Auth.',
     );
   }, [pendingEmail, pendingSignupId]);
 
@@ -248,7 +243,7 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
       })
         .then(() => {
           setSuccessText(
-            'Verification email sent. Check Inbox and Spam — look for mail from BatasMo with your 6-digit code.',
+            'Verification email sent. Check Inbox and Spam — look for mail from Supabase Auth.',
           );
           done();
         })
@@ -313,9 +308,9 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
         return;
       }
 
-      const useBackendPending = Boolean(getBackendApiBase() && pendingSignupId)
-
-      if (useBackendPending) {
+      if (delivery === 'email') {
+        await verifySignUpOtp({ email: pendingEmail, token })
+      } else if (Boolean(getBackendApiBase() && pendingSignupId)) {
         await completePendingSignup({
           email: pendingEmail,
           pendingId: pendingSignupId,
@@ -326,17 +321,7 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
           email: resume.email || pendingEmail,
           password: resume.password,
         })
-      } else if (delivery === 'email') {
-        await verifySignUpOtp({ email: pendingEmail, token })
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
-        if (!session?.user) {
-          await signInWithEmail({
-            email: resume.email || pendingEmail,
-            password: resume.password,
-          })
-        }
+        await supabase.auth.refreshSession()
       } else {
         const uid = localStorage.getItem(PENDING_SIGNUP_USER_ID_KEY) || ''
         await verifySignupSmsOtp({ userId: uid || undefined, email: pendingEmail, token })

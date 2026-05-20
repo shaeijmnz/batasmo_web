@@ -39,10 +39,20 @@ export function isSignupVerificationComplete(user) {
 }
 
 export async function markSignupOtpCompleted() {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  if (!session?.user) {
+    return
+  }
   const { error } = await supabase.auth.updateUser({
     data: { signup_otp_completed: true },
   })
   if (error) {
+    const msg = String(error.message || '')
+    if (msg.toLowerCase().includes('auth session missing')) {
+      return
+    }
     throw new Error(error.message || 'Could not finalize account verification.')
   }
 }

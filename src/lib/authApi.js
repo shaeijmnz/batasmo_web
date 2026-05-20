@@ -584,19 +584,32 @@ export async function signInWithEmail({ email, password }) {
 export async function verifySignUpOtp({ email, token }) {
   const normalizedToken = String(token || '').replace(/\D/g, '')
   let lastError = null
-  for (const type of ['signup', 'email']) {
-    const { error } = await supabase.auth.verifyOtp({
+  let verifyData = null
+  for (const type of ['email', 'signup']) {
+    const { data, error } = await supabase.auth.verifyOtp({
       email,
       token: normalizedToken,
       type,
     })
     if (!error) {
       lastError = null
+      verifyData = data
       break
     }
     lastError = error
   }
   if (lastError) throw new Error(lastError.message)
+
+  if (!verifyData?.session) {
+    await supabase.auth.refreshSession()
+  }
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  if (!session?.user) {
+    throw new Error('Verification succeeded but login session was not created. Please log in with your password.')
+  }
 
   await markSignupOtpCompleted()
 
