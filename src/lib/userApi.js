@@ -100,6 +100,12 @@ const isRecentlyCancelledAppointment = (appt) => {
   return Date.now() - updatedAtMs < RECENTLY_CANCELLED_WINDOW_MS
 }
 
+/** Attorney lists / queue: hide unpaid positive-fee bookings (e.g. pending notarial) until paid. */
+const isVisibleInAttorneyPaidConsultationQueue = (appt) => {
+  if (isRecentlyCancelledAppointment(appt)) return true
+  return isPaidOrFreeConsultation(appt)
+}
+
 async function fetchPaidAppointmentIdsForIdList(appointmentIds) {
   const unique = [...new Set((appointmentIds || []).filter(Boolean))]
   if (!unique.length) return new Set()
@@ -1557,7 +1563,11 @@ export async function fetchAttorneyHomeData(userId, options = {}) {
   }).length
 
   const consultations = appointments
-    .filter((a) => isAttorneyQueueAppointmentStatus(a.status) || isRecentlyCancelledAppointment(a))
+    .filter(
+      (a) =>
+        (isAttorneyQueueAppointmentStatus(a.status) || isRecentlyCancelledAppointment(a)) &&
+        isVisibleInAttorneyPaidConsultationQueue(a),
+    )
     .map((a) => ({
     id: a.id,
     name: a.client_name || 'Client',
@@ -3753,7 +3763,11 @@ export async function fetchAttorneyConsultationRequests(userId, options = {}) {
   if (paidTransactionsRes.error) throw paidTransactionsRes.error
 
   const requests = appointments
-    .filter((item) => isAttorneyQueueAppointmentStatus(item.status) || isRecentlyCancelledAppointment(item))
+    .filter(
+      (item) =>
+        (isAttorneyQueueAppointmentStatus(item.status) || isRecentlyCancelledAppointment(item)) &&
+        isVisibleInAttorneyPaidConsultationQueue(item),
+    )
     .sort((a, b) => {
       const aTime = a.parsed_scheduled_at?.getTime() || 0
       const bTime = b.parsed_scheduled_at?.getTime() || 0
@@ -5594,7 +5608,11 @@ export async function fetchAttorneyUpcomingAppointments(userId, options = {}) {
   const appointments = await fetchAttorneyAppointments(userId, options)
 
   return appointments
-    .filter((item) => isAttorneyQueueAppointmentStatus(item.status) || isRecentlyCancelledAppointment(item))
+    .filter(
+      (item) =>
+        (isAttorneyQueueAppointmentStatus(item.status) || isRecentlyCancelledAppointment(item)) &&
+        isVisibleInAttorneyPaidConsultationQueue(item),
+    )
     .sort((a, b) => {
       const aTime = a.parsed_scheduled_at?.getTime() || 0
       const bTime = b.parsed_scheduled_at?.getTime() || 0
