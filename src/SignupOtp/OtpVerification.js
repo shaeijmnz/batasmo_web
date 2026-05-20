@@ -296,12 +296,12 @@ function OtpVerification({ onNavigate, onAuthSuccess, email = '', role = 'Client
     beginSignupOtpFinishing();
     try {
       setErrorText('');
+      setSuccessText('');
       setIsVerifying(true);
 
       const resumeRaw = sessionStorage.getItem(OTP_RESUME_SIGNUP_KEY);
       if (!resumeRaw) {
         setErrorText('Session expired. Please sign up again.');
-        setIsVerifying(false);
         return;
       }
       let resume;
@@ -309,7 +309,6 @@ function OtpVerification({ onNavigate, onAuthSuccess, email = '', role = 'Client
         resume = JSON.parse(resumeRaw);
       } catch {
         setErrorText('Session expired. Please sign up again.');
-        setIsVerifying(false);
         return;
       }
 
@@ -353,6 +352,16 @@ function OtpVerification({ onNavigate, onAuthSuccess, email = '', role = 'Client
         clientProfile = loaded?.profile || null;
       }
 
+      if (!clientProfile?.id) {
+        throw new Error('Account verified but profile did not load. Please try signing up again.');
+      }
+
+      if (typeof onAuthSuccess !== 'function') {
+        throw new Error('App auth handler missing. Please refresh and try again.');
+      }
+
+      onAuthSuccess(clientProfile);
+
       localStorage.removeItem('batasmo_pending_otp_email');
       localStorage.removeItem('batasmo_pending_otp_role');
       localStorage.removeItem(PENDING_OTP_CHANNEL_KEY);
@@ -360,22 +369,6 @@ function OtpVerification({ onNavigate, onAuthSuccess, email = '', role = 'Client
       localStorage.removeItem(PENDING_SIGNUP_USER_ID_KEY);
       localStorage.removeItem(PENDING_SMS_PHONE_KEY);
       clearOtpResumeSecrets();
-
-      if (!clientProfile?.id) {
-        const loaded = await getCurrentSessionProfile();
-        clientProfile = loaded?.profile || null;
-      }
-
-      if (!clientProfile?.id) {
-        throw new Error('Account verified but profile did not load. Please try logging in once.');
-      }
-
-      if (typeof onAuthSuccess === 'function') {
-        onAuthSuccess(clientProfile);
-        return;
-      }
-
-      onNavigate(pageFromRole(clientProfile?.role || pendingRole));
     } catch (error) {
       setErrorText(getErrorMessage(error, 'Invalid or expired OTP code.'));
     } finally {

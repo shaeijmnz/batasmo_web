@@ -1,5 +1,12 @@
 import { supabase } from './supabaseClient'
 
+/**
+ * Signup OTP contract (do not break):
+ * 1. User enters 6-digit code on OtpVerification
+ * 2. verifySignUpOtp → backend mark verified → fresh signInWithPassword → profile
+ * 3. onAuthSuccess(profile) → Client home (never Login)
+ * While finishing, isSignupOtpFinishing() blocks auth listener / getCurrentSessionProfile sign-out.
+ */
 export const SIGNUP_OTP_FINISHING_KEY = 'batasmo_signup_otp_finishing'
 
 export function beginSignupOtpFinishing() {
@@ -44,6 +51,7 @@ export function isSignupVerificationComplete(user) {
   if (meta.signup_otp_completed === true) return true
   if (meta.signup_otp_completed === false) {
     if (user.email_confirmed_at) return true
+    if (isSignupOtpFinishing()) return true
     return false
   }
 

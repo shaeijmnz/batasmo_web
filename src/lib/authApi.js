@@ -675,6 +675,10 @@ async function markSignupVerifiedOnBackend({ email, pendingId }) {
   }
 }
 
+/**
+ * Email signup OTP: verify code → session → profile. Caller must use onAuthSuccess(profile)
+ * for home navigation (never Login). Wrapped with beginSignupOtpFinishing in OtpVerification.
+ */
 export async function verifySignUpOtp({ email, token, password, pendingId }) {
   const normalizedEmail = normalizeAuthEmail(email)
   const normalizedToken = String(token || '').replace(/\D/g, '')

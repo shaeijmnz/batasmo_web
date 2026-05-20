@@ -555,6 +555,11 @@ function App() {
 
   const handleAuthSuccess = useCallback((profile, options = {}) => {
     resetUserApiRuntimeState();
+    try {
+      sessionStorage.removeItem(FORCE_LOGIN_REDIRECT_KEY);
+    } catch {
+      /* ignore */
+    }
     clearTransientAuthState({ includeRecovery: true });
     setSignupContext({ email: '', role: 'Client', otpChannel: 'email' });
     setCurrentProfile(profile);
