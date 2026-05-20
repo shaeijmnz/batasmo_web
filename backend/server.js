@@ -27,7 +27,9 @@ const CORS_ALLOWED_ORIGINS = [
     .filter(Boolean),
 ].filter((value, index, list) => value && list.indexOf(value) === index)
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY
-const SUPABASE_URL = String(process.env.SUPABASE_URL || '').trim()
+const SUPABASE_URL = String(
+  process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL || '',
+).trim()
 const SUPABASE_SERVICE_ROLE_KEY = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
 const SUPABASE_ANON_KEY = String(
   process.env.SUPABASE_ANON_KEY ||

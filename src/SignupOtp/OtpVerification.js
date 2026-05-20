@@ -54,6 +54,7 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
   const [isVerifying, setIsVerifying] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const [errorText, setErrorText] = useState('');
+  const [successText, setSuccessText] = useState('');
   const [delivery, setDelivery] = useState(() => {
     const stored = String(localStorage.getItem(PENDING_OTP_CHANNEL_KEY) || '').toLowerCase();
     if (stored === 'sms' || stored === 'email') return stored;
@@ -141,6 +142,10 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
       localStorage.setItem(PENDING_SIGNUP_ID_KEY, String(data.pendingId));
     }
     setEmailInitDone(true);
+    setErrorText('');
+    setSuccessText(
+      'Verification email sent. Check Inbox, Spam, and Promotions — look for mail from Supabase Auth.',
+    );
   }, [pendingEmail, pendingSignupId]);
 
   const sendSmsOtp = useCallback(async () => {
@@ -227,6 +232,7 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
     if (!pendingEmail || isResending || timer > 0) return;
 
     setErrorText('');
+    setSuccessText('');
     setIsResending(true);
 
     const done = () => {
@@ -240,7 +246,12 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
         email: pendingEmail,
         pendingId: pendingSignupId || undefined,
       })
-        .then(done)
+        .then(() => {
+          setSuccessText(
+            'Verification email sent. Check Inbox, Spam, and Promotions — look for mail from Supabase Auth.',
+          );
+          done();
+        })
         .catch((error) => {
           setErrorText(getErrorMessage(error, 'Failed to resend OTP.'));
         })
@@ -371,6 +382,7 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
     persistDelivery(next);
     setOtp(['', '', '', '', '', '']);
     setErrorText('');
+    setSuccessText('');
     if (next === 'sms') {
       smsAutoTriedRef.current = false;
       setSmsInitDone(false);
@@ -515,6 +527,7 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
             </form>
           ) : null}
 
+          {successText ? <p className="otp-success">{successText}</p> : null}
           {errorText ? <p className="otp-error">{errorText}</p> : null}
 
           {(delivery === 'email' || smsInitDone) && !smsSending && !emailSending ? (

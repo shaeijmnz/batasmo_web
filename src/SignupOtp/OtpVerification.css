@@ -198,6 +198,11 @@
   color: #f5b2b2;
   font-size: 0.88rem;
 }
+.otp-success {
+  margin: 12px 0 0;
+  color: #8fd4a8;
+  font-size: 0.88rem;
+}
 
 /* Resend */
 .otp-resend-timer {
