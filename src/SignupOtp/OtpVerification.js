@@ -309,7 +309,12 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
       }
 
       if (delivery === 'email') {
-        await verifySignUpOtp({ email: pendingEmail, token })
+        await verifySignUpOtp({
+          email: pendingEmail,
+          token,
+          password: resume.password,
+          pendingId: pendingSignupId || undefined,
+        })
       } else if (Boolean(getBackendApiBase() && pendingSignupId)) {
         await completePendingSignup({
           email: pendingEmail,

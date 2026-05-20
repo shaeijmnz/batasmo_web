@@ -581,13 +581,62 @@ export async function signInWithEmail({ email, password }) {
   }
 }
 
-export async function verifySignUpOtp({ email, token }) {
+function readSignupResumePassword() {
+  try {
+    const raw = sessionStorage.getItem(OTP_RESUME_SIGNUP_KEY)
+    if (!raw) return ''
+    const resume = JSON.parse(raw)
+    return String(resume?.password || '')
+  } catch {
+    return ''
+  }
+}
+
+/** After OTP verify, Supabase often confirms email but does not return a session — sign in with signup password. */
+async function ensureSessionAfterOtpVerify({ email, password, verifyData }) {
+  const normalizedEmail = normalizeAuthEmail(email)
+  const signupPassword = String(password || readSignupResumePassword() || '')
+
+  if (verifyData?.session) {
+    return verifyData.session
+  }
+
+  if (signupPassword) {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: normalizedEmail,
+      password: signupPassword,
+    })
+    if (!error && data?.session) {
+      return data.session
+    }
+    if (error) {
+      const msg = String(error.message || '')
+      if (!msg.toLowerCase().includes('email not confirmed')) {
+        throw new Error(error.message || 'Could not sign you in after verification.')
+      }
+    }
+  }
+
+  await supabase.auth.refreshSession()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  if (session?.user) {
+    return session
+  }
+
+  throw new Error('Could not start your session after verification. Please sign up again.')
+}
+
+export async function verifySignUpOtp({ email, token, password, pendingId }) {
+  const normalizedEmail = normalizeAuthEmail(email)
   const normalizedToken = String(token || '').replace(/\D/g, '')
   let lastError = null
   let verifyData = null
+
   for (const type of ['email', 'signup']) {
     const { data, error } = await supabase.auth.verifyOtp({
-      email,
+      email: normalizedEmail,
       token: normalizedToken,
       type,
     })
@@ -598,20 +647,38 @@ export async function verifySignUpOtp({ email, token }) {
     }
     lastError = error
   }
-  if (lastError) throw new Error(lastError.message)
 
-  if (!verifyData?.session) {
-    await supabase.auth.refreshSession()
+  if (lastError) {
+    const base = getBackendApiBase()
+    const pwd = String(password || readSignupResumePassword() || '')
+    if (base && pendingId && pwd) {
+      await completePendingSignup({
+        email: normalizedEmail,
+        pendingId,
+        otp: normalizedToken,
+        password: pwd,
+      })
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail,
+        password: pwd,
+      })
+      if (error) {
+        throw new Error(error.message || 'Verification failed.')
+      }
+      verifyData = { session: data?.session, user: data?.user }
+    } else {
+      throw new Error(lastError.message)
+    }
   }
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-  if (!session?.user) {
-    throw new Error('Verification succeeded but login session was not created. Please log in with your password.')
-  }
+  await ensureSessionAfterOtpVerify({
+    email: normalizedEmail,
+    password,
+    verifyData,
+  })
 
   await markSignupOtpCompleted()
+  await supabase.auth.refreshSession()
 
   const {
     data: { user },
