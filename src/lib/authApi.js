@@ -85,7 +85,15 @@ async function signUpWithSupabaseOtp({
   })
 
   if (error) {
-    throw new Error(error.message)
+    const msg = String(error.message || '')
+    if (msg.toLowerCase().includes('already registered') || msg.toLowerCase().includes('already been registered')) {
+      throw new Error('This Gmail is already registered. Please log in instead.')
+    }
+    throw new Error(msg || 'Could not create account. Please try again.')
+  }
+
+  if (data?.user && (!data.user.identities || data.user.identities.length === 0)) {
+    throw new Error('This Gmail is already registered. Please log in instead.')
   }
 
   if (data?.user?.id) {
@@ -139,7 +147,11 @@ async function signUpWithSupabaseOtp({
       email: normalizedEmail,
     })
     if (resendError) {
-      console.warn('[signup] resend signup OTP email failed', resendError.message)
+      const resendMsg = String(resendError.message || '')
+      if (resendMsg.toLowerCase().includes('rate limit')) {
+        throw new Error('Too many code requests. Wait a minute and try again, or check your spam folder for an earlier code.')
+      }
+      console.warn('[signup] resend signup OTP email failed', resendMsg)
     }
   }
 
@@ -234,8 +246,10 @@ export async function signUpWithEmail({
     preferredOtpChannel: otpChannel,
   }
 
+  const useBackendSignup = process.env.REACT_APP_USE_BACKEND_SIGNUP === 'true'
   const base = getBackendApiBase()
-  if (base) {
+
+  if (useBackendSignup && base) {
     try {
       const response = await fetch(`${base}/auth/signup-start`, {
         method: 'POST',
@@ -251,22 +265,9 @@ export async function signUpWithEmail({
           preferredOtpChannel: payload?.preferredOtpChannel || otpChannel,
         }
       }
-
-      if (response.ok && !payload?.pendingId) {
-        console.warn('[signup] signup-start ok but no pendingId — using Supabase OTP flow')
-      } else if (response.status !== 404 && response.status !== 501) {
-        throw new Error(payload?.error || 'Failed to start signup.')
-      }
+      console.warn('[signup] backend signup-start skipped', response.status, payload?.error || '')
     } catch (backendError) {
-      const msg = String(backendError?.message || '')
-      const isMissingRoute =
-        msg.includes('Failed to start signup') ||
-        msg.includes('404') ||
-        msg.includes('Not Found')
-      if (!isMissingRoute) {
-        throw backendError
-      }
-      console.warn('[signup] backend signup-start unavailable, using Supabase OTP flow')
+      console.warn('[signup] backend signup-start failed, using Supabase OTP', backendError?.message || backendError)
     }
   }
 
