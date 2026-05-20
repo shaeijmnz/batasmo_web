@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { 
   LayoutDashboard, Users, Scale,
   BarChart3, Settings, LogOut, Menu, Plus, Search, 
-  Filter, Download, Mail, Phone, Calendar, X
+  Filter, Download, Mail, Calendar, X
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { adminCreateWalkInAttorney } from '../lib/userApi';
@@ -100,7 +100,7 @@ const Attorneys = ({ onNavigate }) => {
       const [profilesRes, attorneyProfilesRes, appointmentsRes] = await Promise.all([
           supabase
             .from('profiles')
-            .select('id, full_name, email, phone')
+            .select('id, full_name, email')
             .eq('role', 'Attorney')
             .order('created_at', { ascending: false }),
           supabase
@@ -159,7 +159,6 @@ const Attorneys = ({ onNavigate }) => {
             specialty: formatSpecialty(extra?.specialties),
             experience: formatExperience(extra?.years_experience),
             email: row.email || 'No email',
-            phone: row.phone || 'No phone',
             consultations: Number(consultationsByAttorney.get(row.id) || 0),
             cases: Number(completedCasesByAttorney.get(row.id) || 0),
           };
@@ -416,7 +415,6 @@ const Attorneys = ({ onNavigate }) => {
                       </div>
                       <div className="contact-info">
                         <span><Mail size={14} /> {attorney.email}</span>
-                        <span><Phone size={14} /> {attorney.phone}</span>
                       </div>
                     </div>
                   </div>
