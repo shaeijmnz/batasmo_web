@@ -144,7 +144,7 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
     setEmailInitDone(true);
     setErrorText('');
     setSuccessText(
-      'Verification email sent. Check Inbox, Spam, and Promotions — look for mail from Supabase Auth.',
+      'Verification email sent. Check Inbox and Spam — look for mail from BatasMo with your 6-digit code.',
     );
   }, [pendingEmail, pendingSignupId]);
 
@@ -248,7 +248,7 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
       })
         .then(() => {
           setSuccessText(
-            'Verification email sent. Check Inbox, Spam, and Promotions — look for mail from Supabase Auth.',
+            'Verification email sent. Check Inbox and Spam — look for mail from BatasMo with your 6-digit code.',
           );
           done();
         })

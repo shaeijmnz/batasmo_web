@@ -10,6 +10,7 @@ import {
   isDiditSessionConfigured,
 } from './lib/didit/diditRoutes.js'
 import buildClientSignupRoutes from './lib/clientSignupRoutes.js'
+import { isSmtpConfigured } from './lib/signupEmailOtp.js'
 
 dotenv.config()
 
@@ -2733,6 +2734,7 @@ app.get('/health', (req, res) => {
     modelCandidates: GEMINI_MODEL_CANDIDATES,
     diditConfigured: isDiditApiKeyConfigured(),
     diditSessionReady: isDiditSessionConfigured(),
+    signupEmailSmtpConfigured: isSmtpConfigured(),
   })
 })
 

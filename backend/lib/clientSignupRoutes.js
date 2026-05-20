@@ -1,8 +1,13 @@
 /**
- * Client self-signup via Supabase public Auth API (anon key) so confirmation
- * emails with 6-digit OTP are actually sent. Admin-created users do NOT
- * trigger signup emails — that was the root cause of "no email received".
+ * Client signup: account via Supabase Auth; OTP email via Render SMTP when configured
+ * (Supabase Auth often returns 200 without delivering mail).
  */
+
+import {
+  isSmtpConfigured,
+  issueAndSendSignupEmailOtp,
+  verifyStoredSignupOtp,
+} from './signupEmailOtp.js'
 
 const isPhilippineMobile = (value) => /^09\d{9}$/.test(String(value || '').trim())
 
@@ -70,8 +75,24 @@ const buildClientSignupRoutes = ({
     }
   }
 
-  /** Try every supported path until Supabase accepts one. */
-  const sendSignupVerificationEmail = async (email) => {
+  const sendSignupVerificationEmail = async (email, { userId, fullName } = {}) => {
+    const uid = userId || (await findProfileIdByEmail(email))
+    if (!uid) {
+      throw new Error('Account not found for this Gmail. Please complete sign up again.')
+    }
+
+    if (isSmtpConfigured()) {
+      await issueAndSendSignupEmailOtp({
+        userId: uid,
+        email,
+        fullName: fullName || '',
+        SUPABASE_URL,
+        SUPABASE_SERVICE_ROLE_KEY,
+        getAdminUser,
+      })
+      return
+    }
+
     const failures = []
     const trySend = async (label, fn) => {
       try {
@@ -87,10 +108,10 @@ const buildClientSignupRoutes = ({
 
     if (await trySend('otp', () => sendEmailOtp(email))) return
     if (await trySend('resend-signup', () => resendSignupType(email, 'signup'))) return
-    if (await trySend('resend-email', () => resendSignupType(email, 'email'))) return
 
     throw new Error(
-      failures.join(' | ') || 'Could not send verification email. Check Supabase Auth email settings.',
+      failures.join(' | ') ||
+        'Could not send verification email. Add SMTP_HOST, SMTP_USER, and SMTP_PASS on Render.',
     )
   }
 
@@ -134,13 +155,20 @@ const buildClientSignupRoutes = ({
 
   const markSignupVerified = async (userId) => {
     const existing = await getAdminUser(userId)
+    const prevMeta = existing?.user_metadata || existing?.raw_user_meta_data || {}
+    const {
+      signup_email_otp_hash: _h,
+      signup_email_otp_expires_at: _e,
+      signup_email_otp_sent_at: _s,
+      ...restMeta
+    } = prevMeta
     const response = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
       method: 'PUT',
       headers: serviceAuthHeaders(),
       body: JSON.stringify({
         email_confirm: true,
         user_metadata: {
-          ...(existing?.user_metadata || existing?.raw_user_meta_data || {}),
+          ...restMeta,
           signup_otp_completed: true,
         },
       }),
@@ -315,7 +343,10 @@ const buildClientSignupRoutes = ({
             guardianContact: parsed.guardianContact,
             preferredOtpChannel: parsed.preferredOtpChannel,
           })
-          await sendSignupVerificationEmail(parsed.email)
+          await sendSignupVerificationEmail(parsed.email, {
+            userId: existingId,
+            fullName: parsed.fullName,
+          })
           return { userId: existingId, emailSent: true }
         }
         throw new Error('This Gmail is already registered. Please log in instead.')
@@ -342,7 +373,14 @@ const buildClientSignupRoutes = ({
       preferredOtpChannel: parsed.preferredOtpChannel,
     })
 
-    // Supabase sends the signup confirmation email automatically on public signup.
+    if (isSmtpConfigured()) {
+      await sendSignupVerificationEmail(parsed.email, {
+        userId,
+        fullName: parsed.fullName,
+      })
+      return { userId, emailSent: true }
+    }
+
     return { userId, emailSent: Boolean(authPayload) }
   }
 
@@ -354,7 +392,10 @@ const buildClientSignupRoutes = ({
       const { userId, emailSent } = await registerClientViaPublicSignup(parsed)
 
       if (!emailSent) {
-        await sendSignupVerificationEmail(parsed.email)
+        await sendSignupVerificationEmail(parsed.email, {
+          userId,
+          fullName: parsed.fullName,
+        })
       }
 
       return res.status(201).json({
@@ -380,7 +421,7 @@ const buildClientSignupRoutes = ({
         return res.status(400).json({ error: 'A valid Gmail address is required.' })
       }
       await sendSignupVerificationEmail(email)
-      return res.status(200).json({ success: true })
+      return res.status(200).json({ success: true, channel: isSmtpConfigured() ? 'smtp' : 'supabase' })
     } catch (error) {
       return res.status(400).json({ error: error?.message || 'Failed to resend verification email.' })
     }
@@ -401,11 +442,21 @@ const buildClientSignupRoutes = ({
         return res.status(400).json({ error: 'Please enter the 6-digit verification code.' })
       }
 
-      await verifySignupOtp({ email, token: otp })
-
       const userId = pendingId || (await findProfileIdByEmail(email))
       if (!userId) {
-        throw new Error('Account was verified but user id was not found.')
+        throw new Error('Account not found. Please sign up again.')
+      }
+
+      if (isSmtpConfigured()) {
+        await verifyStoredSignupOtp({
+          userId,
+          email,
+          otp,
+          SUPABASE_SERVICE_ROLE_KEY,
+          getAdminUser,
+        })
+      } else {
+        await verifySignupOtp({ email, token: otp })
       }
 
       await markSignupVerified(userId)
