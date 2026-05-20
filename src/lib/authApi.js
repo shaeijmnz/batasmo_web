@@ -1,5 +1,7 @@
 import { getSupabaseConfigError, supabase } from './supabaseClient'
 import {
+  beginSignupOtpFinishing,
+  endSignupOtpFinishing,
   isSignupVerificationComplete,
   markSignupOtpCompleted,
   signOutIfSignupIncomplete,
@@ -628,12 +630,33 @@ async function ensureSessionAfterOtpVerify({ email, password, verifyData }) {
   throw new Error('Could not start your session after verification. Please sign up again.')
 }
 
+async function markSignupVerifiedOnBackend({ email, pendingId }) {
+  const base = getBackendApiBase()
+  if (!base) return
+
+  const response = await fetch(`${base}/auth/signup-mark-verified`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: normalizeAuthEmail(email),
+      pendingId: pendingId ? String(pendingId).trim() : undefined,
+    }),
+  })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    throw new Error(payload?.error || 'Could not finalize signup on server.')
+  }
+}
+
 export async function verifySignUpOtp({ email, token, password, pendingId }) {
   const normalizedEmail = normalizeAuthEmail(email)
   const normalizedToken = String(token || '').replace(/\D/g, '')
+  const signupPassword = String(password || readSignupResumePassword() || '')
   let lastError = null
   let verifyData = null
 
+  beginSignupOtpFinishing()
+  try {
   for (const type of ['email', 'signup']) {
     const { data, error } = await supabase.auth.verifyOtp({
       email: normalizedEmail,
@@ -671,9 +694,11 @@ export async function verifySignUpOtp({ email, token, password, pendingId }) {
     }
   }
 
+  await markSignupVerifiedOnBackend({ email: normalizedEmail, pendingId })
+
   await ensureSessionAfterOtpVerify({
     email: normalizedEmail,
-    password,
+    password: signupPassword,
     verifyData,
   })
 
@@ -726,6 +751,9 @@ export async function verifySignUpOtp({ email, token, password, pendingId }) {
   }
 
   return { success: true }
+  } finally {
+    endSignupOtpFinishing()
+  }
 }
 
 export async function resendSignUpOtp({ email, pendingId }) {

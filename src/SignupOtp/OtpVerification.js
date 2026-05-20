@@ -45,7 +45,7 @@ const getErrorMessage = (error, fallback) => {
   return fallback;
 };
 
-function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: otpChannelProp = 'email' }) {
+function OtpVerification({ onNavigate, onAuthSuccess, email = '', role = 'Client', otpChannel: otpChannelProp = 'email' }) {
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [timer, setTimer] = useState(59);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -349,17 +349,17 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
       localStorage.removeItem(PENDING_SMS_PHONE_KEY);
       clearOtpResumeSecrets();
 
-      try {
-        const { profile } = await getCurrentSessionProfile();
-        if (profile?.role) {
-          onNavigate(pageFromRole(profile.role));
-          return;
-        }
-      } catch {
-        /* fallback */
+      const { profile } = await getCurrentSessionProfile();
+      if (!profile?.id) {
+        throw new Error('Account verified but profile did not load. Please try logging in once.');
       }
 
-      onNavigate(pageFromRole(pendingRole));
+      if (typeof onAuthSuccess === 'function') {
+        onAuthSuccess(profile);
+        return;
+      }
+
+      onNavigate(pageFromRole(profile?.role || pendingRole));
     } catch (error) {
       setErrorText(getErrorMessage(error, 'Invalid or expired OTP code.'));
     } finally {

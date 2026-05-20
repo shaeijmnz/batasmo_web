@@ -1,5 +1,31 @@
 import { supabase } from './supabaseClient'
 
+export const SIGNUP_OTP_FINISHING_KEY = 'batasmo_signup_otp_finishing'
+
+export function beginSignupOtpFinishing() {
+  try {
+    sessionStorage.setItem(SIGNUP_OTP_FINISHING_KEY, '1')
+  } catch {
+    /* ignore */
+  }
+}
+
+export function endSignupOtpFinishing() {
+  try {
+    sessionStorage.removeItem(SIGNUP_OTP_FINISHING_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+export function isSignupOtpFinishing() {
+  try {
+    return sessionStorage.getItem(SIGNUP_OTP_FINISHING_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
 /**
  * Client signups must complete email/SMS OTP before dashboard access.
  * - signup_otp_completed === true  → verified
@@ -16,7 +42,10 @@ export function isSignupVerificationComplete(user) {
 
   const meta = user.user_metadata || {}
   if (meta.signup_otp_completed === true) return true
-  if (meta.signup_otp_completed === false) return false
+  if (meta.signup_otp_completed === false) {
+    if (user.email_confirmed_at) return true
+    return false
+  }
 
   const pendingEmail = String(
     typeof localStorage !== 'undefined' ? localStorage.getItem('batasmo_pending_otp_email') : '',

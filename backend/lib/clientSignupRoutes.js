@@ -379,6 +379,28 @@ const buildClientSignupRoutes = ({
     }
   })
 
+  app.post('/auth/signup-mark-verified', async (req, res) => {
+    try {
+      requireSupabaseServiceConfig()
+      const email = String(req.body?.email || '').trim().toLowerCase()
+      const pendingId = String(req.body?.pendingId || '').trim()
+
+      if (!isGmailAddress(email)) {
+        return res.status(400).json({ error: 'A valid Gmail address is required.' })
+      }
+
+      const userId = pendingId || (await findProfileIdByEmail(email))
+      if (!userId) {
+        return res.status(404).json({ error: 'Account not found.' })
+      }
+
+      await markSignupVerified(userId)
+      return res.status(200).json({ success: true, userId })
+    } catch (error) {
+      return res.status(400).json({ error: error?.message || 'Could not mark account verified.' })
+    }
+  })
+
   app.post('/auth/signup-complete', async (req, res) => {
     try {
       requireSupabaseServiceConfig()

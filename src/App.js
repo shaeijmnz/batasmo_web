@@ -9,7 +9,11 @@ import {
   signOutUser,
   subscribeToAppConfigChanges,
 } from './lib/userApi';
-import { isSignupVerificationComplete, signOutIfSignupIncomplete } from './lib/signupVerification';
+import {
+  isSignupVerificationComplete,
+  isSignupOtpFinishing,
+  signOutIfSignupIncomplete,
+} from './lib/signupVerification';
 
 /* ── LandingPage ── */
 import LandingPage from './LandingPage/LandingPage';
@@ -296,6 +300,9 @@ function App() {
             clearTransientAuthState({ includeRecovery: true });
             setCurrentProfile(null);
           } else if (!isSignupVerificationComplete(session.user)) {
+            if (isSignupOtpFinishing()) {
+              return;
+            }
             const pendingEmail =
               localStorage.getItem(PENDING_OTP_EMAIL_KEY) || session.user.email || '';
             if (pendingEmail) {
@@ -358,6 +365,9 @@ function App() {
         }
 
         if (!isSignupVerificationComplete(session.user)) {
+          if (isSignupOtpFinishing()) {
+            return;
+          }
           const pendingEmail =
             localStorage.getItem('batasmo_pending_otp_email') || session.user.email || '';
           if (pendingEmail) {
@@ -664,6 +674,7 @@ function App() {
   if (page === 'otp') return (
     <OtpVerification
       onNavigate={handleNavigate}
+      onAuthSuccess={handleAuthSuccess}
       email={signupContext.email}
       role={signupContext.role}
       otpChannel={signupContext.otpChannel}
