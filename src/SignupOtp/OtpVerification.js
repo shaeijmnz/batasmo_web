@@ -299,7 +299,7 @@ function OtpVerification({ onNavigate, email = '', role = 'Client', otpChannel: 
         return;
       }
 
-      const useBackendPending = Boolean(pendingSignupId && getBackendApiBase())
+      const useBackendPending = Boolean(getBackendApiBase() && pendingSignupId)
 
       if (useBackendPending) {
         await completePendingSignup({

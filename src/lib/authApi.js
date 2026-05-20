@@ -72,24 +72,37 @@ async function signUpWithSupabaseOtp({
   guardianContact,
   otpChannel,
 }) {
-  const { data, error } = await supabase.auth.signUp({
-    email: normalizedEmail,
-    password,
-    options: {
-      data: {
-        full_name: fullName,
-        role: normalizedRole,
-        signup_otp_completed: false,
+  const configError = getSupabaseConfigError()
+  if (configError) {
+    throw new Error(configError)
+  }
+
+  let data
+  let error
+  try {
+    const result = await supabase.auth.signUp({
+      email: normalizedEmail,
+      password,
+      options: {
+        data: {
+          full_name: fullName,
+          role: normalizedRole,
+          signup_otp_completed: false,
+        },
       },
-    },
-  })
+    })
+    data = result.data
+    error = result.error
+  } catch (networkError) {
+    throw new Error(normalizeAuthNetworkError(networkError))
+  }
 
   if (error) {
     const msg = String(error.message || '')
     if (msg.toLowerCase().includes('already registered') || msg.toLowerCase().includes('already been registered')) {
       throw new Error('This Gmail is already registered. Please log in instead.')
     }
-    throw new Error(msg || 'Could not create account. Please try again.')
+    throw new Error(normalizeAuthNetworkError(error, msg || 'Could not create account. Please try again.'))
   }
 
   if (data?.user && (!data.user.identities || data.user.identities.length === 0)) {
@@ -138,21 +151,13 @@ async function signUpWithSupabaseOtp({
     }
   }
 
-  // Never keep a session before OTP — even when Supabase auto-confirms email.
-  await supabase.auth.signOut()
-
-  if (otpChannel === 'email' && normalizedEmail) {
-    const { error: resendError } = await supabase.auth.resend({
-      type: 'signup',
-      email: normalizedEmail,
-    })
-    if (resendError) {
-      const resendMsg = String(resendError.message || '')
-      if (resendMsg.toLowerCase().includes('rate limit')) {
-        throw new Error('Too many code requests. Wait a minute and try again, or check your spam folder for an earlier code.')
-      }
-      console.warn('[signup] resend signup OTP email failed', resendMsg)
+  try {
+    const { data: sessionData } = await supabase.auth.getSession()
+    if (sessionData?.session) {
+      await supabase.auth.signOut()
     }
+  } catch (signOutError) {
+    console.warn('[signup] signOut after signup', signOutError?.message || signOutError)
   }
 
   return {
@@ -167,6 +172,14 @@ const normalizeRole = (role) => {
   if (value === 'admin') return 'Admin'
   if (value === 'attorney') return 'Attorney'
   return 'Client'
+}
+
+const normalizeAuthNetworkError = (error, fallback = 'Could not reach the server. Check your connection and try again.') => {
+  const msg = String(error?.message || error || '').trim()
+  if (!msg || msg === 'Load failed' || msg === 'Failed to fetch' || msg.includes('NetworkError')) {
+    return fallback
+  }
+  return msg
 }
 
 export async function checkEmailLockout(email) {
@@ -246,10 +259,9 @@ export async function signUpWithEmail({
     preferredOtpChannel: otpChannel,
   }
 
-  const useBackendSignup = process.env.REACT_APP_USE_BACKEND_SIGNUP === 'true'
   const base = getBackendApiBase()
 
-  if (useBackendSignup && base) {
+  if (base) {
     try {
       const response = await fetch(`${base}/auth/signup-start`, {
         method: 'POST',
@@ -265,9 +277,18 @@ export async function signUpWithEmail({
           preferredOtpChannel: payload?.preferredOtpChannel || otpChannel,
         }
       }
-      console.warn('[signup] backend signup-start skipped', response.status, payload?.error || '')
+
+      const backendMsg = String(payload?.error || '').trim()
+      if (backendMsg && response.status !== 404) {
+        throw new Error(normalizeAuthNetworkError({ message: backendMsg }, backendMsg))
+      }
+      console.warn('[signup] backend signup-start unavailable, using Supabase OTP flow')
     } catch (backendError) {
-      console.warn('[signup] backend signup-start failed, using Supabase OTP', backendError?.message || backendError)
+      const msg = String(backendError?.message || '')
+      if (msg && !msg.includes('Load failed') && !msg.includes('Failed to fetch')) {
+        throw backendError
+      }
+      console.warn('[signup] backend signup-start failed, using Supabase OTP flow', msg)
     }
   }
 
@@ -300,21 +321,21 @@ export async function sendSignupVerificationEmail({ email, pendingId }) {
   if (!normalizedEmail && !pendingId) throw new Error('Email is required.')
 
   const base = getBackendApiBase()
-  if (base && pendingId) {
-    const body = {}
-    if (normalizedEmail) body.email = normalizedEmail
-    body.pendingId = String(pendingId).trim()
-
-    const response = await fetch(`${base}/auth/signup-resend-otp`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    const payload = await response.json().catch(() => ({}))
-    if (response.ok) {
-      return payload
+  if (base && normalizedEmail) {
+    try {
+      const response = await fetch(`${base}/auth/signup-resend-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: normalizedEmail, pendingId: pendingId || undefined }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (response.ok) {
+        return payload
+      }
+      console.warn('[signup] backend resend failed, falling back to Supabase email OTP', payload?.error || '')
+    } catch (backendError) {
+      console.warn('[signup] backend resend error, falling back to Supabase', backendError?.message || backendError)
     }
-    console.warn('[signup] backend resend failed, falling back to Supabase email OTP')
   }
 
   if (!normalizedEmail) {
@@ -587,6 +608,31 @@ export async function verifySignUpOtp({ email, token }) {
           },
           { onConflict: 'user_id' },
         )
+    }
+
+    try {
+      const resumeRaw = sessionStorage.getItem(OTP_RESUME_SIGNUP_KEY)
+      if (resumeRaw) {
+        const resume = JSON.parse(resumeRaw)
+        await supabase.from('profiles').upsert(
+          {
+            id: user.id,
+            email: user.email || resume.email,
+            full_name: resume.fullName || user.user_metadata?.full_name || '',
+            role: 'Client',
+            sex: resume.sex || null,
+            phone: resume.phone || null,
+            age: resume.age ?? null,
+            address: resume.address || null,
+            guardian_name: resume.guardianName || null,
+            guardian_contact: resume.guardianContact || null,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'id' },
+        )
+      }
+    } catch (profileError) {
+      console.warn('[signup] post-verify profile upsert failed', profileError)
     }
   }
 

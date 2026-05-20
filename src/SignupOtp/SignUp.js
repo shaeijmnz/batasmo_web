@@ -225,7 +225,17 @@ function SignUp({ onNavigate, onEmailChange }) {
       try {
         sessionStorage.setItem(
           OTP_RESUME_SIGNUP_KEY,
-          JSON.stringify({ email: normalizedEmail, password: form.password }),
+          JSON.stringify({
+            email: normalizedEmail,
+            password: form.password,
+            fullName: form.fullName.trim(),
+            phone: form.contact.trim(),
+            age: parsedAge,
+            address: form.address.trim(),
+            sex: form.sex,
+            guardianName: parsedAge < 18 ? form.guardianName.trim() : '',
+            guardianContact: parsedAge < 18 ? form.guardianContact.trim() : '',
+          }),
         );
       } catch {
         /* ignore */

@@ -9,6 +9,7 @@ import {
   isDiditApiKeyConfigured,
   isDiditSessionConfigured,
 } from './lib/didit/diditRoutes.js'
+import buildClientSignupRoutes from './lib/clientSignupRoutes.js'
 
 dotenv.config()
 
@@ -16,6 +17,15 @@ const app = express()
 const PORT = process.env.PORT || 4000
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || 'http://localhost:3000'
 const ALLOWED_ORIGIN_BASE = String(ALLOWED_ORIGIN).trim().replace(/\/+$/, '')
+const CORS_ALLOWED_ORIGINS = [
+  ALLOWED_ORIGIN_BASE,
+  'https://batasmo-web.vercel.app',
+  'http://localhost:3000',
+  ...String(process.env.ALLOWED_ORIGINS_EXTRA || '')
+    .split(',')
+    .map((value) => value.trim().replace(/\/+$/, ''))
+    .filter(Boolean),
+].filter((value, index, list) => value && list.indexOf(value) === index)
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').trim()
 const SUPABASE_SERVICE_ROLE_KEY = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
@@ -490,9 +500,15 @@ const runFreeAssistant = async (message) => {
 
 app.use(
   cors({
-    origin: ALLOWED_ORIGIN,
+    origin(origin, callback) {
+      if (!origin || CORS_ALLOWED_ORIGINS.includes(String(origin).replace(/\/+$/, ''))) {
+        callback(null, true)
+        return
+      }
+      callback(null, CORS_ALLOWED_ORIGINS[0] || true)
+    },
     credentials: true,
-  })
+  }),
 )
 
 app.use(express.json({ limit: '10mb' }))
@@ -2686,6 +2702,17 @@ app.post('/verify-identity', async (req, res) => {
     console.error('[verify-identity] error:', err)
     return res.status(500).json({ error: err.message })
   }
+})
+
+buildClientSignupRoutes({
+  app,
+  requireSupabaseServiceConfig,
+  supabaseRestHeaders,
+  supabaseSelectSingle,
+  isGmailAddress,
+  isStrongAccountPassword,
+  SUPABASE_URL,
+  SUPABASE_SERVICE_ROLE_KEY,
 })
 
 app.get('/health', (req, res) => {
