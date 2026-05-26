@@ -959,6 +959,186 @@
   transform: translateY(-1px);
 }
 
+/* Client availability calendar (replaces native date picker) */
+.ba-cal {
+  background: var(--ui-bg-card, #fff);
+  border: 1px solid var(--ui-border, #e2e8f0);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.ba-cal__head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.ba-cal__title {
+  color: var(--ui-text-primary, #152238);
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.ba-cal__nav {
+  align-items: center;
+  background: var(--ui-accent, #152238);
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 1.25rem;
+  font-weight: 800;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.ba-cal__nav:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.ba-cal__weekdays,
+.ba-cal__grid {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.ba-cal__weekdays span {
+  color: var(--ui-text-muted, #64748b);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.ba-cal__day {
+  align-items: center;
+  aspect-ratio: 1;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  color: var(--ui-text-primary, #1b2432);
+  cursor: default;
+  display: flex;
+  flex-direction: column;
+  font-size: 0.82rem;
+  font-weight: 700;
+  justify-content: center;
+  min-height: 40px;
+  padding: 4px 2px;
+  position: relative;
+}
+
+.ba-cal__day--blank {
+  background: transparent;
+  border: none;
+}
+
+.ba-cal__day--past,
+.ba-cal__day--no_schedule {
+  color: #94a3b8;
+  opacity: 0.65;
+}
+
+.ba-cal__day--fully_booked {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+.ba-cal__day--available {
+  background: #f0fdf4;
+  border-color: #86efac;
+  cursor: pointer;
+}
+
+.ba-cal__day--available:hover:not(:disabled) {
+  border-color: var(--ui-accent, #152238);
+  box-shadow: 0 0 0 2px rgba(21, 34, 56, 0.12);
+}
+
+.ba-cal__day--selected {
+  background: var(--ui-accent, #152238);
+  border-color: var(--ui-accent, #152238);
+  color: #fff;
+}
+
+.ba-cal__day--selected .ba-cal__dot--open {
+  background: #fff;
+}
+
+.ba-cal__day--today:not(.ba-cal__day--selected) {
+  box-shadow: 0 0 0 2px rgba(212, 160, 23, 0.35);
+}
+
+.ba-cal__day-num {
+  line-height: 1.1;
+}
+
+.ba-cal__dot {
+  border-radius: 999px;
+  display: inline-block;
+  height: 6px;
+  margin-top: 3px;
+  width: 6px;
+}
+
+.ba-cal__dot--open {
+  background: #16a34a;
+}
+
+.ba-cal__dot--full {
+  background: #dc2626;
+}
+
+.ba-cal__legend {
+  color: var(--ui-text-muted, #64748b);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+  gap: 12px;
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.ba-cal__legend li {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
+
+.ba-cal__legend-muted {
+  color: #94a3b8;
+  font-weight: 700;
+}
+
+.ba-cal__hint,
+.ba-cal__selected {
+  font-size: 0.82rem;
+  line-height: 1.4;
+  margin: 10px 0 0;
+}
+
+.ba-cal__hint {
+  color: var(--ui-text-muted, #64748b);
+}
+
+.ba-cal__selected {
+  color: var(--ui-accent, #152238);
+  font-weight: 700;
+}
+
+.ba-cal__error {
+  color: #dc2626;
+  font-size: 0.82rem;
+  margin: 8px 0 0;
+}
+
 /* Double Booking Confirmation */
 .ba-double-booking-overlay {
   position: fixed;
@@ -1425,6 +1605,10 @@
     padding: 20px 16px 16px;
   }
   
+  .ba-cal__grid {
+    gap: 4px;
+  }
+
   .ba-header h1 {
     font-size: 1.5rem;
   }

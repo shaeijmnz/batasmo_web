@@ -9,6 +9,7 @@ import {
   getConsultationBranchesForAttorney,
   parseConsultationBranchFromTitle,
 } from './consultationBranches'
+import { getTodayDateKey, toDateKey } from './availabilityScheduleUtils'
 
 const isMissingRelationError = (error) =>
   error?.code === '42P01' || String(error?.message || '').toLowerCase().includes('does not exist')
@@ -5796,6 +5797,71 @@ export async function rescheduleAttorneyAppointment({ appointmentId, scheduledAt
   if (existingAppointment.attorney_id && nextSlot?.date) {
     invalidateAvailabilityCache(existingAppointment.attorney_id, nextSlot.date)
   }
+}
+
+// ============================================================================
+// BOOKING FLOW - Client calendar: open vs fully booked days per month
+// ============================================================================
+
+/**
+ * Returns a map of dateKey -> { open, booked, total } for the visible month.
+ * Uses RPC when deployed; falls back to unbooked slots only (no "fully booked" days).
+ */
+export async function fetchClientAttorneyAvailabilityCalendar(attorneyId, monthCursor) {
+  if (!attorneyId || !monthCursor) return {}
+
+  const year = monthCursor.getFullYear()
+  const month = monthCursor.getMonth()
+  const monthStart = toDateKey(new Date(year, month, 1))
+  const monthEnd = toDateKey(new Date(year, month + 1, 0))
+  const today = getTodayDateKey()
+  const fromDate = monthStart < today ? today : monthStart
+
+  if (fromDate > monthEnd) return {}
+
+  const { data, error } = await supabase.rpc('get_attorney_availability_by_day', {
+    p_attorney_id: attorneyId,
+    p_from_date: fromDate,
+    p_to_date: monthEnd,
+  })
+
+  const isMissingRpc =
+    error?.code === '42883' ||
+    String(error?.message || '').toLowerCase().includes('does not exist')
+
+  if (!error && Array.isArray(data)) {
+    return data.reduce((acc, row) => {
+      const key = String(row.slot_date || '').slice(0, 10)
+      if (!key) return acc
+      acc[key] = {
+        open: Number(row.open_count) || 0,
+        booked: Number(row.booked_count) || 0,
+        total: Number(row.total_count) || 0,
+      }
+      return acc
+    }, {})
+  }
+
+  if (!isMissingRpc && error) throw error
+
+  const slots = await getAvailability(attorneyId, null, { force: true })
+  const byDate = {}
+  ;(slots || []).forEach((slot) => {
+    const key = String(slot.date || '').trim()
+    if (!key || key < fromDate || key > monthEnd) return
+    if (!byDate[key]) byDate[key] = { open: 0, booked: 0, total: 0 }
+    byDate[key].open += 1
+    byDate[key].total += 1
+  })
+  return byDate
+}
+
+export const getClientDayAvailabilityStatus = (dateKey, summary, todayKey = getTodayDateKey()) => {
+  if (!dateKey || dateKey < todayKey) return 'past'
+  const row = summary?.[dateKey]
+  if (!row || row.total <= 0) return 'no_schedule'
+  if (row.open > 0) return 'available'
+  return 'fully_booked'
 }
 
 // ============================================================================

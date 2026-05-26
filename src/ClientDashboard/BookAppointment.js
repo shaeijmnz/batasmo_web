@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import './BookAppointment.css';
 import './ClientTheme.css';
+import ClientAvailabilityCalendar from './ClientAvailabilityCalendar';
 import {
   abandonAppointmentCheckout,
   cancelPendingUnpaidBooking,
@@ -170,6 +171,7 @@ function BookAppointment({ onNavigate, profile }) {
   const [paymentMethod, setPaymentMethod] = useState('QRPh');
   const [isPaying, setIsPaying] = useState(false);
   const [confirmedSlot, setConfirmedSlot] = useState(null);
+  const [calendarRefreshKey, setCalendarRefreshKey] = useState(0);
   const [loadError, setLoadError] = useState('');
   const [submitError, setSubmitError] = useState('');
   const pendingTimeoutsRef = useRef([]);
@@ -254,6 +256,7 @@ function BookAppointment({ onNavigate, profile }) {
         const { visibleTimes, hiddenPastCount } = mapFutureTimeStrings(updatedSlots, selectedDate);
         setAvailableSlots(visibleTimes);
         setHiddenPastSlotsCount(hiddenPastCount);
+        setCalendarRefreshKey((k) => k + 1);
       } catch {
         // Keep the current UI state if realtime slot refresh fails.
       } finally {
@@ -335,15 +338,18 @@ function BookAppointment({ onNavigate, profile }) {
     }
   }, [bookingAttorney]);
 
-  const handleDateChange = useCallback(async (e) => {
-    const date = e.target.value;
-    setSelectedDate(date);
-    setSelectedTime('');
-    setAvailableSlots([]);
-    setHiddenPastSlotsCount(0);
-    if (!date || !bookingAttorney) return;
-    await reloadAvailableSlots(date);
-  }, [bookingAttorney, reloadAvailableSlots]);
+  const handleCalendarSelectDate = useCallback(
+    async (date) => {
+      setSelectedDate(date);
+      setSelectedTime('');
+      setAvailableSlots([]);
+      setHiddenPastSlotsCount(0);
+      setSubmitError('');
+      if (!date || !bookingAttorney) return;
+      await reloadAvailableSlots(date);
+    },
+    [bookingAttorney, reloadAvailableSlots],
+  );
 
   const buildScheduledIso = (dateStr, timeStr) => {
     const [time, meridiemRaw] = String(timeStr || '').split(' ');
@@ -608,7 +614,7 @@ function BookAppointment({ onNavigate, profile }) {
         {loadError ? <p>{loadError}</p> : null}
         <div className="ba-header">
           <h1>Book an Appointment</h1>
-          <p>Select an attorney and book from their available time slots.</p>
+          <p>Select an attorney, pick an open date on their calendar, then choose a time slot.</p>
         </div>
 
         {attorneysLoading ? (
@@ -732,16 +738,15 @@ function BookAppointment({ onNavigate, profile }) {
                 {/* Step 1: Select Date & Time & Reason */}
                 <div className="ba-form-group">
                   <label className="ba-form-label">Select Date</label>
-                  <input
-                    type="date"
-                    className="ba-form-input"
-                    value={selectedDate}
-                    onChange={handleDateChange}
-                    min={new Date().toISOString().split('T')[0]}
+                  <ClientAvailabilityCalendar
+                    key={`${bookingAttorney.id}-${calendarRefreshKey}`}
+                    attorneyId={bookingAttorney.id}
+                    selectedDate={selectedDate}
+                    onSelectDate={handleCalendarSelectDate}
                   />
                 </div>
 
-                {selectedDate && bookingStep === 1 && (
+                {selectedDate && bookingStep === 1 ? (
                   <>
                     <div className="ba-form-group">
                       <label className="ba-form-label">Available Time Slots</label>
@@ -857,7 +862,7 @@ function BookAppointment({ onNavigate, profile }) {
                       <button className="ba-booking-btn ba-booking-btn--cancel" onClick={closeBooking}>Cancel</button>
                     </div>
                   </>
-                )}
+                ) : null}
 
                 {bookingStep === 2 && (
                   <>
