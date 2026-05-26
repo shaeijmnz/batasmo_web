@@ -71,25 +71,17 @@ const getErrorMessage = (error, fallback) => {
 function SignUp({ onNavigate, onEmailChange }) {
   const [form, setForm] = useState({
     fullName: '',
-    sex: 'male',
     email: '',
     contact: '',
     password: '',
     confirmPassword: '',
-    age: '',
-    address: '',
-    guardianName: '',
-    guardianContact: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState({});
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [hasInvalidPhoneInput, setHasInvalidPhoneInput] = useState({
-    contact: false,
-    guardianContact: false,
-  });
+  const [hasInvalidPhoneInput, setHasInvalidPhoneInput] = useState(false);
 
   const validateForm = (values) => {
     const nextErrors = {};
@@ -107,11 +99,7 @@ function SignUp({ onNavigate, onEmailChange }) {
       nextErrors.email = GMAIL_REQUIRED_MESSAGE;
     }
 
-    if (values.sex !== 'male' && values.sex !== 'female' && values.sex !== 'others') {
-      nextErrors.sex = 'Please select your gender.';
-    }
-
-    if (hasInvalidPhoneInput.contact) {
+    if (hasInvalidPhoneInput) {
       nextErrors.contact = NUMBERS_ONLY_MESSAGE;
     } else if (!isPhilippineMobile(values.contact)) {
       nextErrors.contact = PH_MOBILE_REQUIRED_MESSAGE;
@@ -129,26 +117,6 @@ function SignUp({ onNavigate, onEmailChange }) {
       nextErrors.confirmPassword = 'Passwords do not match.';
     }
 
-    const parsedAge = Number(values.age);
-    if (!values.age.trim() || !Number.isFinite(parsedAge) || parsedAge < 1 || parsedAge > 120) {
-      nextErrors.age = 'Please enter a valid age (1–120).';
-    }
-
-    if (!values.address.trim()) {
-      nextErrors.address = 'Address is required.';
-    }
-
-    if (parsedAge > 0 && parsedAge < 18) {
-      if (!values.guardianName.trim()) {
-        nextErrors.guardianName = 'Guardian name is required for minors.';
-      }
-      if (hasInvalidPhoneInput.guardianContact) {
-        nextErrors.guardianContact = NUMBERS_ONLY_MESSAGE;
-      } else if (!isPhilippineMobile(values.guardianContact)) {
-        nextErrors.guardianContact = 'Please enter a valid 11-digit guardian mobile number (09XXXXXXXXX).';
-      }
-    }
-
     if (!agreedToTerms) {
       nextErrors.agreedToTerms = 'Please read and accept the Terms and Conditions to continue.';
     }
@@ -158,13 +126,13 @@ function SignUp({ onNavigate, onEmailChange }) {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    if (name === 'contact' || name === 'guardianContact') {
+    if (name === 'contact') {
       const hasNonDigitCharacters = /[^0-9]/.test(String(value || ''));
-      setForm({ ...form, [name]: sanitizePhoneInput(value) });
-      setHasInvalidPhoneInput((prev) => ({ ...prev, [name]: hasNonDigitCharacters }));
+      setForm({ ...form, contact: sanitizePhoneInput(value) });
+      setHasInvalidPhoneInput(hasNonDigitCharacters);
       setErrors((prev) => ({
         ...prev,
-        [name]: hasNonDigitCharacters ? NUMBERS_ONLY_MESSAGE : '',
+        contact: hasNonDigitCharacters ? NUMBERS_ONLY_MESSAGE : '',
       }));
       return;
     }
@@ -181,8 +149,6 @@ function SignUp({ onNavigate, onEmailChange }) {
       return;
     }
 
-    const parsedAge = Number(form.age);
-
     setIsSubmitting(true);
     setErrors({});
 
@@ -193,12 +159,7 @@ function SignUp({ onNavigate, onEmailChange }) {
         password: form.password,
         fullName: form.fullName.trim(),
         role: 'Client',
-        sex: form.sex,
         phone: form.contact.trim(),
-        age: parsedAge,
-        address: form.address.trim(),
-        guardianName: parsedAge < 18 ? form.guardianName.trim() : null,
-        guardianContact: parsedAge < 18 ? form.guardianContact.trim() : null,
         preferredOtpChannel: 'email',
       });
 
@@ -223,11 +184,6 @@ function SignUp({ onNavigate, onEmailChange }) {
             password: form.password,
             fullName: form.fullName.trim(),
             phone: form.contact.trim(),
-            age: parsedAge,
-            address: form.address.trim(),
-            sex: form.sex,
-            guardianName: parsedAge < 18 ? form.guardianName.trim() : '',
-            guardianContact: parsedAge < 18 ? form.guardianContact.trim() : '',
           }),
         );
       } catch {
@@ -297,23 +253,6 @@ function SignUp({ onNavigate, onEmailChange }) {
 
             <div className="su-input-group su-grid-2">
               <div>
-                <label>Gender</label>
-                <div className="su-input-wrap">
-                  <PersonIcon />
-                  <select
-                    name="sex"
-                    value={form.sex}
-                    onChange={handleChange}
-                  >
-                    <option value="male">Male</option>
-                    <option value="female">Female</option>
-                    <option value="others">Others</option>
-                  </select>
-                </div>
-                {errors.sex ? <p className="su-error-text">{errors.sex}</p> : null}
-              </div>
-
-              <div>
                 <label>Email Address</label>
                 <div className="su-input-wrap">
                   <MailIcon />
@@ -343,73 +282,6 @@ function SignUp({ onNavigate, onEmailChange }) {
                 {errors.contact ? <p className="su-error-text">{errors.contact}</p> : null}
               </div>
             </div>
-
-            <div className="su-input-group su-grid-2">
-              <div>
-                <label>Age</label>
-                <div className="su-input-wrap">
-                  <PersonIcon />
-                  <input
-                    type="number"
-                    name="age"
-                    placeholder=""
-                    min="1"
-                    value={form.age}
-                    onChange={handleChange}
-                  />
-                </div>
-                {errors.age ? <p className="su-error-text">{errors.age}</p> : null}
-              </div>
-
-              <div>
-                <label>Address</label>
-                <div className="su-input-wrap">
-                  <PersonIcon />
-                  <input
-                    type="text"
-                    name="address"
-                    placeholder=""
-                    value={form.address}
-                    onChange={handleChange}
-                  />
-                </div>
-                {errors.address ? <p className="su-error-text">{errors.address}</p> : null}
-              </div>
-            </div>
-
-            {Number(form.age) > 0 && Number(form.age) < 18 ? (
-              <div className="su-input-group su-grid-2">
-                <div>
-                  <label>Guardian Full Name</label>
-                  <div className="su-input-wrap">
-                    <PersonIcon />
-                    <input
-                      type="text"
-                      name="guardianName"
-                      placeholder=""
-                      value={form.guardianName}
-                      onChange={handleChange}
-                    />
-                  </div>
-                  {errors.guardianName ? <p className="su-error-text">{errors.guardianName}</p> : null}
-                </div>
-
-                <div>
-                  <label>Guardian Contact Number</label>
-                  <div className="su-input-wrap">
-                    <PhoneIcon />
-                    <input
-                      type="tel"
-                      name="guardianContact"
-                      placeholder=""
-                      value={form.guardianContact}
-                      onChange={handleChange}
-                    />
-                  </div>
-                  {errors.guardianContact ? <p className="su-error-text">{errors.guardianContact}</p> : null}
-                </div>
-              </div>
-            ) : null}
 
             <div className="su-input-group su-grid-2">
               <div>

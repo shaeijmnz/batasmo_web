@@ -202,16 +202,7 @@ const buildClientSignupRoutes = ({
     const password = String(body?.password || '')
     const fullName = String(body?.fullName || '').trim()
     const phone = String(body?.phone || '').trim()
-    const address = String(body?.address || '').trim()
-    const parsedAge = Number(body?.age)
-    const guardianName = String(body?.guardianName || '').trim()
-    const guardianContact = String(body?.guardianContact || '').trim()
     const preferredOtpChannel = body?.preferredOtpChannel === 'sms' ? 'sms' : 'email'
-    const normalizedSex = String(body?.sex || '').trim().toLowerCase()
-    const sex =
-      normalizedSex === 'male' || normalizedSex === 'female' || normalizedSex === 'others'
-        ? normalizedSex
-        : null
 
     if (!isGmailAddress(email)) {
       throw new Error('A valid Gmail address ending with @gmail.com is required.')
@@ -227,32 +218,18 @@ const buildClientSignupRoutes = ({
     if (!isPhilippineMobile(phone)) {
       throw new Error('Please enter a valid 11-digit mobile number (09XXXXXXXXX).')
     }
-    if (!address) {
-      throw new Error('Address is required.')
-    }
-    if (!Number.isFinite(parsedAge) || parsedAge < 1) {
-      throw new Error('Please enter a valid age.')
-    }
-    if (parsedAge < 18) {
-      if (!guardianName) {
-        throw new Error('Guardian name is required for minors.')
-      }
-      if (!isPhilippineMobile(guardianContact)) {
-        throw new Error('Please enter a valid 11-digit guardian mobile number (09XXXXXXXXX).')
-      }
-    }
 
     return {
       email,
       password,
       fullName,
       phone,
-      address,
-      parsedAge,
-      guardianName: parsedAge < 18 ? guardianName : null,
-      guardianContact: parsedAge < 18 ? guardianContact : null,
       preferredOtpChannel,
-      sex,
+      sex: null,
+      parsedAge: null,
+      address: null,
+      guardianName: null,
+      guardianContact: null,
     }
   }
 

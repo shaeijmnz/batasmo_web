@@ -37,24 +37,14 @@ const signupProfilePayload = ({
   normalizedEmail,
   fullName,
   normalizedRole,
-  safeSex,
   phone,
-  parsedAge,
-  address,
-  guardianName,
-  guardianContact,
   otpChannel,
 }) => ({
   id: userId,
   email: normalizedEmail,
   full_name: fullName,
   role: normalizedRole,
-  sex: safeSex,
   phone: phone || null,
-  age: parsedAge,
-  address: address || null,
-  guardian_name: guardianName || null,
-  guardian_contact: guardianContact || null,
   preferred_otp_channel: otpChannel,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
@@ -65,12 +55,7 @@ async function signUpWithSupabaseOtp({
   password,
   fullName,
   normalizedRole,
-  safeSex,
   phone,
-  parsedAge,
-  address,
-  guardianName,
-  guardianContact,
   otpChannel,
 }) {
   const configError = getSupabaseConfigError()
@@ -119,12 +104,7 @@ async function signUpWithSupabaseOtp({
           normalizedEmail,
           fullName,
           normalizedRole,
-          safeSex,
           phone,
-          parsedAge,
-          address,
-          guardianName,
-          guardianContact,
           otpChannel,
         }),
         { onConflict: 'id' },
@@ -200,12 +180,7 @@ export async function signUpWithEmail({
   password,
   fullName,
   role,
-  sex,
   phone,
-  age,
-  address,
-  guardianName,
-  guardianContact,
   preferredOtpChannel = 'email',
 }) {
   const normalizedEmail = normalizeAuthEmail(email)
@@ -224,39 +199,13 @@ export async function signUpWithEmail({
   if (!isStrongPassword(password)) {
     throw new Error(VALID_PASSWORD_MESSAGE)
   }
-  const parsedAge = Number(age)
-  if (!Number.isFinite(parsedAge) || parsedAge < 1) {
-    throw new Error('Please enter a valid age.')
-  }
-  if (!String(address || '').trim()) {
-    throw new Error('Address is required.')
-  }
-  if (parsedAge < 18) {
-    if (!String(guardianName || '').trim()) {
-      throw new Error('Guardian name is required for minors.')
-    }
-    if (!isPhilippineMobile(guardianContact)) {
-      throw new Error('Please enter a valid 11-digit guardian mobile number (09XXXXXXXXX).')
-    }
-  }
-
-  const normalizedSex = String(sex || '').trim().toLowerCase()
-  const safeSex =
-    normalizedSex === 'male' || normalizedSex === 'female' || normalizedSex === 'others'
-      ? normalizedSex
-      : null
 
   const signupBody = {
     email: normalizedEmail,
     password,
     fullName,
     role: normalizedRole,
-    sex: safeSex,
     phone: phone || null,
-    age: parsedAge,
-    address: address || null,
-    guardianName: guardianName || null,
-    guardianContact: guardianContact || null,
     preferredOtpChannel: otpChannel,
   }
 
@@ -298,12 +247,7 @@ export async function signUpWithEmail({
     password,
     fullName,
     normalizedRole,
-    safeSex,
     phone,
-    parsedAge,
-    address,
-    guardianName,
-    guardianContact,
     otpChannel,
   })
 
@@ -648,10 +592,10 @@ async function loadClientProfileForSession(session) {
       full_name: resume?.fullName || user.user_metadata?.full_name || '',
       role: normalizeRole(user.user_metadata?.role || 'Client'),
       phone: resume?.phone || null,
-      address: resume?.address || null,
-      age: resume?.age ?? null,
-      guardian_name: resume?.guardianName || null,
-      guardian_contact: resume?.guardianContact || null,
+      address: null,
+      age: null,
+      guardian_name: null,
+      guardian_contact: null,
       guardian_details: '',
     }
   )
@@ -752,12 +696,7 @@ export async function verifySignUpOtp({ email, token, password, pendingId }) {
             email: user.email || resume.email,
             full_name: resume.fullName || user.user_metadata?.full_name || '',
             role: 'Client',
-            sex: resume.sex || null,
             phone: resume.phone || null,
-            age: resume.age ?? null,
-            address: resume.address || null,
-            guardian_name: resume.guardianName || null,
-            guardian_contact: resume.guardianContact || null,
             updated_at: new Date().toISOString(),
           },
           { onConflict: 'id' },
