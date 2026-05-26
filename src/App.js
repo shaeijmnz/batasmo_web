@@ -265,8 +265,8 @@ function App() {
   }, [])
 
   useEffect(() => {
-    // Warm the admin-controlled feature flags cache (prevent_double_booking,
-    // enforce_schedule_window) and keep it in sync when the admin toggles.
+    // Warm the admin-controlled feature flags cache (enforce_schedule_window)
+    // and keep it in sync when the admin toggles.
     // The realtime channel is module-scoped so it lives for the whole
     // page lifetime; we do not tear it down on unmount.
     ensureAppConfigLoaded();

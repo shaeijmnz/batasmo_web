@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import './BookAppointment.css';
 import './ClientTheme.css';
 import {
-  assertNoActiveAppointmentForClient,
   abandonAppointmentCheckout,
   cancelPendingUnpaidBooking,
   createAppointmentBooking,
@@ -173,9 +172,7 @@ function BookAppointment({ onNavigate, profile }) {
   const [confirmedSlot, setConfirmedSlot] = useState(null);
   const [loadError, setLoadError] = useState('');
   const [submitError, setSubmitError] = useState('');
-  const [doubleBookingPrompt, setDoubleBookingPrompt] = useState(null);
   const pendingTimeoutsRef = useRef([]);
-  const doubleBookingResolveRef = useRef(null);
   const cancelRequestedRef = useRef(false);
   const focusReturnedAtRef = useRef(null);
 
@@ -303,11 +300,6 @@ function BookAppointment({ onNavigate, profile }) {
   };
 
   const closeBooking = () => {
-    if (doubleBookingResolveRef.current) {
-      doubleBookingResolveRef.current(false);
-      doubleBookingResolveRef.current = null;
-    }
-    setDoubleBookingPrompt(null);
     setShowBooking(false);
     runDeferred(() => {
       setBookingAttorney(null);
@@ -324,21 +316,6 @@ function BookAppointment({ onNavigate, profile }) {
       setConfirmedSlot(null);
     });
   };
-
-  const requestDoubleBookingConfirmation = useCallback((message) => (
-    new Promise((resolve) => {
-      doubleBookingResolveRef.current = resolve;
-      setDoubleBookingPrompt({ message });
-    })
-  ), []);
-
-  const handleDoubleBookingDecision = useCallback((confirmed) => {
-    if (doubleBookingResolveRef.current) {
-      doubleBookingResolveRef.current(confirmed);
-      doubleBookingResolveRef.current = null;
-    }
-    setDoubleBookingPrompt(null);
-  }, []);
 
   const reloadAvailableSlots = useCallback(async (date) => {
     if (!date || !bookingAttorney) return;
@@ -391,7 +368,6 @@ function BookAppointment({ onNavigate, profile }) {
     }
 
     let checkoutWindow = null;
-    let secondBookingConfirmed = false;
     let createdAppointmentId = null;
     let paymentTransactionId = null;
     let succeeded = false;
@@ -402,22 +378,6 @@ function BookAppointment({ onNavigate, profile }) {
     try {
       setIsPaying(true);
       setSubmitError('');
-
-      // Pre-check before opening the PayMongo popup so the user sees a
-      // clean error instead of a "preparing..." window that flashes and
-      // closes when the backend throws.
-      try {
-        await assertNoActiveAppointmentForClient(profile.id);
-      } catch (preCheckError) {
-        if (preCheckError?.code === 'DOUBLE_BOOKING_NEEDS_CONFIRMATION') {
-          const shouldContinue = await requestDoubleBookingConfirmation(preCheckError.message);
-          if (!shouldContinue) return;
-          secondBookingConfirmed = true;
-        } else {
-          setSubmitError(preCheckError?.message || 'You cannot book a new consultation right now.');
-          return;
-        }
-      }
 
       checkoutWindow = window.open('', '_blank');
       if (checkoutWindow) {
@@ -451,7 +411,6 @@ function BookAppointment({ onNavigate, profile }) {
         amount: bookingAttorney.amount || 2000,
         attachmentUrl: uploadedAttachment?.url || null,
         attachmentName: uploadedAttachment?.name || null,
-        secondBookingConfirmed,
         payload: {
           attorney_id: bookingAttorney.id,
           title: `Consultation - ${bookingAttorney.specialty || 'General'}`,
@@ -960,47 +919,6 @@ function BookAppointment({ onNavigate, profile }) {
                   </>
                 )}
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Double Booking Confirmation Modal */}
-      {doubleBookingPrompt && (
-        <div className="ba-double-booking-overlay" onClick={() => handleDoubleBookingDecision(false)}>
-          <div className="ba-double-booking-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="double-booking-title">
-            <div className="ba-double-booking-header">
-              <div className="ba-double-booking-icon">
-                <ScaleSmIcon />
-              </div>
-              <div>
-                <p className="ba-double-booking-kicker">Booking Notice</p>
-                <h3 id="double-booking-title">Confirm Second Appointment</h3>
-              </div>
-            </div>
-
-            <div className="ba-double-booking-body">
-              <p>{doubleBookingPrompt.message}</p>
-              <div className="ba-double-booking-note">
-                You may continue with one more active consultation. Please confirm before we proceed to payment.
-              </div>
-            </div>
-
-            <div className="ba-double-booking-actions">
-              <button
-                type="button"
-                className="ba-double-booking-btn ba-double-booking-btn--ghost"
-                onClick={() => handleDoubleBookingDecision(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="ba-double-booking-btn ba-double-booking-btn--primary"
-                onClick={() => handleDoubleBookingDecision(true)}
-              >
-                Continue Booking
-              </button>
             </div>
           </div>
         </div>

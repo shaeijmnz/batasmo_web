@@ -3427,54 +3427,6 @@ export async function rejectClientRescheduleRequest({ appointmentId, adminNote }
   return { ok: true }
 }
 
-// Throws when prevent_double_booking is ON and the client already has an
-// active (non-finalized) appointment, so the UI can ask for explicit
-// confirmation before continuing into checkout.
-export async function assertNoActiveAppointmentForClient(clientId) {
-  if (!clientId) return
-
-  const flag = await getAppConfig('prevent_double_booking', true)
-  const enforce =
-    flag === true ||
-    flag === 'true' ||
-    flag === 1 ||
-    (typeof flag === 'string' && flag.trim().toLowerCase() === 'true')
-
-  if (!enforce) return
-
-  // We deliberately fetch *all* of the client's appointments and filter
-  // active ones in JavaScript. Sending an unknown value to Postgres'
-  // appointment_status enum throws "invalid input value for enum",
-  // and different deployments of this DB have shipped with slightly
-  // different enum members over time (e.g. some have 'started', some don't).
-  const { data, error } = await supabase
-    .from('appointments')
-    .select('id, status')
-    .eq('client_id', clientId)
-
-  if (error) throw error
-
-  const FINALIZED_STATUSES = new Set(['completed', 'cancelled', 'rejected'])
-  const activeRows = (data || []).filter(
-    (row) => !FINALIZED_STATUSES.has(String(row?.status || '').toLowerCase()),
-  )
-
-  const activeCount = activeRows.length
-  if (activeCount === 0) return
-
-  if (activeCount >= 2) {
-    throw new Error(
-      'You already have two active appointments. Please finish or cancel one before booking again.',
-    )
-  }
-
-  const confirmError = new Error(
-    'You already have an active consultation. Are you sure you want to book another one?',
-  )
-  confirmError.code = 'DOUBLE_BOOKING_NEEDS_CONFIRMATION'
-  throw confirmError
-}
-
 const normalizeNotarialStatus = (status) => {
   const value = (status || '').toLowerCase()
   if (value === 'approved' || value === 'accepted') return 'APPROVED'
@@ -4212,21 +4164,6 @@ export async function createAppointmentBooking({
     throw new Error('Missing appointment payload details.')
   }
 
-  // Respect the admin "Prevent Multiple Active Bookings" toggle. When OFF,
-  // skip the per-attorney 2-booking cap entirely so the team can stress-test
-  // the booking flow without juggling test data.
-  const doubleBookingFlag = await getAppConfig('prevent_double_booking', true)
-  if (coerceFlag(doubleBookingFlag, true)) {
-    const activeBookingCount = await fetchClientAttorneyActiveBookingCount({
-      clientId: resolvedClientId,
-      attorneyId: normalizedPayload.attorney_id,
-    })
-
-    if (activeBookingCount >= 2) {
-      throw new Error('Booking limit reached. You can only keep up to 2 active bookings with the same attorney.')
-    }
-  }
-
   normalizedPayload.scheduled_at = scheduledIso
 
   let appointmentId = null
@@ -4511,31 +4448,6 @@ export async function createAppointmentBooking({
   invalidateAttorneyAppointmentsCache(normalizedPayload.attorney_id)
 
   return { success: true, appointmentId, payload: normalizedPayload }
-}
-
-export async function fetchClientAttorneyActiveBookingCount({ clientId, attorneyId }) {
-  if (!clientId || !attorneyId) return 0
-
-  const ACTIVE_LIMIT_STATUSES = new Set([
-    'pending',
-    'confirmed',
-    'rescheduled',
-    'started',
-    'in_progress',
-    'in-progress',
-    'active',
-    'approved',
-  ])
-
-  const { data, error } = await supabase
-    .from('appointments')
-    .select('id, status')
-    .eq('client_id', clientId)
-    .eq('attorney_id', attorneyId)
-
-  if (error) throw error
-
-  return (data || []).filter((item) => ACTIVE_LIMIT_STATUSES.has(String(item?.status || '').toLowerCase())).length
 }
 
 async function getOrCreateConsultationRoom(appointmentId) {
@@ -6177,7 +6089,7 @@ export async function clearVideoMeetingId(consultationRoomId) {
 // and a single realtime subscription keeps the cache in sync when an admin
 // toggles a value in the Settings page.
 
-const APP_CONFIG_KNOWN_KEYS = ['prevent_double_booking', 'enforce_schedule_window']
+const APP_CONFIG_KNOWN_KEYS = ['enforce_schedule_window']
 const appConfigCache = new Map()
 let appConfigLoadPromise = null
 let appConfigChannel = null

@@ -144,7 +144,6 @@ const coerceBooleanSetting = (value, fallback = true) => {
 
 const SecuritySection = () => {
   const [settings, setSettings] = useState({
-    prevent_double_booking: true,
     enforce_schedule_window: true,
   });
   const [loading, setLoading] = useState(true);
@@ -157,14 +156,10 @@ const SecuritySection = () => {
 
     const loadSecuritySettings = async () => {
       try {
-        const [doubleBooking, scheduleWindow] = await Promise.all([
-          getAppConfig('prevent_double_booking', true),
-          getAppConfig('enforce_schedule_window', true),
-        ]);
+        const scheduleWindow = await getAppConfig('enforce_schedule_window', true);
 
         if (!mounted) return;
         setSettings({
-          prevent_double_booking: coerceBooleanSetting(doubleBooking, true),
           enforce_schedule_window: coerceBooleanSetting(scheduleWindow, true),
         });
         setError('');
@@ -204,27 +199,10 @@ const SecuritySection = () => {
   return (
     <div className="settings-stack">
       <div className="card">
-        <h3 className="card-title"><Lock size={18} /> Booking & Chat Validation</h3>
+        <h3 className="card-title"><Lock size={18} /> Chat Validation</h3>
         {loading ? <p className="settings-hint">Loading security settings...</p> : null}
         {error ? <p className="settings-error">{error}</p> : null}
         {message ? <p className="settings-success">{message}</p> : null}
-
-        <div className="toggle-item border-b">
-          <div>
-            <h4>Prevent Multiple Active Bookings</h4>
-            <p>
-              ON blocks clients from booking another consultation while they still have an active one.
-              OFF allows repeated bookings for development testing.
-            </p>
-          </div>
-          <input
-            type="checkbox"
-            className="switch"
-            checked={settings.prevent_double_booking}
-            disabled={loading || Boolean(savingKey)}
-            onChange={(event) => updateToggle('prevent_double_booking', event.target.checked)}
-          />
-        </div>
 
         <div className="toggle-item">
           <div>
