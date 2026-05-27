@@ -4,12 +4,12 @@ import './ClientTheme.css';
 import {
   cancelNotarialRequest,
   fetchClientNotarialRequests,
-  payForNotarialRequest,
+  getNotarialPaymentStatus,
+  payForNotarialRequestViaPaymongo,
   replaceClientNotarialRequestDocument,
   subscribeToClientNotarialRequests,
 } from '../lib/userApi';
 import { attachLiveDataRefresh } from '../lib/liveDataRefresh';
-import { isValidPhoneNumber, VALID_PHONE_MESSAGE } from '../lib/validators';
 
 const ScalesIcon = ({ size = 24, color = '#f5a623' }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -107,11 +107,10 @@ function MyNotarialRequests({ onNavigate, profile }) {
   // Payment state
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [paymentCode, setPaymentCode] = useState('');
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('qrph');
   const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [paymentError, setPaymentError] = useState('');
+  const [paymentReference, setPaymentReference] = useState('');
   const [showPaymentConfirmation, setShowPaymentConfirmation] = useState(false);
   const [loadError, setLoadError] = useState('');
 
@@ -229,41 +228,80 @@ function MyNotarialRequests({ onNavigate, profile }) {
   const openPaymentModal = (req) => {
     setSelectedRequest(req);
     setShowPaymentModal(true);
-    setSelectedPaymentMethod('');
-    setPhoneNumber('');
-    setPaymentCode('');
+    setSelectedPaymentMethod('qrph');
     setPaymentError('');
+    setPaymentReference('');
     setPaymentProcessing(false);
   };
 
   const closePaymentModal = () => {
     setShowPaymentModal(false);
     setSelectedRequest(null);
-    setSelectedPaymentMethod('');
-    setPhoneNumber('');
-    setPaymentCode('');
+    setSelectedPaymentMethod('qrph');
     setPaymentError('');
+    setPaymentReference('');
     setPaymentProcessing(false);
   };
 
   const handlePaymentSubmit = async () => {
     if (!selectedPaymentMethod) { setPaymentError('Please select a payment method'); return; }
-    if (!isValidPhoneNumber(phoneNumber)) { setPaymentError(VALID_PHONE_MESSAGE); return; }
-    if (!paymentCode || paymentCode.length < 4) { setPaymentError('Please enter a valid payment code (at least 4 digits)'); return; }
 
     setPaymentError('');
     setPaymentProcessing(true);
+    let checkoutWindow = null;
 
     try {
-      await payForNotarialRequest({
+      checkoutWindow = window.open('', '_blank');
+      if (checkoutWindow) {
+        checkoutWindow.document.title = 'BatasMo Payment';
+        checkoutWindow.document.body.innerHTML = '<p style="font-family: sans-serif; padding: 16px;">Preparing secure payment checkout...</p>';
+      }
+
+      const session = await payForNotarialRequestViaPaymongo({
         requestId: selectedRequest.id,
         clientId: profile?.id,
         attorneyId: selectedRequest.attorneyId,
         amount: selectedRequest.amount,
         method: selectedPaymentMethod,
       });
+
+      if (session?.checkoutUrl && checkoutWindow) {
+        checkoutWindow.location.href = session.checkoutUrl;
+      } else if (session?.checkoutUrl) {
+        window.open(session.checkoutUrl, '_blank', 'noopener,noreferrer');
+      } else {
+        throw new Error('Checkout URL is missing. Please try again.');
+      }
+
+      const startedAt = Date.now();
+      const timeoutMs = 5 * 60 * 1000;
+      let paid = false;
+      let pollDelayMs = 2500;
+      const waitForNextPoll = (delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs));
+
+      while (Date.now() - startedAt < timeoutMs) {
+        await waitForNextPoll(pollDelayMs);
+        const statusResult = await getNotarialPaymentStatus(session.transactionId);
+        const status = String(statusResult?.status || 'pending').toLowerCase();
+
+        if (status === 'paid') {
+          paid = true;
+          break;
+        }
+        if (status === 'failed') {
+          throw new Error('Payment failed. Please try again.');
+        }
+
+        pollDelayMs = Math.min(6000, pollDelayMs + 500);
+      }
+
+      if (!paid) {
+        throw new Error('Payment is still pending. Complete checkout, then try again in a few seconds.');
+      }
+
       setPaymentProcessing(false);
       setShowPaymentModal(false);
+      setPaymentReference(session?.transactionId || '');
       setShowPaymentConfirmation(true);
       setRequests(prev => prev.map(r =>
         r.id === selectedRequest.id
@@ -272,6 +310,9 @@ function MyNotarialRequests({ onNavigate, profile }) {
       ));
       setLoadError('');
     } catch (error) {
+      if (checkoutWindow && !checkoutWindow.closed) {
+        checkoutWindow.close();
+      }
       setPaymentProcessing(false);
       setPaymentError(error.message || 'Payment failed. Please try again.');
     }
@@ -598,28 +639,9 @@ function MyNotarialRequests({ onNavigate, profile }) {
 
             {selectedPaymentMethod && (
               <div className="mnr-payment-modal__fields">
-                <label className="mnr-payment-field">
-                  <span>Phone Number</span>
-                  <div className="mnr-payment-field__input-wrap">
-                    <span className="mnr-payment-field__prefix">+63</span>
-                    <input
-                      type="tel"
-                      placeholder="9XX XXX XXXX"
-                      maxLength="11"
-                      value={phoneNumber}
-                      onChange={e => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 11))}
-                    />
-                  </div>
-                </label>
-                <label className="mnr-payment-field">
-                  <span>Authentication Code</span>
-                  <input
-                    type="text"
-                    placeholder="Enter code from your e-wallet"
-                    value={paymentCode}
-                    onChange={e => setPaymentCode(e.target.value)}
-                  />
-                </label>
+                <p className="mnr-payment-modal__hint">
+                  We will open a secure PayMongo checkout. Complete the payment there, then this page will update automatically.
+                </p>
               </div>
             )}
 
@@ -631,7 +653,7 @@ function MyNotarialRequests({ onNavigate, profile }) {
                 {paymentProcessing ? (
                   <span className="mnr-spinner" />
                 ) : (
-                  <>Pay {selectedRequest.fee}</>
+                  <>Open PayMongo Checkout</>
                 )}
               </button>
             </div>
@@ -654,7 +676,7 @@ function MyNotarialRequests({ onNavigate, profile }) {
             <div className="mnr-confirm-receipt">
               <div className="mnr-confirm-receipt__row">
                 <span>Reference No.</span>
-                <span>NTR-{Date.now().toString().slice(-8)}</span>
+                <span>{paymentReference || selectedRequest.id}</span>
               </div>
               <div className="mnr-confirm-receipt__row">
                 <span>Service</span>

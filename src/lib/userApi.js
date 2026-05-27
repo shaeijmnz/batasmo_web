@@ -2631,6 +2631,46 @@ export async function getAppointmentPaymentStatus(transactionId) {
   }
 }
 
+export async function payForNotarialRequestViaPaymongo({ requestId, clientId, attorneyId, amount, method }) {
+  if (!requestId) throw new Error('requestId is required.')
+  if (!clientId) throw new Error('clientId is required.')
+
+  const numericAmount = Number(amount || 0)
+  if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+    throw new Error('Amount must be greater than 0.')
+  }
+
+  const session = await requestPaymentApi('/payments/notarial/create-session', {
+    method: 'POST',
+    body: {
+      requestId,
+      clientId,
+      attorneyId,
+      amount: numericAmount,
+      method: normalizeDigitalPaymentMethod(method),
+    },
+  })
+
+  return {
+    transactionId: session.transactionId,
+    checkoutSessionId: session.checkoutSessionId,
+    checkoutUrl: session.checkoutUrl,
+    status: session.status || 'pending',
+  }
+}
+
+export async function getNotarialPaymentStatus(transactionId) {
+  if (!transactionId) throw new Error('transactionId is required.')
+  const data = await requestPaymentApi(
+    `/payments/appointments/status/${encodeURIComponent(transactionId)}`,
+  )
+  return {
+    status: String(data.status || 'pending').toLowerCase(),
+    transactionId: data.transactionId || transactionId,
+    notarialRequestId: data.notarialRequestId || null,
+  }
+}
+
 // Cancels checkout server-side (service role). Required when Supabase RLS blocks
 // the browser from PATCHing appointments to cancelled.
 export async function abandonAppointmentCheckout({ appointmentId, clientId, transactionId }) {

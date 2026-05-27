@@ -616,6 +616,7 @@ const supabaseSelectSingle = async ({ table, query }) => {
 
 const supabaseInsertTransaction = async ({
   appointmentId,
+  notarialRequestId,
   clientId,
   attorneyId,
   amount,
@@ -623,7 +624,6 @@ const supabaseInsertTransaction = async ({
 }) => {
   const endpoint = `${SUPABASE_URL}/rest/v1/transactions`
   const body = {
-    appointment_id: appointmentId,
     client_id: clientId,
     attorney_id: attorneyId,
     amount: Number(amount || 0),
@@ -634,6 +634,8 @@ const supabaseInsertTransaction = async ({
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   }
+  if (appointmentId) body.appointment_id = appointmentId
+  if (notarialRequestId) body.notarial_request_id = notarialRequestId
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: supabaseRestHeaders(),
@@ -683,6 +685,23 @@ const supabaseConfirmAppointment = async ({ appointmentId }) => {
   const payload = await response.json().catch(() => null)
   if (!response.ok) {
     throw new Error(payload?.message || payload?.error || `Failed to confirm appointment (${response.status})`)
+  }
+}
+
+const supabaseUpdateNotarialRequestTimestamp = async ({ requestId }) => {
+  if (!requestId) return
+  const query = new URLSearchParams({ id: `eq.${requestId}` }).toString()
+  const endpoint = `${SUPABASE_URL}/rest/v1/notarial_requests?${query}`
+  const response = await fetch(endpoint, {
+    method: 'PATCH',
+    headers: supabaseRestHeaders(),
+    body: JSON.stringify({
+      updated_at: new Date().toISOString(),
+    }),
+  })
+  const payload = await response.json().catch(() => null)
+  if (!response.ok) {
+    throw new Error(payload?.message || payload?.error || `Failed to update notarial request (${response.status})`)
   }
 }
 
@@ -1733,8 +1752,11 @@ const notifyAttorneyConsultationPaidFromBackend = async ({ appointmentId }) => {
 const createPaymongoCheckoutSession = async ({
   amount,
   appointmentId,
+  notarialRequestId,
   transactionId,
   paymentMethod,
+  itemName = 'BatasMo Consultation Booking',
+  description,
 }) => {
   const lineAmount = Math.max(1, Math.round(Number(amount || 0) * 100))
   const method = normalizePaymentMethod(paymentMethod)
@@ -1752,16 +1774,21 @@ const createPaymongoCheckoutSession = async ({
           {
             currency: 'PHP',
             amount: lineAmount,
-            name: 'BatasMo Consultation Booking',
+            name: itemName,
             quantity: 1,
           },
         ],
         payment_method_types: [method],
-        description: `Consultation payment for appointment ${appointmentId}`,
-        success_url: `${PAYMENT_SUCCESS_URL}?payment=success&tx=${transactionId}&appointmentId=${appointmentId}`,
-        cancel_url: `${PAYMENT_CANCEL_URL}?payment=cancelled&tx=${transactionId}&appointmentId=${appointmentId}`,
+        description:
+          description ||
+          (appointmentId
+            ? `Consultation payment for appointment ${appointmentId}`
+            : `Notarial payment for request ${notarialRequestId}`),
+        success_url: `${PAYMENT_SUCCESS_URL}?payment=success&tx=${transactionId}${appointmentId ? `&appointmentId=${appointmentId}` : ''}${notarialRequestId ? `&notarialRequestId=${notarialRequestId}` : ''}`,
+        cancel_url: `${PAYMENT_CANCEL_URL}?payment=cancelled&tx=${transactionId}${appointmentId ? `&appointmentId=${appointmentId}` : ''}${notarialRequestId ? `&notarialRequestId=${notarialRequestId}` : ''}`,
         metadata: {
-          appointment_id: String(appointmentId),
+          ...(appointmentId ? { appointment_id: String(appointmentId) } : {}),
+          ...(notarialRequestId ? { notarial_request_id: String(notarialRequestId) } : {}),
           transaction_id: String(transactionId),
         },
       },
@@ -2223,6 +2250,78 @@ app.post('/payments/appointments/create-session', async (req, res) => {
   }
 })
 
+app.post('/payments/notarial/create-session', async (req, res) => {
+  try {
+    requirePaymentConfig()
+
+    const requestId = String(req.body?.requestId || '').trim()
+    const clientId = String(req.body?.clientId || '').trim()
+    const attorneyId = String(req.body?.attorneyId || '').trim()
+    const amount = Number(req.body?.amount || 0)
+    const paymentMethod = normalizePaymentMethod(req.body?.method || 'gcash')
+
+    if (!requestId || !clientId) {
+      return res.status(400).json({ error: 'requestId and clientId are required.' })
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ error: 'amount must be greater than 0.' })
+    }
+    if (!isPaymentMethodSupported(paymentMethod)) {
+      return res.status(400).json({ error: 'Only gcash, paymaya, or qrph are supported.' })
+    }
+
+    const requestRow = await supabaseSelectSingle({
+      table: 'notarial_requests',
+      query: new URLSearchParams({ id: `eq.${requestId}` }).toString(),
+    })
+    if (!requestRow) {
+      return res.status(404).json({ error: 'Notarial request not found.' })
+    }
+    if (String(requestRow.client_id) !== clientId) {
+      return res.status(403).json({ error: 'Not allowed to pay this notarial request.' })
+    }
+
+    const pendingTx = await supabaseInsertTransaction({
+      notarialRequestId: requestId,
+      clientId,
+      attorneyId: attorneyId || requestRow.attorney_id || null,
+      amount,
+      paymentMethod:
+        paymentMethod === 'gcash'
+          ? 'GCash'
+          : paymentMethod === 'paymaya'
+            ? 'Maya'
+            : paymentMethod === 'qrph'
+              ? 'QRPh'
+              : 'GCash',
+    })
+
+    const session = await createPaymongoCheckoutSession({
+      amount,
+      notarialRequestId: requestId,
+      transactionId: pendingTx.id,
+      paymentMethod,
+      itemName: 'BatasMo Notarial Service',
+      description: `Notarial payment for request ${requestId}`,
+    })
+
+    await supabaseUpdateTransactionStatus({
+      transactionId: pendingTx.id,
+      paymentStatus: 'pending',
+      providerReference: session.checkoutSessionId,
+    })
+
+    return res.status(200).json({
+      transactionId: pendingTx.id,
+      checkoutSessionId: session.checkoutSessionId,
+      checkoutUrl: session.checkoutUrl,
+      status: 'pending',
+    })
+  } catch (error) {
+    return res.status(500).json({ error: error?.message || 'Unable to create notarial payment session.' })
+  }
+})
+
 // Client abandoned PayMongo / closed checkout — uses service role so RLS
 // cannot block flipping the appointment to cancelled + freeing the slot.
 app.post('/payments/appointments/abandon', async (req, res) => {
@@ -2567,12 +2666,18 @@ app.get('/payments/appointments/status/:transactionId', async (req, res) => {
         }
       }
 
+      if (effectiveStatus === 'paid' && tx.notarial_request_id) {
+        await supabaseUpdateNotarialRequestTimestamp({ requestId: tx.notarial_request_id })
+      }
+
       if (effectiveStatus === 'paid' && previousStatus !== 'paid' && tx.client_id) {
         try {
           await supabaseInsertNotification({
             userId: tx.client_id,
             title: 'Payment Confirmed',
-            body: `Your consultation payment has been received successfully. Ref #${tx.id}`,
+            body: tx.notarial_request_id
+              ? `Your notarial payment has been received successfully. Ref #${tx.id}`
+              : `Your consultation payment has been received successfully. Ref #${tx.id}`,
             type: 'payment',
           })
         } catch (notificationError) {
@@ -2592,6 +2697,7 @@ app.get('/payments/appointments/status/:transactionId', async (req, res) => {
     return res.status(200).json({
       transactionId: tx.id,
       appointmentId: tx.appointment_id || null,
+      notarialRequestId: tx.notarial_request_id || null,
       status: effectiveStatus,
       referenceNo: null,
       providerReference: tx.provider_reference || null,
