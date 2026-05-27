@@ -63,7 +63,7 @@ const NrProfileIcon = () => (
 );
 
 const notarialServices = [
-  { id: 1, name: 'Affidavit of Loss', description: 'Prepare and notarize an affidavit for lost documents or IDs.', amount: 500 },
+  { id: 1, name: 'Affidavit of Loss', description: 'Prepare and notarize an affidavit for lost documents or IDs.', amount: 1 },
 ];
 
 function NotarialRequest({ onNavigate, profile }) {
@@ -114,7 +114,7 @@ function NotarialRequest({ onNavigate, profile }) {
         notes,
         file: uploadedFile,
         documentName: uploadedFile.name,
-        amount: selectedServiceRow?.amount || 500,
+        amount: selectedServiceRow?.amount || 1,
       });
       setShowConfirmation(true);
     } catch (error) {

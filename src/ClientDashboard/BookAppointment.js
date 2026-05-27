@@ -150,7 +150,8 @@ const mapFutureTimeStrings = (slots, date) => {
   return { visibleTimes, hiddenPastCount };
 };
 
-const NOTARIAL_ADDON_FEE = 500;
+const TEST_PAYMENT_AMOUNT = 1;
+const NOTARIAL_ADDON_FEE = 0;
 const NOTARIAL_ADDON_SERVICE = 'Affidavit of Loss';
 
 function BookAppointment({ onNavigate, profile }) {
@@ -390,7 +391,7 @@ function BookAppointment({ onNavigate, profile }) {
     return local.toISOString();
   };
 
-  const consultationFee = Number(bookingAttorney?.amount || 2000);
+  const consultationFee = TEST_PAYMENT_AMOUNT;
   const notarialAddOnFee = includeNotarial ? NOTARIAL_ADDON_FEE : 0;
   const totalPaymentAmount = consultationFee + notarialAddOnFee;
 
@@ -446,7 +447,7 @@ function BookAppointment({ onNavigate, profile }) {
         attorneyId: bookingAttorney.id,
         title: `Consultation - ${bookingAttorney.specialty || 'General'}`,
         notes: reason.trim() || null,
-        amount: bookingAttorney.amount || 2000,
+        amount: consultationFee,
         attachmentUrl: uploadedAttachment?.url || null,
         attachmentName: uploadedAttachment?.name || null,
         payload: {
@@ -456,7 +457,7 @@ function BookAppointment({ onNavigate, profile }) {
           scheduled_at: scheduledAtIso,
           slot_date: selectedDate,
           slot_time: selectedTime,
-          amount: bookingAttorney.amount || 2000,
+          amount: consultationFee,
           duration_minutes: 60,
           attachment_url: uploadedAttachment?.url || null,
           attachment_name: uploadedAttachment?.name || null,
@@ -793,7 +794,7 @@ function BookAppointment({ onNavigate, profile }) {
                 </div>
                 <div className="ba-booking-info-item">
                   <span className="ba-booking-label">Fee:</span>
-                  <span className="ba-booking-value ba-booking-price">PHP 2,000.00</span>
+                  <span className="ba-booking-value ba-booking-price">PHP {TEST_PAYMENT_AMOUNT.toFixed(2)}</span>
                 </div>
               </div>
 
@@ -930,7 +931,7 @@ function BookAppointment({ onNavigate, profile }) {
                           Add notarial request to this payment
                           <small>Pay consultation and notarial service in one receipt.</small>
                         </span>
-                        <strong>+ PHP {NOTARIAL_ADDON_FEE.toLocaleString()}</strong>
+                        <strong>Included for testing</strong>
                       </label>
 
                       {includeNotarial ? (
