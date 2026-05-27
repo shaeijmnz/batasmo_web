@@ -1,13 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200" viewBox="0 0 900 1200" role="img" aria-label="Atty. Allen Kristopher Anarna placeholder">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200" viewBox="0 0 900 1200" role="img" aria-label="Atty. Allen Kristopher Anarna">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#0e2f4e"/>
       <stop offset="100%" stop-color="#07213a"/>
     </linearGradient>
+    <linearGradient id="suit" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#13243a"/>
+      <stop offset="100%" stop-color="#050b14"/>
+    </linearGradient>
   </defs>
   <rect width="900" height="1200" fill="url(#bg)"/>
-  <circle cx="450" cy="430" r="180" fill="#1d4467"/>
-  <rect x="220" y="620" width="460" height="340" rx="28" fill="#1a3d5e"/>
-  <text x="450" y="1010" text-anchor="middle" fill="#f4f7fb" font-family="Georgia, serif" font-size="42">Atty. Allen</text>
-  <text x="450" y="1060" text-anchor="middle" fill="#e2bf65" font-family="Arial, sans-serif" font-size="26" letter-spacing="3">PHOTO PLACEHOLDER</text>
+  <circle cx="450" cy="270" r="150" fill="#d7a474"/>
+  <path d="M300 262c12-110 74-170 152-170 86 0 144 64 150 170-46-34-94-52-150-52-58 0-106 18-152 52z" fill="#2a1c15"/>
+  <path d="M214 1120c26-278 112-434 236-434s210 156 236 434H214z" fill="url(#suit)"/>
+  <path d="M338 704l112 178 112-178c-38-24-76-36-112-36s-74 12-112 36z" fill="#f4f7fb"/>
+  <path d="M398 760h104l-52 152-52-152z" fill="#be9854"/>
+  <path d="M278 1120h344" stroke="#be9854" stroke-width="10" stroke-linecap="round" opacity=".7"/>
+  <text x="450" y="1046" text-anchor="middle" fill="#f4f7fb" font-family="Georgia, serif" font-size="44">Atty. Allen</text>
+  <text x="450" y="1098" text-anchor="middle" fill="#e2bf65" font-family="Arial, sans-serif" font-size="24" letter-spacing="2">LEGAL COUNSEL</text>
 </svg>

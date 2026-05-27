@@ -337,7 +337,7 @@ function HomePage({ onNavigate, profile, onSignOut }) {
             <h1>Welcome Back, {profile?.full_name || 'Client'}</h1>
             <p>Here's what's happening with your legal matters today.</p>
           </div>
-          <img src="/logo.svg" alt="Lady Justice" className="hp-welcome__image" />
+          <img src="/lady-justice.svg" alt="Lady Justice" className="hp-welcome__image" />
         </div>
         {loadError ? <p>{loadError}</p> : null}
 
