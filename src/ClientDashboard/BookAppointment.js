@@ -172,7 +172,6 @@ function BookAppointment({ onNavigate, profile }) {
   const [attachmentError, setAttachmentError] = useState('');
   const attachmentInputRef = useRef(null);
   const [includeNotarial, setIncludeNotarial] = useState(false);
-  const [notarialDate, setNotarialDate] = useState('');
   const [notarialNotes, setNotarialNotes] = useState('');
   const [notarialFile, setNotarialFile] = useState(null);
   const [notarialFileError, setNotarialFileError] = useState('');
@@ -309,7 +308,6 @@ function BookAppointment({ onNavigate, profile }) {
     setAttachmentError('');
     if (attachmentInputRef.current) attachmentInputRef.current.value = '';
     setIncludeNotarial(false);
-    setNotarialDate('');
     setNotarialNotes('');
     setNotarialFile(null);
     setNotarialFileError('');
@@ -332,7 +330,6 @@ function BookAppointment({ onNavigate, profile }) {
       setAttachmentError('');
       if (attachmentInputRef.current) attachmentInputRef.current.value = '';
       setIncludeNotarial(false);
-      setNotarialDate('');
       setNotarialNotes('');
       setNotarialFile(null);
       setNotarialFileError('');
@@ -438,8 +435,8 @@ function BookAppointment({ onNavigate, profile }) {
         }
       }
 
-      if (includeNotarial && (!notarialDate || !(notarialFile instanceof File))) {
-        throw new Error('Please choose a preferred notarial date and attach the document for your notarial request.');
+      if (includeNotarial && !(notarialFile instanceof File)) {
+        throw new Error('Please attach the document for your notarial request.');
       }
 
       const bookingResult = await createAppointmentBooking({
@@ -475,7 +472,6 @@ function BookAppointment({ onNavigate, profile }) {
           clientId: profile.id,
           attorneyId: bookingAttorney.id,
           serviceType: NOTARIAL_ADDON_SERVICE,
-          preferredDate: notarialDate,
           notes: notarialNotes.trim() || `Bundled with consultation appointment ${appointmentId}.`,
           file: notarialFile,
           documentName: notarialFile?.name || null,
@@ -627,7 +623,6 @@ function BookAppointment({ onNavigate, profile }) {
       setAttachmentError('');
       if (attachmentInputRef.current) attachmentInputRef.current.value = '';
       setIncludeNotarial(false);
-      setNotarialDate('');
       setNotarialNotes('');
       setNotarialFile(null);
       setNotarialFileError('');
@@ -919,7 +914,6 @@ function BookAppointment({ onNavigate, profile }) {
                             const checked = e.target.checked;
                             setIncludeNotarial(checked);
                             if (!checked) {
-                              setNotarialDate('');
                               setNotarialNotes('');
                               setNotarialFile(null);
                               setNotarialFileError('');
@@ -939,15 +933,6 @@ function BookAppointment({ onNavigate, profile }) {
                           <div className="ba-form-group">
                             <label className="ba-form-label">Notarial Service</label>
                             <input className="ba-form-input" value={NOTARIAL_ADDON_SERVICE} readOnly />
-                          </div>
-                          <div className="ba-form-group">
-                            <label className="ba-form-label">Preferred Notarial Date</label>
-                            <input
-                              type="date"
-                              className="ba-form-input"
-                              value={notarialDate}
-                              onChange={(e) => setNotarialDate(e.target.value)}
-                            />
                           </div>
                           <div className="ba-form-group">
                             <label className="ba-form-label">Notarial Notes (Optional)</label>
@@ -1029,8 +1014,8 @@ function BookAppointment({ onNavigate, profile }) {
                             setSubmitError('Please select a time slot.');
                             return;
                           }
-                          if (includeNotarial && (!notarialDate || !notarialFile)) {
-                            setSubmitError('Please complete the notarial date and document before payment.');
+                          if (includeNotarial && !notarialFile) {
+                            setSubmitError('Please attach the notarial document before payment.');
                             return;
                           }
                           setSubmitError('');

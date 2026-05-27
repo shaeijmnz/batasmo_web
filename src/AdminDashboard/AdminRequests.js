@@ -103,7 +103,6 @@ function AdminRequests({ onNavigate }) {
           clientName: row.client?.full_name || 'Client',
           serviceType: row.service_type || 'Notarial Service',
           status: normalizeStatus(row.status),
-          preferredDate: formatDate(row.preferred_date),
           submittedDate: formatDate(row.created_at),
           notes: row.notes || '',
           documentUrl: row.document_url || '',
@@ -323,7 +322,6 @@ function AdminRequests({ onNavigate }) {
               <tr>
                 <th>Client</th>
                 <th>Service</th>
-                <th>Preferred Date</th>
                 <th>Submitted</th>
                 <th>Status</th>
                 <th>Actions</th>
@@ -334,7 +332,6 @@ function AdminRequests({ onNavigate }) {
                 <tr key={req.id} className="adm-detail-table__row--clickable">
                   <td>{req.clientName}</td>
                   <td>{req.serviceType}</td>
-                  <td>{req.preferredDate}</td>
                   <td>{req.submittedDate}</td>
                   <td>
                     <span className={`adm-detail-badge ${statusBadgeClass(req)}`}>
@@ -382,7 +379,7 @@ function AdminRequests({ onNavigate }) {
               ))}
               {!loading && visibleRequests.length === 0 ? (
                 <tr>
-                  <td colSpan="6" style={{ textAlign: 'center', color: '#9ca3af', padding: '32px' }}>
+                  <td colSpan="5" style={{ textAlign: 'center', color: '#9ca3af', padding: '32px' }}>
                     No notarial requests found.
                   </td>
                 </tr>
@@ -416,10 +413,6 @@ function AdminRequests({ onNavigate }) {
                     {statusLabel(viewRequest)}
                   </span>
                 </p>
-              </div>
-              <div className="adm-detail-modal__row">
-                <label>Preferred Date</label>
-                <p>{viewRequest.preferredDate}</p>
               </div>
               <div className="adm-detail-modal__row">
                 <label>Submitted</label>

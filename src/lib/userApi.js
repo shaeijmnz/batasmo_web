@@ -5421,13 +5421,13 @@ export async function createNotarialRequest({ clientId, serviceType, preferredDa
   const insertPayload = {
     client_id: clientId,
     service_type: serviceType,
-    preferred_date: preferredDate,
     notes,
     document_url: documentUrl,
     status: 'pending',
     created_at: nowIso,
     updated_at: nowIso,
   }
+  if (preferredDate) insertPayload.preferred_date = preferredDate
   if (Number.isFinite(Number(amount))) insertPayload.amount = Number(amount || 0)
   if (attorneyId) insertPayload.attorney_id = attorneyId
 
@@ -5457,24 +5457,16 @@ export async function createNotarialRequest({ clientId, serviceType, preferredDa
       resolveClientDisplayName(clientId),
       fetchVerifiedAttorneyUserIds(),
     ])
-    const preferredLabel = preferredDate
-      ? new Date(preferredDate).toLocaleDateString('en-PH', {
-          month: 'short',
-          day: 'numeric',
-          year: 'numeric',
-        })
-      : 'an unspecified date'
-
     await insertNotificationForAttorneys({
       attorneyIds,
       title: 'New Notarial Request',
-      body: `${clientName} submitted a ${serviceType || 'notarial'} request for ${preferredLabel}.`,
+      body: `${clientName} submitted a ${serviceType || 'notarial'} request.`,
       type: 'notarial_update',
     })
 
     await notifyAdminsWithBodyMarker({
       title: 'New notarial request',
-      body: `${clientName} submitted a ${serviceType || 'notarial'} request for ${preferredLabel}.`,
+      body: `${clientName} submitted a ${serviceType || 'notarial'} request.`,
       type: 'admin_general',
       marker: `[adminnewnot:${clientId}:${Date.now()}]`,
     })

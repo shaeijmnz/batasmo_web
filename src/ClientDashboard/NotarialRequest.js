@@ -69,7 +69,6 @@ const notarialServices = [
 function NotarialRequest({ onNavigate, profile }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [selectedService, setSelectedService] = useState(null);
-  const [preferredDate, setPreferredDate] = useState('');
   const [uploadedFile, setUploadedFile] = useState(null);
   const [notes, setNotes] = useState('');
   const [showConfirmation, setShowConfirmation] = useState(false);
@@ -99,8 +98,8 @@ function NotarialRequest({ onNavigate, profile }) {
   };
 
   const handleSubmit = async () => {
-    if (!profile?.id || selectedService === null || !preferredDate || !uploadedFile) {
-      setErrorMessage('Please select one service, choose a date, and upload a file');
+    if (!profile?.id || selectedService === null || !uploadedFile) {
+      setErrorMessage('Please select one service and upload a file');
       setShowError(true);
       return;
     }
@@ -110,7 +109,6 @@ function NotarialRequest({ onNavigate, profile }) {
       await createNotarialRequest({
         clientId: profile?.id,
         serviceType: selectedServiceRow?.name || 'Notarial Service',
-        preferredDate,
         notes,
         file: uploadedFile,
         documentName: uploadedFile.name,
@@ -131,7 +129,6 @@ function NotarialRequest({ onNavigate, profile }) {
     setShowConfirmation(false);
     pendingTimeoutRef.current = setTimeout(() => {
       setSelectedService(null);
-      setPreferredDate('');
       setUploadedFile(null);
       setNotes('');
       onNavigate('my-notarial-requests');
@@ -205,17 +202,6 @@ function NotarialRequest({ onNavigate, profile }) {
                 </div>
               ))}
             </div>
-          </div>
-
-          {/* Preferred Date */}
-          <div className="nr-section">
-            <h2 className="nr-section-title">Preferred Service Date</h2>
-            <input
-              type="date"
-              className="nr-date-input"
-              value={preferredDate}
-              onChange={(e) => setPreferredDate(e.target.value)}
-            />
           </div>
 
           {/* File Upload */}
@@ -312,10 +298,6 @@ function NotarialRequest({ onNavigate, profile }) {
                     <span className="nr-detail-value">
                       {notarialServices.find(s => s.id === selectedService)?.name}
                     </span>
-                  </div>
-                  <div className="nr-detail-item">
-                    <span className="nr-detail-label">Preferred Date:</span>
-                    <span className="nr-detail-value">{preferredDate}</span>
                   </div>
                   <div className="nr-detail-item">
                     <span className="nr-detail-label">Document:</span>
