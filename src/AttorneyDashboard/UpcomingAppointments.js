@@ -438,7 +438,7 @@ function UpcomingAppointments({ onNavigate, profile }) {
             <MenuIcon />
           </button>
           <div className="ua-topbar__logo">
-            <img src="/logo/logo.jpg" alt="BatasMo" className="ua-topbar__brand-logo" />
+            <img src="/logo.svg" alt="BatasMo" className="ua-topbar__brand-logo" />
             <div>
               <p className="ua-topbar__eyebrow">Attorney Workspace</p>
               <span>My Appointments</span>

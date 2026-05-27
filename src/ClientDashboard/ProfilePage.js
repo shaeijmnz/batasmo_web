@@ -290,7 +290,7 @@ function ProfilePage({
             <MenuIcon />
           </button>
           <div className="pp-sidebar__logo">
-            <img src="/logo/logo.jpg" alt="Logo" className="pp-sidebar__logo-img" />
+            <img src="/logo.svg" alt="Logo" className="pp-sidebar__logo-img" />
             <ScalesIcon size={26} color="#f5a623" />
             <span>BatasMo</span>
           </div>

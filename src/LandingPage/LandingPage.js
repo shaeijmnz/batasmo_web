@@ -80,7 +80,7 @@ function LandingPage({ onNavigate }) {
       <nav className="lp-nav">
         <div className="lp-shell lp-nav-shell">
           <div className="lp-brand-wrap">
-            <img src="/logo/logo.jpg" alt="BatasMo" className="lp-brand-logo" />
+            <img src="/logo.svg" alt="BatasMo" className="lp-brand-logo" />
             <h2 className="lp-brand">BatasMo</h2>
           </div>
 

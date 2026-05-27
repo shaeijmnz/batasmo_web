@@ -301,7 +301,7 @@ function HomePage({ onNavigate, profile, onSignOut }) {
             <MenuIcon />
           </button>
           <div className="hp-sidebar__logo">
-            <img src="/logo/logo.jpg" alt="Logo" className="hp-sidebar__logo-img" />
+            <img src="/logo.svg" alt="Logo" className="hp-sidebar__logo-img" />
             <ScalesIcon size={26} color="#f5a623" />
             <span>BatasMo</span>
           </div>
@@ -337,7 +337,7 @@ function HomePage({ onNavigate, profile, onSignOut }) {
             <h1>Welcome Back, {profile?.full_name || 'Client'}</h1>
             <p>Here's what's happening with your legal matters today.</p>
           </div>
-          <img src="/lady-justice/lady justice.jpg" alt="Lady Justice" className="hp-welcome__image" />
+          <img src="/logo.svg" alt="Lady Justice" className="hp-welcome__image" />
         </div>
         {loadError ? <p>{loadError}</p> : null}
 
@@ -358,7 +358,7 @@ function HomePage({ onNavigate, profile, onSignOut }) {
             </div>
             <div>
               <h3>Request Notary</h3>
-              <p>Notary requests are completed on the BatasMo mobile app</p>
+              <p>Submit and pay for notary requests online</p>
             </div>
           </div>
         </div>

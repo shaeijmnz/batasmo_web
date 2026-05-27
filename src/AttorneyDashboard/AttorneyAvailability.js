@@ -98,7 +98,7 @@ export default function AttorneyAvailability({ onNavigate, profile }) {
             <MenuIcon />
           </button>
           <div className="aa-topbar__logo">
-            <img src="/logo/logo.jpg" alt="BatasMo" className="aa-topbar__brand-logo" />
+            <img src="/logo.svg" alt="BatasMo" className="aa-topbar__brand-logo" />
             <div>
               <p className="aa-topbar__eyebrow">Attorney Workspace</p>
               <span>My Availability</span>

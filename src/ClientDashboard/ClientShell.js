@@ -404,7 +404,7 @@ export default function ClientShell({
       <aside className={`client-shell-sidebar ${sidebarOpen ? 'open' : 'collapsed'}`}>
         <div className="client-shell-sidebar-header">
           <button type="button" className="client-shell-brand" onClick={() => handleNavigate('home-logged')}>
-            <img src="/logo/logo.jpg" alt="BatasMo" className="client-shell-brand-logo" />
+            <img src="/logo.svg" alt="BatasMo" className="client-shell-brand-logo" />
             {sidebarOpen ? <span className="client-shell-brand-text">BATASMO</span> : null}
           </button>
         </div>

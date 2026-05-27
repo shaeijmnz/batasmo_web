@@ -191,7 +191,7 @@ function TransactionHistory({ onNavigate, profile }) {
             <MenuIcon />
           </button>
           <div className="th-sidebar__logo">
-            <img src="/logo/logo.jpg" alt="Logo" className="th-sidebar__logo-img" />
+            <img src="/logo.svg" alt="Logo" className="th-sidebar__logo-img" />
             <ScalesIcon size={26} color="#f5a623" />
             <span>BatasMo</span>
           </div>

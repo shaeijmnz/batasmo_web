@@ -209,7 +209,7 @@ const Consultations = ({ onNavigate }) => {
           <button className="sidebar-toggle" onClick={() => setSidebarOpen(!isSidebarOpen)}>
             <Menu size={24} />
           </button>
-          {isSidebarOpen && <img src="/logo/logo.jpg" alt="BatasMo logo" className="brand-logo" />}
+          {isSidebarOpen && <img src="/logo.svg" alt="BatasMo logo" className="brand-logo" />}
           {isSidebarOpen && <span className="logo-text">BatasMo</span>}
         </div>
         <nav className="sidebar-nav">
