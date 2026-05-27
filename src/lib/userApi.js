@@ -1180,15 +1180,15 @@ const resolveAttorneyImage = (name, preferredImageUrl) => {
     .trim()
 
   if (normalized.includes('jeanne') && normalized.includes('anarna')) {
-    return '/partners/jeanne.svg'
+    return '/assets/attorneys/jeanne-luz-castillo-anarna.jpg'
   }
 
   if (normalized.includes('alston') && normalized.includes('anarna')) {
-    return '/partners/kevin.svg'
+    return '/assets/attorneys/alston-kevin-anarna.jpg'
   }
 
   if (normalized.includes('allen') && normalized.includes('anarna')) {
-    return '/partners/allen.svg'
+    return '/assets/attorneys/allen-kristopher-anarna.png'
   }
 
   return `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'Attorney')}&background=f5a623&color=111827`

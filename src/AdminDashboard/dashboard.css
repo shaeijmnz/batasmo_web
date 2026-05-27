@@ -463,9 +463,10 @@ body { font-family: 'Inter', sans-serif; background: #F5F1EB; color: #0B0F19; }
   padding: 40px;
   overflow: hidden;
   margin-bottom: 24px;
-  background:
-    radial-gradient(520px 240px at 82% 24%, rgba(190, 152, 84, 0.2), transparent 62%),
-    linear-gradient(135deg, #F5F1EB 0%, #fff8ea 100%);
+  background-image: url('../../public/lady-justice/lady-justice.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
 /* TEXT */

@@ -181,7 +181,7 @@ export default function AttorneyProfile({ onNavigate, profile: sessionProfile, o
             <MenuIcon />
           </button>
           <div className="ap-topbar__logo">
-            <img src="/logo.svg" alt="BatasMo" className="ap-topbar__brand-logo" />
+            <img src="/logo/logo.jpg" alt="BatasMo" className="ap-topbar__brand-logo" />
             <div>
               <p className="ap-topbar__eyebrow">Attorney Workspace</p>
               <span>Attorney Dashboard</span>
