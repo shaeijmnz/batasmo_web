@@ -185,7 +185,10 @@
 .lp-hero {
   min-height: 100vh;
   padding: 9.5rem 0 5rem;
-  background: url("../../public/background/bg.jpg") center center / cover no-repeat;
+  background:
+    radial-gradient(900px 520px at 20% 20%, rgba(190, 152, 84, 0.22), transparent 62%),
+    radial-gradient(900px 520px at 78% 10%, rgba(45, 94, 139, 0.24), transparent 60%),
+    linear-gradient(135deg, #07111d 0%, #0a1b2d 48%, #050b13 100%);
   position: relative;
 }
 

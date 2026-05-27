@@ -17,8 +17,9 @@
   inset: 0;
   z-index: 0;
   background:
-    linear-gradient(135deg, rgba(10, 16, 22, 0.48), rgba(8, 13, 19, 0.28)),
-    url('../../public/auth/bg.jpg');
+    radial-gradient(780px 460px at 12% 18%, rgba(242, 200, 121, 0.16), transparent 62%),
+    radial-gradient(820px 500px at 90% 80%, rgba(30, 58, 138, 0.18), transparent 62%),
+    linear-gradient(135deg, #0a1016, #080d13);
   background-size: cover;
   background-position: center;
   transform: scale(1.02);
