@@ -4091,61 +4091,68 @@ export async function fetchPublicLandingData() {
 }
 
 /**
+ * Uploads a client-owned file to Supabase Storage, trying the preferred bucket
+ * first and falling back to the alternate bucket when the primary is missing.
+ */
+async function uploadClientOwnedDocument({ clientId, file, preferredBucket = 'notarial-documents' }) {
+  if (!(file instanceof File)) return null
+  if (!clientId) throw new Error('clientId is required to upload a document.')
+
+  const safeName = String(file.name || 'document').replace(/[^a-zA-Z0-9._-]/g, '_')
+  const filePath = `${clientId}/${Date.now()}_${safeName}`
+  const ext = safeName.split('.').pop() || 'bin'
+  const uploadOptions = {
+    contentType: file.type || `application/${ext}`,
+    upsert: false,
+  }
+
+  const bucketOrder =
+    preferredBucket === 'appointment-attachments'
+      ? ['appointment-attachments', 'notarial-documents']
+      : ['notarial-documents', 'appointment-attachments']
+
+  let lastError = null
+  for (const bucket of bucketOrder) {
+    const { error: uploadError } = await supabase.storage
+      .from(bucket)
+      .upload(filePath, file, uploadOptions)
+
+    if (!uploadError) {
+      const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(filePath)
+      return {
+        url: urlData?.publicUrl || filePath,
+        name: file.name || safeName,
+        bucket,
+      }
+    }
+
+    lastError = uploadError
+    if (!/bucket not found/i.test(String(uploadError.message || ''))) {
+      break
+    }
+  }
+
+  const message = String(lastError?.message || 'Could not upload document.')
+  if (/bucket not found/i.test(message)) {
+    throw new Error(
+      'Document storage is not set up yet. In Supabase, run database/20260528_notarial_and_attachment_storage.sql in the SQL Editor (or create public buckets named "notarial-documents" and "appointment-attachments").',
+    )
+  }
+
+  const rlsHint = /row-level security|violates row-level security/i.test(message)
+    ? ' Run database/20260528_notarial_and_attachment_storage.sql in Supabase SQL Editor.'
+    : ''
+
+  throw new Error(`${message}${rlsHint}`.trim())
+}
+
+/**
  * Uploads an optional client-provided file that should accompany a new
  * consultation booking. Uses the public `appointment-attachments` bucket and
  * returns `{ url, name }` so the caller can persist it onto the appointment.
  */
 export async function uploadAppointmentAttachment({ clientId, file }) {
-  if (!(file instanceof File)) return null
-  if (!clientId) throw new Error('clientId is required to upload an attachment.')
-  const safeName = String(file.name || 'attachment').replace(/[^a-zA-Z0-9._-]/g, '_')
-  const filePath = `${clientId}/${Date.now()}_${safeName}`
-  const ext = safeName.split('.').pop() || 'bin'
-
-  const { error: uploadError } = await supabase.storage
-    .from('appointment-attachments')
-    .upload(filePath, file, {
-      contentType: file.type || `application/${ext}`,
-      upsert: false,
-    })
-
-  if (uploadError) {
-    const rlsHint =
-      /row-level security|violates row-level security/i.test(String(uploadError.message || ''))
-        ? ' In Supabase, run database/20260514_appointment_attachments_storage_rls.sql (SQL Editor).'
-        : ''
-
-    // Fall back to the existing notarial-documents bucket so the feature
-    // still works if the team has not provisioned the new bucket yet.
-    const { error: fallbackUploadError } = await supabase.storage
-      .from('notarial-documents')
-      .upload(filePath, file, {
-        contentType: file.type || `application/${ext}`,
-        upsert: false,
-      })
-    if (fallbackUploadError) {
-      throw new Error(
-        `${uploadError.message || 'Could not upload attachment.'}${rlsHint}`.trim(),
-      )
-    }
-
-    const { data: fallbackUrlData } = supabase.storage
-      .from('notarial-documents')
-      .getPublicUrl(filePath)
-    return {
-      url: fallbackUrlData?.publicUrl || filePath,
-      name: file.name || safeName,
-    }
-  }
-
-  const { data: urlData } = supabase.storage
-    .from('appointment-attachments')
-    .getPublicUrl(filePath)
-
-  return {
-    url: urlData?.publicUrl || filePath,
-    name: file.name || safeName,
-  }
+  return uploadClientOwnedDocument({ clientId, file, preferredBucket: 'appointment-attachments' })
 }
 
 export async function createAppointmentBooking({
@@ -5443,19 +5450,12 @@ export async function createNotarialRequest({ clientId, serviceType, preferredDa
   const nowIso = new Date().toISOString()
 
   if (file instanceof File) {
-    const ext = file.name.split('.').pop() || 'bin'
-    const filePath = `${clientId}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
-    const { error: uploadError } = await supabase.storage
-      .from('notarial-documents')
-      .upload(filePath, file, { contentType: file.type || `application/${ext}`, upsert: false })
-
-    if (uploadError) throw uploadError
-
-    const { data: urlData } = supabase.storage
-      .from('notarial-documents')
-      .getPublicUrl(filePath)
-
-    documentUrl = urlData?.publicUrl || filePath
+    const uploaded = await uploadClientOwnedDocument({
+      clientId,
+      file,
+      preferredBucket: 'notarial-documents',
+    })
+    documentUrl = uploaded?.url || documentName || null
   }
 
   const insertPayload = {
