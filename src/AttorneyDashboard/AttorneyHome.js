@@ -327,7 +327,7 @@ function AttorneyHome({ onNavigate, profile }) {
       <main className="att-main">
         <section className="att-hero-grid">
           <div className="att-welcome att-welcome--with-image">
-            <img src="/lady-justice/lady-justice.jpg" alt="Lady Justice" className="att-welcome__image" />
+            <img src="/lady-justice.svg" alt="Lady Justice" className="att-welcome__image" />
             <div className="att-welcome__overlay" />
             <div className="att-welcome__text">
               <p className="att-kicker">LEGAL OPERATIONS OVERVIEW</p>

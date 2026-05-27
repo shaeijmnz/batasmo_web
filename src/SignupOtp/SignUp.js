@@ -213,7 +213,7 @@ function SignUp({ onNavigate, onEmailChange }) {
           </button>
 
           <div className="su-brand-badge" onClick={() => onNavigate('home')}>
-            <img src="/auth/logo.jpg" alt="BatasMo" className="su-brand-logo" />
+            <img src="/logo.svg" alt="BatasMo" className="su-brand-logo" />
             <span className="su-brand-text">BatasMo</span>
           </div>
         </div>
