@@ -6,12 +6,14 @@ import {
   abandonAppointmentCheckout,
   cancelPendingUnpaidBooking,
   createAppointmentBooking,
+  createNotarialRequest,
   uploadAppointmentAttachment,
   fetchBookableAttorneys,
   getAppointmentPaymentStatus,
   getAvailability,
   sortTimeLabels,
   invalidateAvailabilityCache,
+  markNotarialRequestPaid,
   notifyAttorneyOfPaidBooking,
   payForAppointment,
   subscribeToAvailabilitySlots,
@@ -148,6 +150,9 @@ const mapFutureTimeStrings = (slots, date) => {
   return { visibleTimes, hiddenPastCount };
 };
 
+const NOTARIAL_ADDON_FEE = 500;
+const NOTARIAL_ADDON_SERVICE = 'Affidavit of Loss';
+
 function BookAppointment({ onNavigate, profile }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [attorneys, setAttorneys] = useState([]);
@@ -165,6 +170,12 @@ function BookAppointment({ onNavigate, profile }) {
   const [attachment, setAttachment] = useState(null);
   const [attachmentError, setAttachmentError] = useState('');
   const attachmentInputRef = useRef(null);
+  const [includeNotarial, setIncludeNotarial] = useState(false);
+  const [notarialDate, setNotarialDate] = useState('');
+  const [notarialNotes, setNotarialNotes] = useState('');
+  const [notarialFile, setNotarialFile] = useState(null);
+  const [notarialFileError, setNotarialFileError] = useState('');
+  const notarialFileInputRef = useRef(null);
   const [availableSlots, setAvailableSlots] = useState([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [hiddenPastSlotsCount, setHiddenPastSlotsCount] = useState(0);
@@ -296,6 +307,12 @@ function BookAppointment({ onNavigate, profile }) {
     setAttachment(null);
     setAttachmentError('');
     if (attachmentInputRef.current) attachmentInputRef.current.value = '';
+    setIncludeNotarial(false);
+    setNotarialDate('');
+    setNotarialNotes('');
+    setNotarialFile(null);
+    setNotarialFileError('');
+    if (notarialFileInputRef.current) notarialFileInputRef.current.value = '';
     setAvailableSlots([]);
     setHiddenPastSlotsCount(0);
     setPaymentMethod('QRPh');
@@ -313,6 +330,12 @@ function BookAppointment({ onNavigate, profile }) {
       setAttachment(null);
       setAttachmentError('');
       if (attachmentInputRef.current) attachmentInputRef.current.value = '';
+      setIncludeNotarial(false);
+      setNotarialDate('');
+      setNotarialNotes('');
+      setNotarialFile(null);
+      setNotarialFileError('');
+      if (notarialFileInputRef.current) notarialFileInputRef.current.value = '';
       setAvailableSlots([]);
       setHiddenPastSlotsCount(0);
       setPaymentMethod('QRPh');
@@ -367,6 +390,10 @@ function BookAppointment({ onNavigate, profile }) {
     return local.toISOString();
   };
 
+  const consultationFee = Number(bookingAttorney?.amount || 2000);
+  const notarialAddOnFee = includeNotarial ? NOTARIAL_ADDON_FEE : 0;
+  const totalPaymentAmount = consultationFee + notarialAddOnFee;
+
   const handlePayNow = async () => {
     if (!profile?.id || !bookingAttorney?.id || !selectedDate || !selectedTime) {
       setSubmitError('Please complete date and time selection before payment.');
@@ -376,6 +403,7 @@ function BookAppointment({ onNavigate, profile }) {
     let checkoutWindow = null;
     let createdAppointmentId = null;
     let paymentTransactionId = null;
+    let createdNotarialRequestId = null;
     let succeeded = false;
 
     cancelRequestedRef.current = false;
@@ -409,6 +437,10 @@ function BookAppointment({ onNavigate, profile }) {
         }
       }
 
+      if (includeNotarial && (!notarialDate || !(notarialFile instanceof File))) {
+        throw new Error('Please choose a preferred notarial date and attach the document for your notarial request.');
+      }
+
       const bookingResult = await createAppointmentBooking({
         clientId: profile.id,
         attorneyId: bookingAttorney.id,
@@ -437,11 +469,25 @@ function BookAppointment({ onNavigate, profile }) {
       }
       createdAppointmentId = appointmentId;
 
+      if (includeNotarial) {
+        const notarialResult = await createNotarialRequest({
+          clientId: profile.id,
+          attorneyId: bookingAttorney.id,
+          serviceType: NOTARIAL_ADDON_SERVICE,
+          preferredDate: notarialDate,
+          notes: notarialNotes.trim() || `Bundled with consultation appointment ${appointmentId}.`,
+          file: notarialFile,
+          documentName: notarialFile?.name || null,
+          amount: NOTARIAL_ADDON_FEE,
+        });
+        createdNotarialRequestId = notarialResult?.requestId || null;
+      }
+
       const session = await payForAppointment({
         appointmentId,
         clientId: profile.id,
         attorneyId: bookingAttorney.id,
-        amount: bookingAttorney.amount || 2000,
+        amount: totalPaymentAmount,
         method: paymentMethod,
       });
       paymentTransactionId = session?.transactionId || null;
@@ -497,6 +543,19 @@ function BookAppointment({ onNavigate, profile }) {
         await notifyAttorneyOfPaidBooking({ appointmentId });
       } catch (notifyError) {
         console.warn('[booking] notify attorney of paid booking failed', notifyError);
+      }
+      if (includeNotarial && createdNotarialRequestId) {
+        try {
+          await markNotarialRequestPaid({
+            requestId: createdNotarialRequestId,
+            clientId: profile.id,
+            attorneyId: bookingAttorney.id,
+            amount: 0,
+            method: paymentMethod,
+          });
+        } catch (notarialPaymentError) {
+          console.warn('[booking] bundled notarial payment marker failed', notarialPaymentError);
+        }
       }
       succeeded = true;
 
@@ -566,6 +625,12 @@ function BookAppointment({ onNavigate, profile }) {
       setAttachment(null);
       setAttachmentError('');
       if (attachmentInputRef.current) attachmentInputRef.current.value = '';
+      setIncludeNotarial(false);
+      setNotarialDate('');
+      setNotarialNotes('');
+      setNotarialFile(null);
+      setNotarialFileError('');
+      if (notarialFileInputRef.current) notarialFileInputRef.current.value = '';
       setAvailableSlots([]);
     });
   };
@@ -844,12 +909,127 @@ function BookAppointment({ onNavigate, profile }) {
                       </div>
                     </div>
 
+                    <div className="ba-service-bundle">
+                      <label className="ba-service-bundle__toggle">
+                        <input
+                          type="checkbox"
+                          checked={includeNotarial}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setIncludeNotarial(checked);
+                            if (!checked) {
+                              setNotarialDate('');
+                              setNotarialNotes('');
+                              setNotarialFile(null);
+                              setNotarialFileError('');
+                              if (notarialFileInputRef.current) notarialFileInputRef.current.value = '';
+                            }
+                          }}
+                        />
+                        <span>
+                          Add notarial request to this payment
+                          <small>Pay consultation and notarial service in one receipt.</small>
+                        </span>
+                        <strong>+ PHP {NOTARIAL_ADDON_FEE.toLocaleString()}</strong>
+                      </label>
+
+                      {includeNotarial ? (
+                        <div className="ba-service-bundle__fields">
+                          <div className="ba-form-group">
+                            <label className="ba-form-label">Notarial Service</label>
+                            <input className="ba-form-input" value={NOTARIAL_ADDON_SERVICE} readOnly />
+                          </div>
+                          <div className="ba-form-group">
+                            <label className="ba-form-label">Preferred Notarial Date</label>
+                            <input
+                              type="date"
+                              className="ba-form-input"
+                              value={notarialDate}
+                              onChange={(e) => setNotarialDate(e.target.value)}
+                            />
+                          </div>
+                          <div className="ba-form-group">
+                            <label className="ba-form-label">Notarial Notes (Optional)</label>
+                            <textarea
+                              className="ba-form-textarea"
+                              placeholder="Add details for your notarial request..."
+                              value={notarialNotes}
+                              onChange={(e) => setNotarialNotes(e.target.value)}
+                              rows="3"
+                            />
+                          </div>
+                          <div className="ba-attach-row">
+                            <div className="ba-attach-row__hint">
+                              Attach the document to be notarized. PDF, image, or document, max 10 MB.
+                            </div>
+                            <input
+                              ref={notarialFileInputRef}
+                              type="file"
+                              accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp,.txt,application/pdf,image/*"
+                              style={{ display: 'none' }}
+                              onChange={(e) => {
+                                const file = e.target.files && e.target.files[0];
+                                if (!file) {
+                                  setNotarialFile(null);
+                                  setNotarialFileError('');
+                                  return;
+                                }
+                                const MAX_BYTES = 10 * 1024 * 1024;
+                                if (file.size > MAX_BYTES) {
+                                  setNotarialFile(null);
+                                  setNotarialFileError('File is too large. Please keep it under 10 MB.');
+                                  if (notarialFileInputRef.current) notarialFileInputRef.current.value = '';
+                                  return;
+                                }
+                                setNotarialFile(file);
+                                setNotarialFileError('');
+                              }}
+                            />
+                            <div className="ba-attach-row__controls">
+                              <button
+                                type="button"
+                                className="ba-attach-btn"
+                                onClick={() => notarialFileInputRef.current && notarialFileInputRef.current.click()}
+                              >
+                                {notarialFile ? 'Replace document' : 'Choose document'}
+                              </button>
+                              {notarialFile ? (
+                                <>
+                                  <span className="ba-attach-name" title={notarialFile.name}>
+                                    {notarialFile.name}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="ba-attach-btn ba-attach-btn--ghost"
+                                    onClick={() => {
+                                      setNotarialFile(null);
+                                      setNotarialFileError('');
+                                      if (notarialFileInputRef.current) notarialFileInputRef.current.value = '';
+                                    }}
+                                  >
+                                    Remove
+                                  </button>
+                                </>
+                              ) : null}
+                            </div>
+                            {notarialFileError ? (
+                              <div className="ba-attach-row__error">{notarialFileError}</div>
+                            ) : null}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+
                     <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
                       <button
                         className="ba-booking-btn ba-booking-btn--submit"
                         onClick={() => {
                           if (!selectedTime) {
                             setSubmitError('Please select a time slot.');
+                            return;
+                          }
+                          if (includeNotarial && (!notarialDate || !notarialFile)) {
+                            setSubmitError('Please complete the notarial date and document before payment.');
                             return;
                           }
                           setSubmitError('');
@@ -881,9 +1061,16 @@ function BookAppointment({ onNavigate, profile }) {
                       <div style={{ color: '#cbd5e1', fontSize: '0.9rem' }}>
                         <div><strong>Date:</strong> {selectedDate}</div>
                         <div><strong>Time:</strong> {selectedTime}</div>
-                        <div><strong>Amount:</strong> PHP 2,000.00</div>
+                        <div><strong>Consultation:</strong> PHP {consultationFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                        {includeNotarial ? (
+                          <div><strong>Notarial:</strong> PHP {NOTARIAL_ADDON_FEE.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({NOTARIAL_ADDON_SERVICE})</div>
+                        ) : null}
+                        <div><strong>Total:</strong> PHP {totalPaymentAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                         {attachment ? (
                           <div><strong>Attached:</strong> {attachment.name}</div>
+                        ) : null}
+                        {includeNotarial && notarialFile ? (
+                          <div><strong>Notarial document:</strong> {notarialFile.name}</div>
                         ) : null}
                       </div>
                     </div>

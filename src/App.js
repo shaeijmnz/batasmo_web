@@ -110,13 +110,6 @@ const canAccessPage = (role, targetPage) => {
   return true
 }
 
-const NOTARY_WARNING_MESSAGE =
-  'To proceed with your notarial request, face verification is required. Please open the BatasMo mobile app to continue.'
-
-const CLIENT_NOTARY_BLOCKED_PAGES = new Set([
-  'notarial-request',
-])
-
 const PUBLIC_PAGES = new Set([
   'home',
   'signup',
@@ -231,7 +224,6 @@ function PageLifecycleTrace({ page, profile, children }) {
 function App() {
   const [page, setPage] = useState(() => resolveInitialPage());
   const [pageParams, setPageParams] = useState({});
-  const [showNotaryModal, setShowNotaryModal] = useState(false);
   const [signupContext, setSignupContext] = useState({ email: '', role: 'Client', otpChannel: 'email' });
   const [currentProfile, setCurrentProfile] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -574,15 +566,10 @@ function App() {
   }, []);
 
   const handleNavigate = useCallback((nextPage, params = {}) => {
-    const role = normalizeRole(currentProfile?.role || '')
-    if ((role === 'Client' || !role) && CLIENT_NOTARY_BLOCKED_PAGES.has(nextPage)) {
-      setShowNotaryModal(true)
-      return
-    }
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
     setPageParams(params || {})
     setPage(nextPage)
-  }, [currentProfile?.role])
+  }, [])
 
   const handleSignOut = useCallback(async () => {
     try {
@@ -628,9 +615,6 @@ function App() {
         profile={currentProfile}
         onNavigate={handleNavigate}
         onSignOut={handleSignOut}
-        showNotaryModal={showNotaryModal}
-        notaryWarningMessage={NOTARY_WARNING_MESSAGE}
-        onCloseNotaryModal={() => setShowNotaryModal(false)}
       >
         {node}
       </ClientShell>,

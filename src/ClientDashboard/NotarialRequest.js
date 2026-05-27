@@ -63,7 +63,7 @@ const NrProfileIcon = () => (
 );
 
 const notarialServices = [
-  { id: 1, name: 'Affidavit of Loss', description: 'Prepare and notarize an affidavit for lost documents or IDs.' },
+  { id: 1, name: 'Affidavit of Loss', description: 'Prepare and notarize an affidavit for lost documents or IDs.', amount: 500 },
 ];
 
 function NotarialRequest({ onNavigate, profile }) {
@@ -114,6 +114,7 @@ function NotarialRequest({ onNavigate, profile }) {
         notes,
         file: uploadedFile,
         documentName: uploadedFile.name,
+        amount: selectedServiceRow?.amount || 500,
       });
       setShowConfirmation(true);
     } catch (error) {
@@ -133,7 +134,7 @@ function NotarialRequest({ onNavigate, profile }) {
       setPreferredDate('');
       setUploadedFile(null);
       setNotes('');
-      onNavigate('home-logged');
+      onNavigate('my-notarial-requests');
       pendingTimeoutRef.current = null;
     }, 300);
   };
@@ -200,6 +201,7 @@ function NotarialRequest({ onNavigate, profile }) {
                   </div>
                   <h3 className="nr-service-name">{service.name}</h3>
                   <p className="nr-service-desc">{service.description}</p>
+                  <p className="nr-service-price">PHP {Number(service.amount || 0).toLocaleString()}</p>
                 </div>
               ))}
             </div>
@@ -296,10 +298,9 @@ function NotarialRequest({ onNavigate, profile }) {
               <div className="nr-confirmation-what-next">
                 <h4 className="nr-what-next-title">What Happens Next?</h4>
                 <ul className="nr-what-next-list">
-                  <li>Your request status is now <strong>Pending</strong> - awaiting notary review</li>
-                  <li>Our notary will review your documents and respond within 24 hours</li>
-                  <li>You will receive a notification when the request is accepted or declined</li>
-                  <li>Payment will be required only after the notary accepts your request</li>
+                  <li>Your request status is now <strong>Pending</strong> and ready for payment</li>
+                  <li>After payment, it will appear in the admin notarial queue for processing</li>
+                  <li>You can track status updates in My Notarial Requests</li>
                 </ul>
               </div>
 
@@ -323,7 +324,7 @@ function NotarialRequest({ onNavigate, profile }) {
                 </div>
               </div>
 
-              <button className="nr-confirmation-btn" onClick={closeConfirmation}>Back to Home</button>
+              <button className="nr-confirmation-btn" onClick={closeConfirmation}>Go to My Notarial Requests</button>
             </div>
           </div>
         </div>

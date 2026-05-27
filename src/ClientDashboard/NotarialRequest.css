@@ -280,6 +280,13 @@
   line-height: 1.4;
 }
 
+.nr-service-price {
+  margin: 12px 0 0;
+  color: #1e3a8a;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
 /* Date Input */
 .nr-date-input {
   width: 100%;

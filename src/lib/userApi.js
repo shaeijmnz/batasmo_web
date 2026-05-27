@@ -3538,6 +3538,19 @@ export async function payForNotarialRequest({ requestId, clientId, attorneyId, a
   }
 }
 
+export async function markNotarialRequestPaid({ requestId, clientId, attorneyId, amount, method }) {
+  if (!requestId) throw new Error('requestId is required.')
+  if (!clientId) throw new Error('clientId is required.')
+
+  await payForNotarialRequest({
+    requestId,
+    clientId,
+    attorneyId,
+    amount,
+    method,
+  })
+}
+
 export async function cancelNotarialRequest(requestId) {
   const { error } = await supabase
     .from('notarial_requests')
@@ -5385,8 +5398,9 @@ export function subscribeToAvailabilitySlots(onChange) {
   }
 }
 
-export async function createNotarialRequest({ clientId, serviceType, preferredDate, notes, file, documentName }) {
+export async function createNotarialRequest({ clientId, serviceType, preferredDate, notes, file, documentName, amount, attorneyId }) {
   let documentUrl = documentName || null
+  const nowIso = new Date().toISOString()
 
   if (file instanceof File) {
     const ext = file.name.split('.').pop() || 'bin'
@@ -5404,18 +5418,37 @@ export async function createNotarialRequest({ clientId, serviceType, preferredDa
     documentUrl = urlData?.publicUrl || filePath
   }
 
-  const { error } = await supabase.from('notarial_requests').insert({
+  const insertPayload = {
     client_id: clientId,
     service_type: serviceType,
     preferred_date: preferredDate,
     notes,
     document_url: documentUrl,
     status: 'pending',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  })
+    created_at: nowIso,
+    updated_at: nowIso,
+  }
+  if (Number.isFinite(Number(amount))) insertPayload.amount = Number(amount || 0)
+  if (attorneyId) insertPayload.attorney_id = attorneyId
 
-  if (error) throw error
+  let insertResult = await supabase
+    .from('notarial_requests')
+    .insert(insertPayload)
+    .select('id')
+    .single()
+
+  if (insertResult.error && isMissingColumnError(insertResult.error, 'amount')) {
+    const { amount: _amount, ...withoutAmount } = insertPayload
+    insertResult = await supabase
+      .from('notarial_requests')
+      .insert(withoutAmount)
+      .select('id')
+      .single()
+  }
+
+  if (insertResult.error) throw insertResult.error
+
+  const requestId = insertResult.data?.id || null
 
   // Notify all verified attorneys so a new notarial request is visible in
   // every attorney's bell as soon as the client submits it.
@@ -5448,6 +5481,8 @@ export async function createNotarialRequest({ clientId, serviceType, preferredDa
   } catch (notifyError) {
     console.warn('[notarial] attorney notify failed', notifyError)
   }
+
+  return { requestId, documentUrl }
 }
 
 /**
