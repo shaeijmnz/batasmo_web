@@ -151,7 +151,7 @@ const mapFutureTimeStrings = (slots, date) => {
 };
 
 const TEST_PAYMENT_AMOUNT = 1;
-const NOTARIAL_ADDON_FEE = 0;
+const NOTARIAL_ADDON_FEE = 1;
 const NOTARIAL_ADDON_SERVICE = 'Affidavit of Loss';
 
 function BookAppointment({ onNavigate, profile }) {
