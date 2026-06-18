@@ -20,6 +20,7 @@ import {
   VALID_PASSWORD_MESSAGE,
   normalizeAuthEmail,
 } from './validators'
+import { resolvePublicApiBaseUrl } from './runtimeConfig'
 
 export const PENDING_OTP_CHANNEL_KEY = 'batasmo_pending_otp_channel'
 export const PENDING_SIGNUP_USER_ID_KEY = 'batasmo_pending_signup_user_id'
@@ -27,8 +28,6 @@ export const PENDING_SIGNUP_ID_KEY = 'batasmo_pending_signup_id'
 export const PENDING_SMS_PHONE_KEY = 'batasmo_pending_sms_phone'
 export const OTP_RESUME_LOGIN_KEY = 'batasmo_otp_resume_login'
 export const OTP_RESUME_SIGNUP_KEY = 'batasmo_otp_resume_signup'
-
-import { resolvePublicApiBaseUrl } from './runtimeConfig'
 
 export const getBackendApiBase = () => resolvePublicApiBaseUrl()
 

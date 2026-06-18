@@ -9,6 +9,7 @@ import {
   getConsultationBranchesForAttorney,
   parseConsultationBranchFromTitle,
 } from './consultationBranches'
+import { getTodayDateKey, toDateKey } from './availabilityScheduleUtils'
 import { resolvePublicApiBaseUrl } from './runtimeConfig'
 
 const isMissingRelationError = (error) =>
