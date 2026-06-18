@@ -28,14 +28,9 @@ export const PENDING_SMS_PHONE_KEY = 'batasmo_pending_sms_phone'
 export const OTP_RESUME_LOGIN_KEY = 'batasmo_otp_resume_login'
 export const OTP_RESUME_SIGNUP_KEY = 'batasmo_otp_resume_signup'
 
-export const getBackendApiBase = () =>
-  String(
-    process.env.REACT_APP_PAYMENT_API_URL ||
-      process.env.REACT_APP_CHATBOT_API_URL ||
-      '',
-  )
-    .trim()
-    .replace(/\/+$/, '')
+import { resolvePublicApiBaseUrl } from './runtimeConfig'
+
+export const getBackendApiBase = () => resolvePublicApiBaseUrl()
 
 const signupProfilePayload = ({
   userId,

@@ -9,7 +9,7 @@ import {
   getConsultationBranchesForAttorney,
   parseConsultationBranchFromTitle,
 } from './consultationBranches'
-import { getTodayDateKey, toDateKey } from './availabilityScheduleUtils'
+import { resolvePublicApiBaseUrl } from './runtimeConfig'
 
 const isMissingRelationError = (error) =>
   error?.code === '42P01' || String(error?.message || '').toLowerCase().includes('does not exist')
@@ -2545,16 +2545,8 @@ export async function fetchClientConsultationLogs(userId) {
   })
 }
 
-// Resolves the base URL of the Express backend that handles PayMongo. Reads
-// REACT_APP_PAYMENT_API_URL first, falls back to REACT_APP_CHATBOT_API_URL,
-// then to localhost:4000 for development.
-const resolvePaymentApiBaseUrl = () => {
-  const raw =
-    process.env.REACT_APP_PAYMENT_API_URL ||
-    process.env.REACT_APP_CHATBOT_API_URL ||
-    'http://localhost:4000'
-  return String(raw).replace(/\/+$/, '')
-}
+// Resolves the base URL of the Express backend that handles PayMongo.
+const resolvePaymentApiBaseUrl = () => resolvePublicApiBaseUrl()
 
 const requestPaymentApi = async (path, { method = 'GET', body } = {}) => {
   const baseUrl = resolvePaymentApiBaseUrl()
