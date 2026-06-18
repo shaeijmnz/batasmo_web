@@ -90,6 +90,15 @@ export function mapLoginErrorMessage(error) {
   if (normalized.includes('too many requests') || normalized.includes('rate limit')) {
     return 'Too many login attempts. Please wait a moment and try again.';
   }
+  if (
+    normalized === 'load failed' ||
+    normalized === 'failed to fetch' ||
+    normalized.includes('networkerror') ||
+    normalized.includes('network request failed') ||
+    normalized.includes('cannot reach the batasmo database')
+  ) {
+    return 'Cannot connect to BatasMo servers. The database may be offline — restore Supabase and redeploy Vercel with updated environment variables.';
+  }
   return raw;
 }
 

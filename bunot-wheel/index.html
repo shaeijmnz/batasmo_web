@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>wheelofnames.com</title>
+    <link rel="icon" href="logo.png" type="image/png" />
+    <link rel="stylesheet" href="css/wheel.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <img class="brand-logo" src="logo.png" width="42" height="42" alt="wheelofnames.com" />
+        <span class="brand-name">wheelofnames.com</span>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="wheel-section">
+        <div id="wheel-area" class="wheel-area">
+          <div class="wheel-frame">
+            <canvas id="wheel-canvas" aria-label="Spinning wheel"></canvas>
+            <svg class="pointer" viewBox="0 0 36 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <polygon points="0,24 36,0 36,48" fill="#d32f2f" />
+            </svg>
+            <div id="spin-overlay" class="spin-overlay">
+              <p class="spin-title">Click to spin</p>
+              <p class="spin-hint">or press ctrl+enter</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="sidebar">
+        <div class="tabs">
+          <button class="tab-btn active" data-tab="entries" type="button">
+            Entries <span id="entries-count" class="badge">0</span>
+          </button>
+          <button class="tab-btn" data-tab="results" type="button">
+            Results <span id="results-count" class="badge">0</span>
+          </button>
+        </div>
+
+        <div class="toolbar">
+          <button id="shuffle-btn" type="button">Shuffle</button>
+          <button id="sort-btn" type="button">Sort</button>
+          <button id="reset-btn" type="button">Reset</button>
+        </div>
+
+        <div id="entries-panel" class="tab-panel active">
+          <textarea
+            id="entries-textarea"
+            spellcheck="false"
+            placeholder="One name per line..."
+          ></textarea>
+        </div>
+
+        <div id="results-panel" class="tab-panel">
+          <ol id="results-list" class="results-list"></ol>
+          <p id="results-empty" class="results-empty">Walang bunot pa.</p>
+        </div>
+      </aside>
+    </main>
+
+    <div id="winner-modal" class="winner-modal" hidden>
+      <div class="winner-modal__backdrop"></div>
+      <div class="winner-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="winner-modal-title">
+        <div id="winner-modal-title" class="winner-modal__header">We have a winner!</div>
+        <div class="winner-modal__body">
+          <p id="winner-modal-name" class="winner-modal__name"></p>
+        </div>
+        <div class="winner-modal__footer">
+          <button id="winner-close-btn" type="button" class="winner-modal__close-btn">Close</button>
+          <button id="winner-remove-btn" type="button" class="winner-modal__remove-btn">Remove</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="confetti-layer" class="confetti-layer" hidden aria-hidden="true"></div>
+
+    <script type="module" src="js/app.js"></script>
+  </body>
+</html>

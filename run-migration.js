@@ -15,10 +15,16 @@ const fs = require('fs');
 const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
 
-const SUPABASE_URL = 'https://sjmmyqeqiigmclcgcadr.supabase.co';
+const SUPABASE_URL = String(process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL || '').trim();
 
 async function runMigration() {
   const serviceRoleKey = process.argv[2];
+
+  if (!SUPABASE_URL) {
+    console.error('❌ ERROR: Missing SUPABASE_URL');
+    console.error('Set SUPABASE_URL or REACT_APP_SUPABASE_URL in your environment.');
+    process.exit(1);
+  }
 
   if (!serviceRoleKey) {
     console.error('❌ ERROR: Missing service role key');

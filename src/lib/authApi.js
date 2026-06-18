@@ -1,4 +1,9 @@
-import { getSupabaseConfigError, supabase } from './supabaseClient'
+import {
+  getSupabaseConfigError,
+  isSupabaseNetworkError,
+  supabase,
+  SUPABASE_REACHABILITY_ERROR,
+} from './supabaseClient'
 import { resetUserApiRuntimeState } from './userApi'
 import {
   isSignupVerificationComplete,
@@ -155,9 +160,12 @@ const normalizeRole = (role) => {
   return 'Client'
 }
 
-const normalizeAuthNetworkError = (error, fallback = 'Could not reach the server. Check your connection and try again.') => {
+const normalizeAuthNetworkError = (
+  error,
+  fallback = SUPABASE_REACHABILITY_ERROR,
+) => {
   const msg = String(error?.message || error || '').trim()
-  if (!msg || msg === 'Load failed' || msg === 'Failed to fetch' || msg.includes('NetworkError')) {
+  if (isSupabaseNetworkError(error)) {
     return fallback
   }
   return msg
@@ -447,10 +455,18 @@ export async function signInWithEmail({ email, password }) {
     throw new Error(`LOCKOUT:${lockoutBefore}`)
   }
 
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: normalizedEmail,
-    password,
-  })
+  let data
+  let error
+  try {
+    const result = await supabase.auth.signInWithPassword({
+      email: normalizedEmail,
+      password,
+    })
+    data = result.data
+    error = result.error
+  } catch (networkError) {
+    throw new Error(normalizeAuthNetworkError(networkError))
+  }
 
   if (error) {
     const normalized = String(error.message || '').toLowerCase()
