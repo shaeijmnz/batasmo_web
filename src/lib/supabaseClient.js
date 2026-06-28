@@ -62,6 +62,32 @@ export async function checkSupabaseReachable() {
   }
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/**
+ * Safari/WebKit often rejects parallel fetches with "TypeError: Load failed" even when the
+ * server is healthy. Retry transient network failures (and 5xx) a few times before giving up so
+ * dashboard pages stop showing "Load failed".
+ */
+const fetchWithRetry = async (input, init = {}, attempt = 0) => {
+  const MAX_ATTEMPTS = 3
+  try {
+    const response = await fetch(input, init)
+    if (response.status >= 500 && response.status < 600 && attempt < MAX_ATTEMPTS - 1) {
+      await sleep(350 * (attempt + 1))
+      return fetchWithRetry(input, init, attempt + 1)
+    }
+    return response
+  } catch (error) {
+    const isAbort = init?.signal?.aborted || String(error?.name || '') === 'AbortError'
+    if (!isAbort && isSupabaseNetworkError(error) && attempt < MAX_ATTEMPTS - 1) {
+      await sleep(350 * (attempt + 1))
+      return fetchWithRetry(input, init, attempt + 1)
+    }
+    throw error
+  }
+}
+
 export const supabase = createClient(
   SUPABASE_URL,
   SUPABASE_ANON_KEY,
@@ -70,6 +96,9 @@ export const supabase = createClient(
       storage: typeof window !== 'undefined' ? window.localStorage : undefined,
       autoRefreshToken: true,
       persistSession: true,
+    },
+    global: {
+      fetch: (...args) => fetchWithRetry(...args),
     },
   },
 )

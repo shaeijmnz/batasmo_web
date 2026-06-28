@@ -1181,15 +1181,15 @@ const resolveAttorneyImage = (name, preferredImageUrl) => {
     .trim()
 
   if (normalized.includes('jeanne') && normalized.includes('anarna')) {
-    return '/partners/jeanne.svg'
+    return '/partners/jeanne.jpg'
   }
 
   if (normalized.includes('alston') && normalized.includes('anarna')) {
-    return '/partners/kevin.svg'
+    return '/partners/kevin.jpg'
   }
 
   if (normalized.includes('allen') && normalized.includes('anarna')) {
-    return '/partners/allen.svg'
+    return '/partners/allen.jpg'
   }
 
   return `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'Attorney')}&background=f5a623&color=111827`
@@ -1211,7 +1211,7 @@ const FALLBACK_BOOKABLE_ATTORNEYS = [
     prcId: 'TEMPORARY-PRC-0002',
     verified: true,
     availableSlots: [],
-    img: '/partners/kevin.svg',
+    img: '/partners/kevin.jpg',
   },
   {
     id: 'cfa842e8-d1c0-41ea-bcc4-7fb94f90d01e',
@@ -1228,7 +1228,7 @@ const FALLBACK_BOOKABLE_ATTORNEYS = [
     prcId: 'TEMPORARY-PRC-0001',
     verified: true,
     availableSlots: [],
-    img: '/partners/jeanne.svg',
+    img: '/partners/jeanne.jpg',
   },
   {
     id: 'b369bde6-9ac5-4c7d-b657-768f05fa6bd6',
@@ -1245,7 +1245,7 @@ const FALLBACK_BOOKABLE_ATTORNEYS = [
     prcId: 'TEMPORARY-PRC-0003',
     verified: true,
     availableSlots: [],
-    img: '/partners/allen.svg',
+    img: '/partners/allen.jpg',
   },
 ]
 
