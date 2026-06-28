@@ -9,6 +9,7 @@ import {
   createNotarialRequest,
   uploadAppointmentAttachment,
   fetchBookableAttorneys,
+  getFallbackBookableAttorneys,
   getAppointmentPaymentStatus,
   getAvailability,
   sortTimeLabels,
@@ -197,9 +198,11 @@ function BookAppointment({ onNavigate, profile }) {
       setAttorneys(rows);
       setLoadError('');
     } catch (error) {
-      setLoadError(error.message || 'Unable to load attorneys.');
+      console.warn('[booking] live attorney load failed, using fallback attorneys', error);
+      setAttorneys(getFallbackBookableAttorneys());
+      setLoadError('');
       if (!silent) {
-        setAttorneys([]);
+        setAttorneys(getFallbackBookableAttorneys());
       }
     } finally {
       if (!silent) setAttorneysLoading(false);

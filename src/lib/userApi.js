@@ -1181,18 +1181,78 @@ const resolveAttorneyImage = (name, preferredImageUrl) => {
     .trim()
 
   if (normalized.includes('jeanne') && normalized.includes('anarna')) {
-    return '/assets/attorneys/jeanne-luz-castillo-anarna.jpg'
+    return '/partners/jeanne.svg'
   }
 
   if (normalized.includes('alston') && normalized.includes('anarna')) {
-    return '/assets/attorneys/alston-kevin-anarna.jpg'
+    return '/partners/kevin.svg'
   }
 
   if (normalized.includes('allen') && normalized.includes('anarna')) {
-    return '/assets/attorneys/allen-kristopher-anarna.png'
+    return '/partners/allen.svg'
   }
 
   return `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'Attorney')}&background=f5a623&color=111827`
+}
+
+const FALLBACK_BOOKABLE_ATTORNEYS = [
+  {
+    id: '9b19fed3-d3d1-4730-befc-736fa40192d9',
+    name: 'Atty. Alston Kevin Anarna',
+    specialty: 'Real Estate and Land Registration Law',
+    specialties: ['Real Estate and Land Registration Law', 'Election and Administrative Law', 'Labor Law'],
+    practiceAreas: ['Real Estate and Land Registration Law', 'Election and Administrative Law', 'Labor Law'],
+    exp: '5 years experience',
+    rating: 5,
+    price: 'PHP 1.00',
+    amount: 1,
+    bio: 'Atty. Kevin represents clients in courts and tribunals and has served in local governance as Provincial Board Member of Cavite.',
+    details: 'Bachelor of Laws, University of Santo Tomas; Political Science and Legal Management, De La Salle University Manila.',
+    prcId: 'TEMPORARY-PRC-0002',
+    verified: true,
+    availableSlots: [],
+    img: '/partners/kevin.svg',
+  },
+  {
+    id: 'cfa842e8-d1c0-41ea-bcc4-7fb94f90d01e',
+    name: 'Atty. Jeanne Luz Castillo-Anarna',
+    specialty: 'Family Law',
+    specialties: ['Family Law', 'Corporate and Business Law', 'Intellectual Property Law', 'General Litigation'],
+    practiceAreas: ['Family Law', 'Corporate and Business Law', 'Intellectual Property Law', 'General Litigation'],
+    exp: '5 years experience',
+    rating: 5,
+    price: 'PHP 1.00',
+    amount: 1,
+    bio: 'Atty. Jeanne handles civil, criminal, and corporate cases and previously served as Branch Clerk of Court in Quezon City.',
+    details: 'Faculty of Civil Law, University of Santo Tomas; awarded with a Medal for Leadership.',
+    prcId: 'TEMPORARY-PRC-0001',
+    verified: true,
+    availableSlots: [],
+    img: '/partners/jeanne.svg',
+  },
+  {
+    id: 'b369bde6-9ac5-4c7d-b657-768f05fa6bd6',
+    name: 'Atty. Allen Kristopher Anarna',
+    specialty: 'Administrative Law',
+    specialties: ['Real Estate and Land Registration Law', 'Law on Public Officials', 'Administrative Law', 'Taxation'],
+    practiceAreas: ['Real Estate and Land Registration Law', 'Law on Public Officials', 'Administrative Law', 'Taxation'],
+    exp: '5 years experience',
+    rating: 5,
+    price: 'PHP 1.00',
+    amount: 1,
+    bio: 'Atty. Allen served as Attorney for the Presidential Anti-Corruption Commission and Deputy Register of Deeds of Taguig City.',
+    details: 'Law degree and accountancy degree from the University of Santo Tomas; CPA board passer.',
+    prcId: 'TEMPORARY-PRC-0003',
+    verified: true,
+    availableSlots: [],
+    img: '/partners/allen.svg',
+  },
+]
+
+export function getFallbackBookableAttorneys({ concern } = {}) {
+  return FALLBACK_BOOKABLE_ATTORNEYS.filter((attorney) =>
+    matchConcernToSpecialties([...attorney.specialties, ...attorney.practiceAreas], concern),
+  )
 }
 
 export function normalizeRole(roleText) {
