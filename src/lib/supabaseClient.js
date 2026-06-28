@@ -6,9 +6,11 @@ const DEFAULT_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNqbW15cWVxaWlnbWNsY2djYWRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI4MDY2MDEsImV4cCI6MjA4ODM4MjYwMX0.pBslZg2JQqoqRKNhaOE-uWHpWxSf0jULvV0awyC0NUI'
 
 export const SUPABASE_URL = String(process.env.REACT_APP_SUPABASE_URL || DEFAULT_URL).trim()
-const SUPABASE_ANON_KEY = String(
-  process.env.REACT_APP_SUPABASE_ANON_KEY || DEFAULT_ANON_KEY,
-).trim()
+const SUPABASE_ENV_ANON_KEY = String(process.env.REACT_APP_SUPABASE_ANON_KEY || '').trim()
+const isLegacyAnonJwt = (value) => String(value || '').startsWith('eyJ')
+const SUPABASE_ANON_KEY = isLegacyAnonJwt(SUPABASE_ENV_ANON_KEY)
+  ? SUPABASE_ENV_ANON_KEY
+  : DEFAULT_ANON_KEY
 
 export const SUPABASE_PUBLISHABLE_KEY_WARNING =
   'Login needs the legacy anon key (starts with eyJ), not sb_publishable_. In Supabase: Settings → API Keys → Legacy anon, public — then set REACT_APP_SUPABASE_ANON_KEY on Vercel and redeploy.'
@@ -20,9 +22,6 @@ export const SUPABASE_REACHABILITY_ERROR =
 export function getSupabaseConfigError() {
   if (!SUPABASE_ANON_KEY) {
     return 'Missing REACT_APP_SUPABASE_ANON_KEY. Add your Supabase legacy anon key (eyJ…) in Vercel → Settings → Environment Variables, then redeploy.'
-  }
-  if (SUPABASE_ANON_KEY.startsWith('sb_publishable_') || SUPABASE_ANON_KEY.startsWith('sb_secret_')) {
-    return SUPABASE_PUBLISHABLE_KEY_WARNING
   }
   if (!SUPABASE_ANON_KEY.startsWith('eyJ')) {
     return 'REACT_APP_SUPABASE_ANON_KEY must be the legacy anon JWT (starts with eyJ…).'
