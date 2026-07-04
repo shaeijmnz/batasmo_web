@@ -34,7 +34,7 @@
   max-height: 92vh;
   overflow: hidden;
   border-radius: 16px;
-  background: linear-gradient(180deg, #fff9f0 0%, #f7ead9 100%);
+  background: linear-gradient(180deg, rgba(27, 43, 71, 0.96) 0%, rgba(15, 26, 45, 0.98) 100%);
   border: 1px solid #d9c8b1;
   box-shadow: 0 24px 48px rgba(36, 29, 20, 0.16);
   display: flex;
@@ -76,7 +76,7 @@
   padding: 10px 12px;
   font-size: 0.9rem;
   font-family: inherit;
-  color: #1b2432;
+  color: #f5f4f1;
   cursor: pointer;
 }
 .al-summary-panel__select:focus {
@@ -103,7 +103,7 @@
   font-family: inherit;
   resize: vertical;
   min-height: 180px;
-  color: #1b2432;
+  color: #f5f4f1;
   line-height: 1.5;
 }
 .al-summary-panel__textarea::placeholder { color: #8b857d; }
@@ -135,13 +135,13 @@
   align-items: flex-start;
   gap: 12px;
   flex-wrap: wrap;
-  background: linear-gradient(180deg, #fff9f0 0%, #f5ebdc 100%);
+  background: linear-gradient(180deg, rgba(27, 43, 71, 0.94) 0%, rgba(15, 26, 45, 0.98) 100%);
 }
 .al-modal__header h2 {
   margin: 0;
   font-size: 1.05rem;
   font-weight: 800;
-  color: #1b2432;
+  color: #f5f4f1;
   letter-spacing: -0.02em;
 }
 .al-modal__header-meta {
@@ -170,8 +170,8 @@
 
 /* Page-scoped override: make 'View summary' button dark text on light/beige background */
 .al-page .al-list .al-item .al-view-btn {
-  background: linear-gradient(145deg, #fff9f0, #f8ecdd) !important;
-  color: #1b2432 !important;
+  background: linear-gradient(145deg, rgba(27, 43, 71, 0.94), rgba(15, 26, 45, 0.98)) !important;
+  color: #f5f4f1 !important;
   border: 1px solid #d9c8b1 !important;
   box-shadow: 0 6px 14px rgba(36, 29, 20, 0.06) !important;
 }

@@ -42,8 +42,9 @@
 	height: 44px;
 	object-fit: cover;
 	border-radius: 12px;
-	border: 1px solid rgba(242, 200, 121, 0.52);
-	box-shadow: 0 8px 18px rgba(212, 175, 55, 0.22);
+	border: 1px solid rgba(212, 175, 55, 0.35);
+	background: #0b1321;
+	box-shadow: 0 8px 18px rgba(7, 12, 22, 0.28);
 }
 
 .att-brand-text-wrap {
@@ -135,7 +136,9 @@
 	height: 38px;
 	border-radius: 10px;
 	object-fit: cover;
-	border: 1px solid rgba(242, 200, 121, 0.5);
+	border: 1px solid rgba(212, 175, 55, 0.35);
+	background: #0b1321;
+	box-shadow: 0 6px 14px rgba(7, 12, 22, 0.28);
 }
 
 .att-topbar__eyebrow {
@@ -223,9 +226,12 @@
 	gap: 18px;
 }
 
-/* Lady Justice image integration for a seamless hero */
+/* Lady Justice image integration for a seamless dark hero */
 .att-welcome--with-image {
-	background: linear-gradient(90deg, rgba(255,249,240,0.98) 0%, rgba(255,249,240,0.92) 48%, rgba(255,249,240,0.18) 100%);
+	background:
+		linear-gradient(90deg, rgba(11, 19, 33, 0.98) 0%, rgba(21, 34, 56, 0.94) 52%, rgba(15, 26, 45, 0.72) 100%);
+	border: 1px solid rgba(212, 175, 55, 0.14);
+	box-shadow: 0 18px 40px rgba(7, 12, 22, 0.28);
 }
 
 .att-welcome__image {
@@ -236,16 +242,19 @@
 	max-width: 56%;
 	object-fit: cover;
 	object-position: right center;
-	opacity: 0.96;
-	filter: saturate(0.9) contrast(1.02) brightness(0.98);
+	opacity: 0.28;
+	filter: saturate(0.75) contrast(1.08) brightness(0.62);
 	transform: translateX(8%);
 	pointer-events: none;
+	mix-blend-mode: luminosity;
 }
 
 .att-welcome__overlay {
 	position: absolute;
 	inset: 0;
-	background: linear-gradient(90deg, rgba(255,249,240,0.98) 0%, rgba(255,249,240,0.9) 46%, rgba(255,249,240,0.26) 100%);
+	background:
+		linear-gradient(90deg, rgba(11, 19, 33, 0.97) 0%, rgba(21, 34, 56, 0.9) 42%, rgba(15, 26, 45, 0.55) 68%, rgba(15, 26, 45, 0.12) 100%),
+		radial-gradient(circle at 82% 50%, rgba(212, 175, 55, 0.08), transparent 42%);
 	z-index: 1;
 	pointer-events: none;
 }
@@ -483,28 +492,28 @@
 	gap: 12px;
 	padding: 14px;
 	border-radius: 14px;
-	background: linear-gradient(180deg, #fff9f0 0%, #f7ead9 100%);
-	border: 1px solid #d9c8b1;
+	background: linear-gradient(180deg, rgba(27, 43, 71, 0.94) 0%, rgba(15, 26, 45, 0.98) 100%);
+	border: 1px solid rgba(212, 175, 55, 0.14);
 	transition: transform .22s ease, background .22s ease, border-color .22s ease;
 }
 
 .att-queue-item:hover {
 	transform: translateY(-2px);
-	background: linear-gradient(180deg, #fffdf8 0%, #f9efe1 100%);
-	border-color: #c9b89a;
+	background: linear-gradient(180deg, rgba(34, 54, 86, 0.98) 0%, rgba(27, 43, 71, 0.98) 100%);
+	border-color: rgba(212, 175, 55, 0.28);
 }
 
 .att-queue-item--today {
-	background: linear-gradient(120deg, #fff8eb 0%, #f5e8cf 100%);
-	border-color: #d4af37;
+	background: linear-gradient(120deg, rgba(34, 54, 86, 0.98) 0%, rgba(27, 43, 71, 0.98) 100%);
+	border-color: rgba(212, 175, 55, 0.28);
 }
 
 .att-queue-number {
 	width: 30px;
 	height: 30px;
 	border-radius: 50%;
-	background: rgba(21, 34, 56, 0.1);
-	color: #152238;
+	background: rgba(212, 175, 55, 0.16);
+	color: #f5f4f1;
 	font-size: 0.8rem;
 	font-weight: 700;
 	display: flex;
@@ -514,8 +523,8 @@
 
 .att-queue-item__date-block {
 	border-radius: 10px;
-	background: linear-gradient(180deg, #fffaf3 0%, #f0e4d3 100%);
-	border: 1px solid #d4c4ad;
+	background: linear-gradient(180deg, rgba(27, 43, 71, 0.96) 0%, rgba(15, 26, 45, 0.98) 100%);
+	border: 1px solid rgba(212, 175, 55, 0.12);
 	display: flex;
 	flex-direction: column;
 	align-items: center;
@@ -528,14 +537,14 @@
 .att-queue-month {
 	font-size: 0.65rem;
 	text-transform: uppercase;
-	color: #8b847a;
+	color: #b8c2d1;
 	letter-spacing: .07em;
 	font-weight: 600;
 }
 
 .att-queue-day {
 	font-size: 1.08rem;
-	color: #152238;
+	color: #f5f4f1;
 	font-weight: 800;
 }
 
@@ -543,8 +552,8 @@
 	width: 42px;
 	height: 42px;
 	border-radius: 50%;
-	background: linear-gradient(145deg, #2f7bf0, #1958c5);
-	color: #fff;
+	background: linear-gradient(145deg, #152238, #223656);
+	color: #f5f4f1;
 	font-size: 0.75rem;
 	font-weight: 700;
 	display: flex;
@@ -560,19 +569,19 @@
 }
 
 .att-queue-item__name {
-	color: #1b2432;
+	color: #f5f4f1;
 	font-size: 0.92rem;
 	font-weight: 700;
 }
 
 .att-queue-item__area {
 	font-size: 0.81rem;
-	color: #6f6a62;
+	color: #b8c2d1;
 }
 
 .att-queue-item__time {
 	font-size: 0.77rem;
-	color: #9a9288;
+	color: #7d8da6;
 	display: inline-flex;
 	align-items: center;
 	gap: 4px;
@@ -594,7 +603,7 @@
 
 .att-badge--pending {
 	background: rgba(212, 175, 55, 0.18);
-	color: #f5d995;
+	color: #f5f4f1;
 }
 
 .att-badge--confirmed {
@@ -633,15 +642,15 @@
 }
 
 .att-queue-item__status-text {
-	color: #a5c0de;
+	color: #b8c2d1;
 	font-size: 0.79rem;
 }
 
 .att-queue-empty {
 	padding: 16px;
 	text-align: center;
-	color: #aac2df;
-	border: 1px dashed rgba(170, 202, 236, 0.3);
+	color: #b8c2d1;
+	border: 1px dashed rgba(212, 175, 55, 0.2);
 	border-radius: 12px;
 	margin: 6px 8px;
 }

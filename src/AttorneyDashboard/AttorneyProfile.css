@@ -235,7 +235,7 @@
 
 .ap-stat__value {
   display: block;
-  color: #1b2432;
+  color: #f5f4f1;
   font-size: 2rem;
   line-height: 1;
   font-weight: 800;
@@ -261,7 +261,7 @@
 .ap-details-card h2 {
   margin: 0 0 14px;
   font-size: 1.25rem;
-  color: #1b2432;
+  color: #f5f4f1;
 }
 
 .ap-detail-grid {
@@ -289,7 +289,7 @@
 .ap-detail__value {
   display: block;
   margin-top: 4px;
-  color: #1b2432;
+  color: #f5f4f1;
   font-size: 0.92rem;
   font-weight: 600;
   word-break: break-word;

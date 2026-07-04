@@ -452,7 +452,7 @@
 }
 
 .availability-page--attorney {
-  background: linear-gradient(180deg, #fff9f0 0%, #f2e5d4 100%);
+  background: linear-gradient(180deg, rgba(27, 43, 71, 0.94) 0%, rgba(15, 26, 45, 0.98) 100%);
   border: 1px solid #d9c8b1;
   color: #1b2432;
 }
@@ -473,7 +473,7 @@
 }
 
 .availability-page--attorney .availability-card {
-  background: linear-gradient(180deg, #fff9f0 0%, #f7ead9 100%);
+  background: linear-gradient(180deg, rgba(27, 43, 71, 0.94) 0%, rgba(15, 26, 45, 0.98) 100%);
   border-color: #d9c8b1;
 }
 

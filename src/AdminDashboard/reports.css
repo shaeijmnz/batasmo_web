@@ -4,21 +4,21 @@
    ============================================================ */
 
 :root {
-  --navy: #0f172a;
-  --gold: #eab308;
-  --bg-main: #f8fafc;
-  --border: #e2e8f0;
+  --navy: #152238;
+  --gold: #d4af37;
+  --bg-main: #0b1321;
+  --border: #2c4266;
   --ui-accent: #152238;
-  --ui-accent-hover: #1e2d45;
-  --ui-bg-card: rgba(255, 255, 255, 0.96);
-  --ui-bg-card-hover: rgba(255, 255, 255, 1);
-  --ui-border: #D1D5DB;
-  --ui-glass-border: rgba(21, 34, 56, 0.15);
-  --ui-glass-bg: rgba(255, 255, 255, 0.85);
-  --ui-shadow-premium: 0 6px 28px rgba(21, 34, 56, 0.12);
-  --ui-shadow-glow: 0 0 20px rgba(21, 34, 56, 0.1);
-  --ui-text-primary: #0B0F19;
-  --ui-text-secondary: #4B5563;
+  --ui-accent-hover: #223656;
+  --ui-bg-card: rgba(27, 43, 71, 0.94);
+  --ui-bg-card-hover: rgba(34, 54, 86, 0.98);
+  --ui-border: #2c4266;
+  --ui-glass-border: rgba(212, 175, 55, 0.18);
+  --ui-glass-bg: rgba(15, 26, 45, 0.78);
+  --ui-shadow-premium: 0 18px 50px rgba(7, 12, 22, 0.34);
+  --ui-shadow-glow: 0 0 20px rgba(212, 175, 55, 0.08);
+  --ui-text-primary: #f5f4f1;
+  --ui-text-secondary: #b8c2d1;
   --ui-gradient-primary: linear-gradient(135deg, var(--ui-accent) 0%, var(--ui-accent-hover) 100%);
   --ui-radius-md: 8px;
   --ui-radius-lg: 16px;

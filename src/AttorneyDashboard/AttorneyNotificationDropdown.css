@@ -20,7 +20,7 @@
   z-index: 300;
   border-radius: 14px;
   overflow: hidden;
-  background: linear-gradient(180deg, #fff9f0 0%, #f7ead9 100%);
+  background: linear-gradient(180deg, rgba(27, 43, 71, 0.96) 0%, rgba(15, 26, 45, 0.98) 100%);
   border: 1px solid #d9c8b1;
   box-shadow: 0 18px 36px rgba(36, 29, 20, 0.14);
   backdrop-filter: blur(16px);
@@ -39,7 +39,7 @@
   font-size: 0.92rem;
   font-weight: 800;
   letter-spacing: 0.02em;
-  color: #1b2432;
+  color: #f5f4f1;
 }
 
 .atty-notif-panel__header-actions {
@@ -64,7 +64,7 @@
 .atty-notif-panel__mark-read:hover:not(:disabled) {
   background: #e8d7c1;
   border-color: #c8b49a;
-  color: #1b2432;
+  color: #f5f4f1;
 }
 
 .atty-notif-panel__mark-read:disabled {
@@ -85,7 +85,7 @@
 }
 
 .atty-notif-panel__close:hover {
-  color: #1b2432;
+  color: #f5f4f1;
   background: rgba(21, 34, 56, 0.08);
 }
 
@@ -198,7 +198,7 @@
   font-weight: 800;
   line-height: 1.25;
   letter-spacing: 0.01em;
-  color: #1b2432;
+  color: #f5f4f1;
   flex: 1;
   min-width: 0;
 }

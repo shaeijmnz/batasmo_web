@@ -1,45 +1,26 @@
 :root {
-  --navy: #0f172a;
-  --gold: #eab308;
-  --bg-main: #f8fafc;
-  --border: #e2e8f0;
-  --text-primary: #1e293b;
-  --text-secondary: #64748b;
-  --ui-bg-darker: #ECE6DE;
-  --ui-bg-dark: #F5F1EB;
-  --ui-bg-card: rgba(255, 255, 255, 0.96);
+  --navy: #152238;
+  --gold: #d4af37;
+  --bg-main: #0b1321;
+  --border: #2c4266;
+  --text-primary: #f5f4f1;
+  --text-secondary: #b8c2d1;
+  --ui-bg-darker: #0f1a2d;
+  --ui-bg-dark: #152238;
+  --ui-bg-card: rgba(27, 43, 71, 0.94);
+  --ui-bg-card-hover: rgba(34, 54, 86, 0.98);
   --ui-accent: #152238;
-  --ui-text-primary: #0B0F19;
-  --ui-text-secondary: #4B5563;
-  --ui-border: #e2e8f0;
-  --ui-glass-border: rgba(21, 34, 56, 0.15);
-  --ui-glass-bg: rgba(255, 255, 255, 0.85);
-  --ui-shadow-glow: 0 0 20px rgba(21, 34, 56, 0.1);
-  --ui-shadow-premium: 0 6px 28px rgba(21, 34, 56, 0.12);
-  --ui-accent-hover: #1e2d45;
-  --ui-bg-card-hover: rgba(255, 255, 255, 1);
+  --ui-accent-hover: #223656;
+  --ui-border: #2c4266;
+  --ui-glass-border: rgba(212, 175, 55, 0.18);
+  --ui-glass-bg: rgba(15, 26, 45, 0.78);
+  --ui-shadow-premium: 0 18px 50px rgba(7, 12, 22, 0.34);
+  --ui-shadow-glow: 0 0 20px rgba(212, 175, 55, 0.08);
+  --ui-text-primary: #f5f4f1;
+  --ui-text-secondary: #b8c2d1;
 }
-
-.app-container { display: flex; min-height: 100vh; overflow: visible; }
-
-/* Sidebar & Navbar (Common styles) - Using theme.css globally */
-.logo-icon { background: linear-gradient(135deg, var(--ui-accent) 0%, var(--ui-accent-hover) 100%); color: white; padding: 5px; border-radius: 4px; display: flex; box-shadow: var(--ui-shadow-glow); }
-
-.main-content { flex: 1; display: flex; flex-direction: column; background: transparent; overflow: hidden; }
-.hamburger { background: none; border: none; cursor: pointer; color: var(--ui-text-primary); }
-.dot { position: absolute; top: 0; right: 0; width: 8px; height: 8px; background: #EF4444; border-radius: 50%; border: 2px solid var(--ui-bg-darker); }
-.bell-container { position: relative; color: var(--ui-text-secondary); }
 
 /* Page Specifics */
-.content-wrapper { padding: 30px; overflow-y: auto; width: 100%; max-width: 1600px; margin: 0 auto; position: relative; z-index: 1; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
-
-.sidebar.closed ~ .main-content .content-wrapper {
-  max-width: 1800px;
-}
-
-.sidebar.closed ~ .main-content .stats-grid {
-  grid-template-columns: repeat(3, 1fr) !important;
-}
 
 .sidebar.closed ~ .main-content .attorneys-container {
   max-width: 100%;

@@ -1,44 +1,68 @@
 :root {
-  /* Background Colors */
-  --ui-bg-dark: #F5F1EB;
-  --ui-bg-darker: #ECE6DE;
-  --ui-bg-midnight: #F5F1EB;
-  --ui-bg-charcoal: #ECE6DE;
-  --ui-bg-card: rgba(255, 255, 255, 0.96);
-  --ui-bg-card-hover: rgba(255, 255, 255, 1);
+  /* Primary navy palette — matches AdminDashboard */
+  --ui-bg-dark: #152238;
+  --ui-bg-darker: #0f1a2d;
+  --ui-bg-midnight: #0b1321;
+  --ui-bg-charcoal: #1b2b47;
+  --ui-bg-card: rgba(27, 43, 71, 0.94);
+  --ui-bg-card-hover: rgba(34, 54, 86, 0.98);
+  --ui-page-bg: #e8ebf0;
 
-  /* Accent Colors */
+  /* Accent — navy + gold law-firm */
   --ui-accent: #152238;
-  --ui-accent-hover: #1e2d45;
-  --ui-accent-light: #2a3a55;
-  --ui-accent-dark: #0B0F19;
-  --ui-accent-glow: rgba(21, 34, 56, 0.12);
-  --ui-accent-glow-hover: rgba(21, 34, 56, 0.18);
+  --ui-accent-hover: #223656;
+  --ui-accent-light: #2c4266;
+  --ui-accent-dark: #0f1a2d;
+  --ui-accent-glow: rgba(212, 175, 55, 0.14);
+  --ui-accent-glow-hover: rgba(212, 175, 55, 0.22);
+  --gold: #d4af37;
+  --gold-hover: #e4c46a;
 
-  /* Text Colors */
-  --ui-text-primary: #0B0F19;
-  --ui-text-secondary: #4B5563;
-  --ui-text-muted: #6B7280;
+  /* Text */
+  --ui-text-primary: #f5f4f1;
+  --ui-text-secondary: #b8c2d1;
+  --ui-text-muted: #7d8da6;
 
-  /* Border Colors */
-  --ui-border: #D1D5DB;
-  --ui-glass-border: rgba(21, 34, 56, 0.15);
-
-  /* Glassmorphism */
-  --ui-glass-bg: rgba(255, 255, 255, 0.85);
-  --ui-glass-blur: 8px;
+  /* Borders & glass */
+  --ui-border: #2c4266;
+  --ui-glass-border: rgba(212, 175, 55, 0.18);
+  --ui-glass-bg: rgba(15, 26, 45, 0.78);
+  --ui-glass-blur: 14px;
 
   /* Gradients */
-  --ui-gradient-primary: linear-gradient(135deg, #152238 0%, #1e2d45 100%);
-  --ui-gradient-secondary: linear-gradient(135deg, #ECE6DE 0%, #F5F1EB 100%);
+  --ui-gradient-primary: linear-gradient(135deg, #152238 0%, #0f1a2d 100%);
+  --ui-gradient-secondary: linear-gradient(135deg, #1b2b47 0%, #152238 100%);
+  --ui-gradient-sidebar: linear-gradient(180deg, #0f1a2d 0%, #152238 100%);
 
   /* Shadows */
-  --ui-shadow-sm: 0 2px 4px rgba(21, 34, 56, 0.05);
-  --ui-shadow-md: 0 4px 12px rgba(21, 34, 56, 0.08);
-  --ui-shadow-lg: 0 8px 24px rgba(21, 34, 56, 0.12);
-  --ui-shadow-xl: 0 16px 48px rgba(21, 34, 56, 0.15);
+  --ui-shadow-sm: 0 3px 12px rgba(7, 12, 22, 0.18);
+  --ui-shadow-md: 0 10px 26px rgba(7, 12, 22, 0.22);
+  --ui-shadow-lg: 0 18px 44px rgba(7, 12, 22, 0.3);
+  --ui-shadow-xl: 0 18px 50px rgba(7, 12, 22, 0.34);
+  --ui-shadow-premium: 0 18px 50px rgba(7, 12, 22, 0.34);
+  --ui-shadow-glow: 0 0 20px rgba(212, 175, 55, 0.08);
 
-  /* Animations */
+  /* Semantic */
+  --ui-success: #4fae7a;
+  --ui-warning: #d9a441;
+  --ui-danger: #c85a5a;
+
+  /* Legacy cream aliases → dark surfaces (page CSS compatibility) */
+  --ui-bg-cream: rgba(27, 43, 71, 0.94);
+  --ui-bg-cream-light: #223656;
+  --ui-glass-cream: rgba(27, 43, 71, 0.94);
+  --ui-border-cream: rgba(212, 175, 55, 0.14);
+  --ui-text-cream: #b8c2d1;
+  --ui-gradient-cream: linear-gradient(180deg, #1b2b47 0%, #152238 100%);
+  --ui-shadow-cream: 0 18px 50px rgba(7, 12, 22, 0.34);
+
+  /* Radius */
+  --ui-radius-sm: 10px;
+  --ui-radius-md: 14px;
+  --ui-radius-lg: 18px;
+  --ui-radius-xl: 26px;
+
+  /* Transitions */
   --ui-transition-fast: 0.15s ease;
   --ui-transition-normal: 0.25s ease;
   --ui-transition-slow: 0.4s ease;

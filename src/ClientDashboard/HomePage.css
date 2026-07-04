@@ -1,6 +1,6 @@
 .hp-page {
   min-height: 100vh;
-  background: #f8f9fa;
+  background: transparent;
   font-family: 'Segoe UI', 'Inter', sans-serif;
   overflow-x: hidden;
   display: flex;

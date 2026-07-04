@@ -1,6 +1,6 @@
-/* Light palette overrides for the attorney messages page. */
+/* Attorney messages palette aligned to the navy-and-gold law-firm theme. */
 .am-page {
-  background: linear-gradient(180deg, var(--at-ui-page) 0%, var(--at-ui-page-soft) 100%) !important;
+  background: radial-gradient(circle at top left, rgba(212, 175, 55, 0.08), transparent 28%), radial-gradient(circle at top right, rgba(34, 54, 86, 0.35), transparent 32%), linear-gradient(180deg, #0b1321 0%, #152238 58%, #0f1a2d 100%) !important;
   color: var(--at-ui-text) !important;
 }
 
@@ -11,7 +11,7 @@
 .am-chat-actions,
 .am-input-bar,
 .am-confirm-modal {
-  background: linear-gradient(180deg, var(--at-ui-surface) 0%, var(--at-ui-surface-2) 100%) !important;
+  background: linear-gradient(180deg, rgba(27, 43, 71, 0.94) 0%, rgba(15, 26, 45, 0.98) 100%) !important;
   color: var(--at-ui-text) !important;
   border-color: var(--at-ui-border) !important;
 }
@@ -55,13 +55,13 @@
 }
 
 .am-confirm-btn--ghost {
-  background: #fff9f0 !important;
-  border: 1px solid #c9b89a !important;
+  background: rgba(27, 43, 71, 0.94) !important;
+  border: 1px solid rgba(212, 175, 55, 0.16) !important;
   color: #152238 !important;
 }
 
 .am-confirm-btn--ghost:hover:not(:disabled) {
-  background: #f3e6d6 !important;
+  background: rgba(34, 54, 86, 0.98) !important;
 }
 
 .am-confirm-btn--danger {
@@ -72,10 +72,10 @@
 }
 
 .am-confirm-btn--primary {
-  background: linear-gradient(135deg, var(--at-ui-accent) 0%, var(--at-ui-accent-2) 100%) !important;
+  background: linear-gradient(135deg, #d4af37 0%, #e4c46a 100%) !important;
   border: 1px solid transparent !important;
-  color: #ffffff !important;
-  box-shadow: 0 8px 18px var(--at-ui-accent-soft) !important;
+  color: #152238 !important;
+  box-shadow: 0 8px 18px rgba(212, 175, 55, 0.16) !important;
 }
 
 .am-sidebar__item:hover,
@@ -85,8 +85,8 @@
 .am-end-session-btn--top,
 .am-bubble--attorney,
 .am-chat-header__status {
-  background: linear-gradient(135deg, var(--at-ui-accent) 0%, var(--at-ui-accent-2) 100%) !important;
-  color: #fff !important;
+  background: linear-gradient(135deg, #152238 0%, #223656 100%) !important;
+  color: #f5f4f1 !important;
 }
 
 .am-thread-select,
@@ -109,14 +109,14 @@
 .am-timer-chip,
 .am-attach-btn,
 .am-input-bar__textarea {
-  background: linear-gradient(180deg, var(--at-ui-surface) 0%, var(--at-ui-surface-2) 100%) !important;
+  background: linear-gradient(180deg, rgba(27, 43, 71, 0.94) 0%, rgba(15, 26, 45, 0.98) 100%) !important;
 }
 
 .am-bubble--attorney,
 .am-video-call-btn,
 .am-input-bar__send {
-  background: linear-gradient(135deg, var(--at-ui-accent) 0%, var(--at-ui-accent-2) 100%) !important;
-  color: #fff !important;
+  background: linear-gradient(135deg, #d4af37 0%, #e4c46a 100%) !important;
+  color: #152238 !important;
 }
 
 .am-online-dot {
@@ -131,7 +131,7 @@
 .am-modal,
 .am-confirm-modal,
 .am-summary-modal {
-  background: linear-gradient(180deg, var(--at-ui-surface) 0%, var(--at-ui-surface-2) 100%) !important;
+  background: linear-gradient(180deg, rgba(27, 43, 71, 0.96) 0%, rgba(15, 26, 45, 0.98) 100%) !important;
   box-shadow: var(--at-ui-shadow) !important;
   color: var(--at-ui-text) !important;
   border-color: var(--at-ui-border) !important;
