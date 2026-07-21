@@ -152,6 +152,31 @@ export function isAttorneyConsultationQueueVisible(appt, nowValue = new Date()) 
   return now.getTime() < windowEndMs
 }
 
+const CLIENT_QUEUE_ACTIVE_STATUSES = new Set([
+  'pending',
+  'approved',
+  'confirmed',
+  'rescheduled',
+  'started',
+  'in_progress',
+  'in-progress',
+  'active',
+])
+
+/** Active upcoming bookings still within the consultation slot window (client queue / View All). */
+export function isClientConsultationQueueVisible(appt, nowValue = new Date()) {
+  const status = String(appt?.rawStatus || appt?.status || '').toLowerCase()
+  if (['completed', 'cancelled', 'rejected'].includes(status)) return false
+  if (!CLIENT_QUEUE_ACTIVE_STATUSES.has(status)) return false
+
+  const scheduled = parseAppointmentScheduleDate(appt)
+  if (!scheduled || Number.isNaN(scheduled.getTime())) return false
+
+  const now = nowValue instanceof Date ? nowValue : new Date(nowValue)
+  const windowEndMs = scheduled.getTime() + ATTORNEY_QUEUE_SLOT_DURATION_MS
+  return now.getTime() < windowEndMs
+}
+
 async function fetchPaidAppointmentIdsForIdList(appointmentIds) {
   const unique = [...new Set((appointmentIds || []).filter(Boolean))]
   if (!unique.length) return new Set()
@@ -1514,6 +1539,14 @@ export async function fetchClientHomeData(userId) {
         }),
       }
     })
+    .filter((item) =>
+      isClientConsultationQueueVisible({
+        status: item.status,
+        scheduledAt: item.scheduledAt,
+        slotDate: item.slotDate,
+        slotTime: item.slotTime,
+      }),
+    )
 
   const notifications = (notificationsRes.data || []).map((n) => ({
     id: n.id,

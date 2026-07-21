@@ -4,6 +4,7 @@ import './ClientTheme.css';
 import {
   fetchClientAppointmentsData,
   fetchClientForfeitedRescheduleAlerts,
+  isClientConsultationQueueVisible,
   getAppointmentPaymentStatus,
   getAvailability,
   sortTimeLabels,
@@ -115,6 +116,12 @@ function MyAppointments({ onNavigate, profile }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
   const [waitingPopup, setWaitingPopup] = useState(null);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowTick(Date.now()), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const loadAppointments = useCallback(async (options = {}) => {
     if (!profile?.id) return;
@@ -172,17 +179,13 @@ function MyAppointments({ onNavigate, profile }) {
     };
   }, [profile?.id]);
 
-  const upcomingAppointments = useMemo(
-    () => appointments.filter((item) => ['PENDING', 'APPROVED'].includes(String(item.status || '').toUpperCase())),
-    [appointments],
-  );
-
   const queueAppointments = useMemo(
     () =>
-      upcomingAppointments
+      appointments
+        .filter((item) => isClientConsultationQueueVisible(item, nowTick))
         .slice()
         .sort((a, b) => Number(a.scheduledAtTs || 0) - Number(b.scheduledAtTs || 0)),
-    [upcomingAppointments],
+    [appointments, nowTick],
   );
 
   const totalUpcoming = queueAppointments.length;
@@ -428,6 +431,7 @@ function MyAppointments({ onNavigate, profile }) {
 
   const renderAppointmentCard = (appointment) => {
     const canEnterChat = appointment.chatAccessible && appointment.payment === 'PAID' && appointment.status !== 'COMPLETED';
+    const reschedulePolicy = getReschedulePolicyState(appointment);
     const attorneyName = formatAttorneyName(appointment.attorney);
     const areaLabel = String(appointment.specialty || 'Consultation').toUpperCase();
 
@@ -455,7 +459,12 @@ function MyAppointments({ onNavigate, profile }) {
             ) : (
               <button
                 className="ma-btn ma-btn--queue-secondary"
-                title="Choose a new date and time (admin approval required)"
+                disabled={!reschedulePolicy.can}
+                title={
+                  reschedulePolicy.can
+                    ? 'Choose a new date and time (admin approval required)'
+                    : reschedulePolicy.reason
+                }
                 onClick={() => openRescheduleModal(appointment)}
               >
                 RESCHEDULE
