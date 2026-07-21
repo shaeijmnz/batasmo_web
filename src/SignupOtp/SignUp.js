@@ -8,9 +8,8 @@ import {
   signUpWithEmail,
 } from '../lib/authApi';
 import {
+  getEmailValidationError,
   getPasswordRuleChecks,
-  GMAIL_REQUIRED_MESSAGE,
-  isGmailEmail,
   isPhilippineMobile,
   isStrongPassword,
   NUMBERS_ONLY_MESSAGE,
@@ -92,11 +91,9 @@ function SignUp({ onNavigate, onEmailChange }) {
       nextErrors.fullName = 'Please enter your complete name.';
     }
 
-    const normalizedEmail = String(values.email || '').trim().toLowerCase();
-    if (!normalizedEmail) {
-      nextErrors.email = 'Email is required.';
-    } else if (!isGmailEmail(normalizedEmail)) {
-      nextErrors.email = GMAIL_REQUIRED_MESSAGE;
+    const emailError = getEmailValidationError(values.email, { requireGmail: true });
+    if (emailError) {
+      nextErrors.email = emailError;
     }
 
     if (hasInvalidPhoneInput) {
@@ -235,7 +232,7 @@ function SignUp({ onNavigate, onEmailChange }) {
             <p>Create your legal profile and continue with OTP verification.</p>
           </div>
 
-          <form className="su-form" onSubmit={handleSubmit}>
+          <form className="su-form" onSubmit={handleSubmit} noValidate>
             <div className="su-input-group">
               <label>Full Name</label>
               <div className="su-input-wrap">

@@ -5,9 +5,8 @@ import { getSupabaseConfigError } from '../lib/supabaseClient';
 import { normalizeRole, pageFromRole } from '../lib/userApi';
 import {
   formatLockoutMessage,
-  isValidEmail,
+  getLoginFormValidationError,
   mapLoginErrorMessage,
-  VALID_EMAIL_MESSAGE,
 } from '../lib/validators';
 
 const MailIcon = () => (
@@ -65,18 +64,17 @@ function Login({ onNavigate, onAuthSuccess }) {
     return `${min}:${sec < 10 ? '0' : ''}${sec}`;
   };
 
-  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+  const handleChange = (e) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+    if (errorText) setErrorText('');
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!form.email.trim() || !form.password) {
-      setErrorText('Email and password are required.');
-      return;
-    }
-
-    if (!isValidEmail(form.email)) {
-      setErrorText(VALID_EMAIL_MESSAGE);
+    const validationError = getLoginFormValidationError(form);
+    if (validationError) {
+      setErrorText(validationError);
       return;
     }
 
@@ -198,7 +196,7 @@ function Login({ onNavigate, onAuthSuccess }) {
             <p>Use your credentials to continue.</p>
           </div>
 
-          <form className="lg-form" onSubmit={handleSubmit}>
+          <form className="lg-form" onSubmit={handleSubmit} noValidate>
             <div className="lg-input-group">
               <label>Email Address</label>
               <div className="lg-input-wrap">

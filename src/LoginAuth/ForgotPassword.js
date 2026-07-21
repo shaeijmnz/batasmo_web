@@ -5,7 +5,7 @@ import {
   startPasswordRecovery,
   verifyRecoveryOtp,
 } from '../lib/authApi';
-import { isValidEmail, VALID_EMAIL_MESSAGE } from '../lib/validators';
+import { getEmailValidationError } from '../lib/validators';
 
 const RECOVERY_ACTIVE_KEY = 'batasmo_recovery_active';
 const RECOVERY_EMAIL_KEY = 'batasmo_recovery_email';
@@ -76,8 +76,9 @@ function ForgotPassword({ onNavigate }) {
   };
 
   const handleSendOtp = async () => {
-    if (!isValidEmail(email)) {
-      setErrorText(VALID_EMAIL_MESSAGE);
+    const emailError = getEmailValidationError(email);
+    if (emailError) {
+      setErrorText(emailError);
       return;
     }
 
@@ -101,8 +102,9 @@ function ForgotPassword({ onNavigate }) {
 
   const handleResendOtp = async () => {
     if (timer > 0 || isResending) return;
-    if (!isValidEmail(email)) {
-      setErrorText(VALID_EMAIL_MESSAGE);
+    const emailError = getEmailValidationError(email);
+    if (emailError) {
+      setErrorText(emailError);
       return;
     }
 
@@ -187,7 +189,7 @@ function ForgotPassword({ onNavigate }) {
               : 'Enter only the 6-digit OTP code from your email to continue password reset.'}
           </p>
 
-          <form className="fp-form" onSubmit={handleSubmit}>
+          <form className="fp-form" onSubmit={handleSubmit} noValidate>
             {step === 'email' ? (
               <div className="fp-field">
                 <label>Email Address</label>
@@ -197,7 +199,10 @@ function ForgotPassword({ onNavigate }) {
                     type="email"
                     placeholder=""
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (errorText) setErrorText('');
+                    }}
                     required
                   />
                 </div>

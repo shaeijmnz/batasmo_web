@@ -1,4 +1,7 @@
 export const VALID_EMAIL_MESSAGE = 'Please enter a valid email address (example: name@domain.com).';
+export const EMAIL_REQUIRED_MESSAGE = 'Email is required.';
+export const EMAIL_MISSING_AT_MESSAGE = 'Email must include @ (example: name@domain.com).';
+export const PASSWORD_REQUIRED_MESSAGE = 'Password is required.';
 export const GMAIL_REQUIRED_MESSAGE = 'Please enter a valid Gmail address ending with @gmail.com.';
 export const VALID_PHONE_MESSAGE = 'Please enter a valid 11-digit Philippine mobile number (example: 09XXXXXXXXX).';
 export const PH_MOBILE_REQUIRED_MESSAGE = VALID_PHONE_MESSAGE;
@@ -12,6 +15,24 @@ const PH_MOBILE_PATTERN = /^09\d{9}$/;
 export function isValidEmail(value) {
   const email = String(value || '').trim();
   return /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/.test(email);
+}
+
+/** Returns the first email validation error, or '' when valid. */
+export function getEmailValidationError(value, { requireGmail = false } = {}) {
+  const email = String(value || '').trim();
+  if (!email) return EMAIL_REQUIRED_MESSAGE;
+  if (!email.includes('@')) return EMAIL_MISSING_AT_MESSAGE;
+  if (!isValidEmail(email)) return VALID_EMAIL_MESSAGE;
+  if (requireGmail && !isGmailEmail(email)) return GMAIL_REQUIRED_MESSAGE;
+  return '';
+}
+
+/** Login form: email checks first, then password. */
+export function getLoginFormValidationError({ email, password }) {
+  const emailError = getEmailValidationError(email);
+  if (emailError) return emailError;
+  if (!String(password || '')) return PASSWORD_REQUIRED_MESSAGE;
+  return '';
 }
 
 /** Client signup / walk-in: must be valid email and @gmail.com */

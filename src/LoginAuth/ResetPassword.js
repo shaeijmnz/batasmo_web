@@ -88,6 +88,11 @@ function ResetPassword({ onNavigate }) {
     e.preventDefault();
     if (isSubmitting) return;
 
+    if (!String(form.password || '').trim()) {
+      setErrorText('Password is required.');
+      return;
+    }
+
     if (!isStrongPassword(form.password)) {
       setErrorText(VALID_PASSWORD_MESSAGE);
       return;
@@ -157,7 +162,7 @@ function ResetPassword({ onNavigate }) {
             Create a strong new password for your account. Make sure it's something you'll remember!
           </p>
 
-          <form className="fp-form" onSubmit={handleSubmit}>
+          <form className="fp-form" onSubmit={handleSubmit} noValidate>
             <div className="fp-field">
               <label>New Password</label>
               <div className="fp-input-wrap">

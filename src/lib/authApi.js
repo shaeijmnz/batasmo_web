@@ -11,14 +11,13 @@ import {
   signOutIfSignupIncomplete,
 } from './signupVerification'
 import {
-  isGmailEmail,
   isPhilippineMobile,
   isStrongPassword,
-  isValidEmail,
-  GMAIL_REQUIRED_MESSAGE,
   PH_MOBILE_REQUIRED_MESSAGE,
   VALID_PASSWORD_MESSAGE,
   normalizeAuthEmail,
+  getEmailValidationError,
+  getLoginFormValidationError,
 } from './validators'
 import { resolvePublicApiBaseUrl } from './runtimeConfig'
 
@@ -192,8 +191,9 @@ export async function signUpWithEmail({
   if (!String(fullName || '').trim()) {
     throw new Error('Full name is required.')
   }
-  if (!isGmailEmail(normalizedEmail)) {
-    throw new Error(GMAIL_REQUIRED_MESSAGE)
+  const emailError = getEmailValidationError(normalizedEmail, { requireGmail: true })
+  if (emailError) {
+    throw new Error(emailError)
   }
   if (!isPhilippineMobile(phone)) {
     throw new Error(PH_MOBILE_REQUIRED_MESSAGE)
@@ -437,11 +437,12 @@ export async function signInWithEmail({ email, password }) {
 
   const normalizedEmail = normalizeAuthEmail(email)
 
-  if (!normalizedEmail || !password) {
-    throw new Error('Email and password are required.')
-  }
-  if (!isValidEmail(normalizedEmail)) {
-    throw new Error('Please enter a valid email address.')
+  const loginValidationError = getLoginFormValidationError({
+    email: normalizedEmail,
+    password,
+  })
+  if (loginValidationError) {
+    throw new Error(loginValidationError)
   }
 
   const lockoutBefore = await checkEmailLockout(normalizedEmail)
