@@ -1380,9 +1380,23 @@ progress::-webkit-progress-value {
 .chart-export,
 .stat-change,
 .rating-star,
-.dl-icon,
-.specialty-badge {
+.dl-icon {
   color: var(--ui-accent-dark) !important;
+}
+
+.specialty-badge {
+  background: rgba(212, 175, 55, 0.16) !important;
+  border: 1px solid rgba(212, 175, 55, 0.28) !important;
+  color: #f3dfa0 !important;
+}
+
+.metric-box {
+  background: rgba(15, 26, 45, 0.92) !important;
+  border: 1px solid rgba(212, 175, 55, 0.18) !important;
+}
+
+.m-value {
+  color: var(--ui-text-primary) !important;
 }
 
 .search-box,
