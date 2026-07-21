@@ -276,13 +276,18 @@ const Attorneys = ({ onNavigate }) => {
       setAddFormError('Attorney name is required.');
       return;
     }
+    const specialty = addSpecialty.trim();
+    if (!specialty) {
+      setAddFormError('Specialty is required.');
+      return;
+    }
 
     try {
       setAddSubmitting(true);
       const result = await adminCreateWalkInAttorney({
         email,
         fullName,
-        specialty: addSpecialty.trim(),
+        specialty,
       });
       const generatedPassword = result?.generatedPassword;
       if (!generatedPassword) {
@@ -525,9 +530,7 @@ const Attorneys = ({ onNavigate }) => {
                 />
               </div>
               <div className="modal-input-group">
-                <label htmlFor="add-attorney-specialty">
-                  Specialty <span className="modal-optional">(optional)</span>
-                </label>
+                <label htmlFor="add-attorney-specialty">Specialty</label>
                 <input
                   id="add-attorney-specialty"
                   type="text"
@@ -535,6 +538,7 @@ const Attorneys = ({ onNavigate }) => {
                   value={addSpecialty}
                   onChange={(e) => setAddSpecialty(e.target.value)}
                   disabled={addSubmitting}
+                  required
                 />
               </div>
               {addFormError ? <p className="modal-form-error">{addFormError}</p> : null}

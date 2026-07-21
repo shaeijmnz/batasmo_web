@@ -783,7 +783,7 @@ export async function adminCreateWalkInAttorney({ email, password, fullName, spe
   const body = {
     email: String(email || '').trim().toLowerCase(),
     fullName: String(fullName || '').trim(),
-    specialty: String(specialty || '').trim() || undefined,
+    specialty: String(specialty || '').trim(),
   }
   const trimmedPassword = String(password || '').trim()
   if (trimmedPassword) {

@@ -1199,6 +1199,9 @@ const supabaseAdminCreateWalkInAttorney = async ({ email, password, fullName, sp
   if (!String(fullName || '').trim()) {
     throw new Error('Attorney name is required.')
   }
+  if (!specialtyRaw) {
+    throw new Error('Specialty is required.')
+  }
   if (!safePassword) {
     safePassword = generateWalkInPassword()
     passwordWasGenerated = true
@@ -1209,8 +1212,13 @@ const supabaseAdminCreateWalkInAttorney = async ({ email, password, fullName, sp
   }
 
   const specialties = specialtyRaw
-    ? specialtyRaw.split(',').map((part) => part.trim()).filter(Boolean)
-    : ['General Practice']
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean)
+
+  if (!specialties.length) {
+    throw new Error('Specialty is required.')
+  }
 
   const authResponse = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
     method: 'POST',
@@ -2678,6 +2686,7 @@ app.post('/admin/attorneys/walk-in', async (req, res) => {
           : lower.includes('valid email') ||
               lower.includes('password must') ||
               lower.includes('name is required') ||
+              lower.includes('specialty is required') ||
               lower.includes('already been registered') ||
               lower.includes('already registered') ||
               lower.includes('user already') ||
