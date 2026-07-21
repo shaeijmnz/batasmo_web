@@ -66,14 +66,18 @@
   margin: 0 0 14px;
   padding: 14px 16px;
   border-radius: 10px;
-  background: #f8f6f2;
-  border: 1px solid #e8e0d4;
+  background: rgba(15, 26, 45, 0.92);
+  border: 1px solid rgba(212, 175, 55, 0.18);
 }
 
 .attorney-created-credentials p {
   margin: 0 0 10px;
   font-size: 0.9rem;
-  color: #334155;
+  color: #c5d0df;
+}
+
+.attorney-created-credentials p strong {
+  color: #f5f4f1;
 }
 
 .attorney-created-credentials p:last-child {
@@ -83,7 +87,7 @@
 .attorney-created-credentials code {
   font-family: ui-monospace, Menlo, monospace;
   font-size: 0.88rem;
-  color: #152238;
+  color: #f3dfa0;
 }
 
 .attorney-email-sent-badge {
@@ -111,7 +115,7 @@
 .modal-copy-feedback {
   margin: 0 0 10px;
   font-size: 0.82rem;
-  color: #166534;
+  color: #86efac;
 }
 
 .attorneys-success-message {
@@ -256,21 +260,23 @@
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.52);
+  background: rgba(7, 12, 22, 0.72);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 2000;
   padding: 20px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .add-attorney-modal {
   width: 100%;
   max-width: 510px;
-  background: #ffffff;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.24);
+  background: rgba(27, 43, 71, 0.98);
+  border: 1px solid rgba(212, 175, 55, 0.2);
+  border-radius: 16px;
+  box-shadow: 0 24px 64px rgba(7, 12, 22, 0.45);
   padding: 24px;
 }
 
@@ -283,24 +289,33 @@
 
 .modal-header h3 {
   margin: 0;
-  font-size: 2rem;
+  font-size: 1.75rem;
   font-weight: 700;
-  color: var(--text-primary);
+  color: #f5f4f1;
 }
 
 .modal-close-btn {
   border: none;
   background: transparent;
-  color: #6b7280;
+  color: #b8c2d1;
   cursor: pointer;
   padding: 4px;
   display: flex;
+  transition: color 0.2s ease;
+}
+
+.modal-close-btn:hover:not(:disabled) {
+  color: #f5f4f1;
 }
 
 .modal-subtitle {
   margin: 0 0 16px;
-  color: var(--text-secondary);
-  line-height: 1.4;
+  color: #b8c2d1;
+  line-height: 1.5;
+}
+
+.modal-subtitle strong {
+  color: #f5f4f1;
 }
 
 .modal-form {
@@ -317,23 +332,28 @@
 
 .modal-input-group label {
   font-weight: 700;
-  color: var(--text-primary);
+  color: #f5f4f1;
 }
 
 .modal-input-group input {
   width: 100%;
   border-radius: 12px;
-  border: 1px solid #d8dde6;
-  background: #f8fafc;
+  border: 1px solid rgba(212, 175, 55, 0.18);
+  background: rgba(15, 26, 45, 0.92);
   padding: 12px 14px;
   font-size: 1rem;
-  color: var(--text-primary);
+  color: #f5f4f1;
   outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.modal-input-group input::placeholder {
+  color: #7d8da6;
 }
 
 .modal-input-group input:focus {
-  border-color: #d4a017;
-  box-shadow: 0 0 0 3px rgba(212, 160, 23, 0.2);
+  border-color: #d4af37;
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.18);
 }
 
 .modal-actions {
@@ -349,18 +369,29 @@
   padding: 10px 18px;
   font-weight: 700;
   cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
 }
 
 .modal-cancel-btn {
-  border: 1px solid #d3d9e3;
-  background: #ffffff;
-  color: #7b8595;
+  border: 1px solid rgba(212, 175, 55, 0.2);
+  background: rgba(15, 26, 45, 0.9);
+  color: #b8c2d1;
+}
+
+.modal-cancel-btn:hover:not(:disabled) {
+  background: rgba(34, 54, 86, 0.98);
+  color: #f5f4f1;
 }
 
 .modal-submit-btn {
   border: none;
-  background: #d4a017;
-  color: white;
+  background: linear-gradient(135deg, #d4af37 0%, #b8922f 100%);
+  color: #0f1a2d;
+}
+
+.modal-submit-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(212, 175, 55, 0.22);
 }
 
 .modal-submit-btn:disabled,
@@ -372,12 +403,12 @@
 .modal-form-error {
   margin: 4px 0 0;
   font-size: 0.85rem;
-  color: #b91c1c;
+  color: #fca5a5;
 }
 
 .modal-optional {
   font-weight: 500;
-  color: #94a3b8;
+  color: #7d8da6;
 }
 
 .availability-page-overlay {
