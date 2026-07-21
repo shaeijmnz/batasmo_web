@@ -6,7 +6,7 @@ import {
   fetchAttorneyUpcomingAppointments,
   getAvailability,
   sortTimeLabels,
-  isConsultationChatWindowOpen,
+  isConsultationChatEnterAllowed,
   normalizeSlotTimeLabel,
   rescheduleAttorneyAppointment,
   subscribeToAttorneyAppointments,
@@ -322,12 +322,13 @@ function UpcomingAppointments({ onNavigate, profile }) {
   };
 
   const renderCard = (appt) => {
-    const canEnterConsultation = isConsultationChatWindowOpen({
+    const canEnterConsultation = isConsultationChatEnterAllowed({
       status: appt.status,
       scheduledAt: appt.scheduledAt,
       slotDate: appt.slotDate,
       slotTime: appt.slotTime,
       paymentStatus: appt.paymentStatus || 'unpaid',
+      enforceScheduleWindow: true,
     });
 
     return (

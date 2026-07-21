@@ -641,6 +641,12 @@
 	cursor: pointer;
 }
 
+.att-enter-room-btn:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+	filter: grayscale(0.35);
+}
+
 .att-queue-item__status-text {
 	color: #b8c2d1;
 	font-size: 0.79rem;

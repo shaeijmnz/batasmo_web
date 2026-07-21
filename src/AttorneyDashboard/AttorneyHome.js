@@ -3,7 +3,8 @@ import './AttorneyHome.css';
 import './AttorneyTheme.css';
 import {
   fetchAttorneyHomeData,
-  isConsultationChatWindowOpen,
+  isAttorneyConsultationQueueVisible,
+  isConsultationChatEnterAllowed,
   markAttorneyNotificationsAsRead,
   subscribeToAttorneyAppointments,
   subscribeToAttorneyNotifications,
@@ -95,6 +96,7 @@ function AttorneyHome({ onNavigate, profile }) {
   });
   const [loadError, setLoadError] = useState('');
   const [waitingPopup, setWaitingPopup] = useState(null);
+  const [nowTick, setNowTick] = useState(() => new Date());
 
   useEffect(() => {
     if (!profile?.id) {
@@ -161,29 +163,53 @@ function AttorneyHome({ onNavigate, profile }) {
     return () => window.clearInterval(id);
   }, [profile?.id]);
 
+  useEffect(() => {
+    const id = window.setInterval(() => setNowTick(new Date()), 30000);
+    return () => window.clearInterval(id);
+  }, []);
+
   const stats = [
     { label: 'My Appointments', value: String(statsData.myAppointmentCount), icon: <CalendarCheckIcon />, bg: '#eff6ff', border: '#3b82f6', nav: 'upcoming-appointments' },
     { label: 'Analytics', value: 'View Graph', icon: <AnalyticsIcon />, bg: '#ecfdf5', border: '#10b981', nav: 'attorney-analytics' },
   ];
 
-  const sortedConsultations = [...consultations].sort((a, b) => new Date(a.date) - new Date(b.date));
+  const sortedConsultations = useMemo(
+    () =>
+      [...consultations]
+        .filter((item) =>
+          isAttorneyConsultationQueueVisible(
+            {
+              status: item.status,
+              scheduledAt: item.scheduledAt,
+              slotDate: item.slotDate,
+              slotTime: item.slotTime,
+              paymentStatus: item.paymentStatus,
+            },
+            nowTick,
+          ),
+        )
+        .sort((a, b) => new Date(a.date) - new Date(b.date)),
+    [consultations, nowTick],
+  );
   const presenceWatches = useMemo(
     () =>
       sortedConsultations
         .filter((item) =>
-          isConsultationChatWindowOpen({
+          isConsultationChatEnterAllowed({
             status: item.status,
             scheduledAt: item.scheduledAt,
             slotDate: item.slotDate,
             slotTime: item.slotTime,
             paymentStatus: item.paymentStatus || 'unpaid',
+            nowValue: nowTick,
+            enforceScheduleWindow: true,
           }),
         )
         .map((item) => ({
           appointmentId: item.id,
           otherPartyName: item.name || 'Client',
         })),
-    [sortedConsultations],
+    [sortedConsultations, nowTick],
   );
   const presenceWatchKey = presenceWatches.map((item) => item.appointmentId).join(',');
 
@@ -383,22 +409,24 @@ function AttorneyHome({ onNavigate, profile }) {
             <h2>Consultation Queue</h2>
             <button className="att-view-all" onClick={() => onNavigate('upcoming-appointments')}>View All</button>
           </div>
-          <p className="att-queue-subtitle">Upcoming client consultations sorted by date</p>
+          <p className="att-queue-subtitle">Paid upcoming consultations — chat opens at scheduled time</p>
           <div className="att-queue-list">
             {sortedConsultations
               .map((c, i) => {
-                const today = new Date();
+                const today = nowTick;
                 const apptDate = new Date(c.date);
                 const todayCal = new Date(today.getFullYear(), today.getMonth(), today.getDate());
                 const apptCal = new Date(apptDate.getFullYear(), apptDate.getMonth(), apptDate.getDate());
                 const isToday = todayCal.getTime() === apptCal.getTime();
                 const daysUntil = calendarDaysFromTodayLocal(c.date);
-                const canEnterChatroom = isConsultationChatWindowOpen({
+                const canEnterChatroom = isConsultationChatEnterAllowed({
                   status: c.status,
                   scheduledAt: c.scheduledAt,
                   slotDate: c.slotDate,
                   slotTime: c.slotTime,
                   paymentStatus: c.paymentStatus || 'unpaid',
+                  nowValue: nowTick,
+                  enforceScheduleWindow: true,
                 });
 
                 const formatDate = (dateStr) => {
@@ -415,7 +443,7 @@ function AttorneyHome({ onNavigate, profile }) {
                       : 'att-badge att-badge--pending';
 
                 return (
-                  <div key={i} className={`att-queue-item ${isToday ? 'att-queue-item--today' : ''}`}>
+                  <div key={c.id} className={`att-queue-item ${isToday ? 'att-queue-item--today' : ''}`}>
                     <div className="att-queue-item__position">
                       <span className="att-queue-number">{i + 1}</span>
                     </div>
@@ -435,32 +463,47 @@ function AttorneyHome({ onNavigate, profile }) {
                     </div>
                     <div className="att-queue-item__right">
                       <span className={badgeClass}>{c.status}</span>
-                      {canEnterChatroom ? (
-                        <div className="att-queue-item__today-actions">
-                          {isToday ? <span className="att-today-label">🔴 TODAY</span> : null}
-                          <button className="att-enter-room-btn" onClick={() => onNavigate('attorney-messages', { appointmentId: c.id })}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                            </svg>
-                            Enter Chatroom
-                          </button>
-                        </div>
-                      ) : isToday ? (
-                        <div className="att-queue-item__today-actions">
-                          <span className="att-today-label">🔴 TODAY</span>
-                          <span className="att-queue-item__status-text">Waiting for scheduled time</span>
-                        </div>
-                      ) : (
-                        <span className="att-queue-item__status-text">
-                          {daysUntil === 1 ? 'Tomorrow' : daysUntil > 1 ? `In ${daysUntil} days` : 'Past'}
-                        </span>
-                      )}
+                      <div className="att-queue-item__today-actions">
+                        {isToday ? <span className="att-today-label">🔴 TODAY</span> : null}
+                        <button
+                          type="button"
+                          className="att-enter-room-btn"
+                          disabled={!canEnterChatroom}
+                          title={
+                            canEnterChatroom
+                              ? 'Open consultation chatroom'
+                              : isToday
+                                ? 'Chat opens at the scheduled time'
+                                : daysUntil > 0
+                                  ? `Chat opens on appointment day`
+                                  : 'Consultation window has ended'
+                          }
+                          onClick={() => {
+                            if (!canEnterChatroom) return;
+                            onNavigate('attorney-messages', { appointmentId: c.id });
+                          }}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                          </svg>
+                          Enter Chatroom
+                        </button>
+                        {!canEnterChatroom ? (
+                          <span className="att-queue-item__status-text">
+                            {isToday
+                              ? 'Waiting for scheduled time'
+                              : daysUntil > 0
+                                ? (daysUntil === 1 ? 'Tomorrow' : `In ${daysUntil} days`)
+                                : 'Not yet available'}
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                 );
               })}
             {!sortedConsultations.length ? (
-              <div className="att-queue-empty">No consultations in queue yet.</div>
+              <div className="att-queue-empty">No paid upcoming consultations in queue.</div>
             ) : null}
           </div>
         </div>

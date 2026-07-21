@@ -108,6 +108,50 @@ const isVisibleInAttorneyPaidConsultationQueue = (appt) => {
   return isPaidOrFreeConsultation(appt)
 }
 
+/** How long a booked slot stays on the attorney dashboard queue after its start time. */
+export const ATTORNEY_QUEUE_SLOT_DURATION_MS = 90 * 60 * 1000
+
+export function parseAppointmentScheduleDate(appt = {}) {
+  return parseChatScheduleDate({
+    scheduledAt: appt?.scheduled_value || appt?.scheduled_at || appt?.scheduledAt,
+    slotDate: appt?.slot_date || appt?.slotDate,
+    slotTime: appt?.slot_time || appt?.slotTime,
+  })
+}
+
+const isPaidForAttorneyQueue = (appt) => {
+  if (typeof appt?.consultationPaid === 'boolean') {
+    return isPaidOrFreeConsultation(appt)
+  }
+  if (appt?.paymentStatus) {
+    const paid = String(appt.paymentStatus).toLowerCase() === 'paid'
+    return isPaidOrFreeConsultation({ amount: appt?.amount ?? 0, consultationPaid: paid })
+  }
+  return isPaidOrFreeConsultation(appt)
+}
+
+/** Paid, active bookings that have not yet passed their consultation slot window. */
+export function isAttorneyConsultationQueueVisible(appt, nowValue = new Date()) {
+  if (isRecentlyCancelledAppointment(appt)) return true
+
+  const paidOk =
+    typeof appt?.consultationPaid === 'boolean'
+      ? isVisibleInAttorneyPaidConsultationQueue(appt)
+      : isPaidForAttorneyQueue(appt)
+  if (!paidOk) return false
+  if (!isAttorneyQueueAppointmentStatus(appt?.status)) return false
+
+  const status = String(appt?.status || '').toLowerCase()
+  if (['completed', 'cancelled', 'rejected'].includes(status)) return false
+
+  const scheduled = parseAppointmentScheduleDate(appt)
+  if (!scheduled || Number.isNaN(scheduled.getTime())) return false
+
+  const now = nowValue instanceof Date ? nowValue : new Date(nowValue)
+  const windowEndMs = scheduled.getTime() + ATTORNEY_QUEUE_SLOT_DURATION_MS
+  return now.getTime() < windowEndMs
+}
+
 async function fetchPaidAppointmentIdsForIdList(appointmentIds) {
   const unique = [...new Set((appointmentIds || []).filter(Boolean))]
   if (!unique.length) return new Set()
@@ -1619,16 +1663,13 @@ export async function fetchAttorneyHomeData(userId, options = {}) {
     (a) => String(a.status || '').toLowerCase() === 'pending',
   ).length
 
-  const myAppointmentCount = appointments.filter((a) => {
-    const status = String(a.status || '').toLowerCase()
-    return status === 'confirmed' || status === 'rescheduled'
-  }).length
+  const myAppointmentCount = appointments.filter((a) => isAttorneyConsultationQueueVisible(a)).length
 
   const consultations = appointments
     .filter(
       (a) =>
-        (isAttorneyQueueAppointmentStatus(a.status) || isRecentlyCancelledAppointment(a)) &&
-        isVisibleInAttorneyPaidConsultationQueue(a),
+        isAttorneyConsultationQueueVisible(a) ||
+        isRecentlyCancelledAppointment(a),
     )
     .map((a) => ({
     id: a.id,
@@ -2397,6 +2438,38 @@ const validateChatAttachment = (sizeBytes, mime) => {
 export const isConsultationChatActiveStatus = (status) =>
   CHAT_ACTIVE_APPOINTMENT_STATUSES.has(String(status || '').toLowerCase())
 
+/** Attorney queue/chat buttons: paid + active status + within slot window; optional schedule-time gate. */
+export function isConsultationChatEnterAllowed({
+  status,
+  scheduledAt,
+  slotDate,
+  slotTime,
+  nowValue,
+  paymentStatus,
+  enforceScheduleWindow = true,
+} = {}) {
+  if (process.env.REACT_APP_BYPASS_CHAT_WINDOW === 'true') return true
+
+  const normalizedStatus = String(status || '').toLowerCase()
+  const paid = String(paymentStatus || '').toLowerCase() === 'paid'
+  const paidAwaitingConfirm =
+    paid && (normalizedStatus === 'pending' || normalizedStatus === 'approved' || normalizedStatus === '')
+
+  if (!paidAwaitingConfirm && !isConsultationChatActiveStatus(status)) return false
+
+  const scheduled = parseChatScheduleDate({ scheduledAt, slotDate, slotTime })
+  if (!scheduled || Number.isNaN(scheduled.getTime())) return false
+
+  const now = nowValue instanceof Date ? nowValue : new Date(nowValue || Date.now())
+  if (Number.isNaN(now.getTime())) return false
+
+  if (enforceScheduleWindow && now.getTime() < scheduled.getTime()) return false
+
+  if (now.getTime() >= scheduled.getTime() + ATTORNEY_QUEUE_SLOT_DURATION_MS) return false
+
+  return true
+}
+
 export const isConsultationChatWindowOpen = ({
   status,
   scheduledAt,
@@ -2404,31 +2477,16 @@ export const isConsultationChatWindowOpen = ({
   slotTime,
   nowValue,
   paymentStatus,
-} = {}) => {
-  // DEV BYPASS — remove this line before going to production
-  if (process.env.REACT_APP_BYPASS_CHAT_WINDOW === 'true') return true
-
-  const normalizedStatus = String(status || '').toLowerCase()
-  const paid = String(paymentStatus || '').toLowerCase() === 'paid'
-
-  // Paid consultations may still be pending/approved until status sync — allow chat + video.
-  const paidAwaitingConfirm =
-    paid && (normalizedStatus === 'pending' || normalizedStatus === 'approved' || normalizedStatus === '')
-
-  if (!paidAwaitingConfirm && !isConsultationChatActiveStatus(status)) return false
-
-  // Admin-controlled override: when "Enforce Scheduled Chat Time" is OFF,
-  // any active consultation can enter the chat regardless of the start time.
-  if (!isAppConfigFlagOn('enforce_schedule_window', true)) return true
-
-  const scheduled = parseChatScheduleDate({ scheduledAt, slotDate, slotTime })
-  if (!scheduled) return true
-
-  const now = nowValue instanceof Date ? nowValue : new Date(nowValue || Date.now())
-  if (Number.isNaN(now.getTime())) return false
-
-  return now.getTime() >= scheduled.getTime()
-}
+} = {}) =>
+  isConsultationChatEnterAllowed({
+    status,
+    scheduledAt,
+    slotDate,
+    slotTime,
+    nowValue,
+    paymentStatus,
+    enforceScheduleWindow: isAppConfigFlagOn('enforce_schedule_window', true),
+  })
 
 export async function fetchClientAppointmentsData(userId) {
   const [appointmentsRes, transactionsRes] = await Promise.all([
@@ -3824,8 +3882,8 @@ export async function fetchAttorneyConsultationRequests(userId, options = {}) {
   const requests = appointments
     .filter(
       (item) =>
-        (isAttorneyQueueAppointmentStatus(item.status) || isRecentlyCancelledAppointment(item)) &&
-        isVisibleInAttorneyPaidConsultationQueue(item),
+        isAttorneyConsultationQueueVisible(item) ||
+        isRecentlyCancelledAppointment(item),
     )
     .sort((a, b) => {
       const aTime = a.parsed_scheduled_at?.getTime() || 0
@@ -5643,8 +5701,8 @@ export async function fetchAttorneyUpcomingAppointments(userId, options = {}) {
   return appointments
     .filter(
       (item) =>
-        (isAttorneyQueueAppointmentStatus(item.status) || isRecentlyCancelledAppointment(item)) &&
-        isVisibleInAttorneyPaidConsultationQueue(item),
+        isAttorneyConsultationQueueVisible(item) ||
+        isRecentlyCancelledAppointment(item),
     )
     .sort((a, b) => {
       const aTime = a.parsed_scheduled_at?.getTime() || 0
