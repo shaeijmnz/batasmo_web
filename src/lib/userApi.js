@@ -6312,6 +6312,36 @@ export async function getVideoSdkToken() {
  * one room per appointment (deterministic customRoomId + in-process lock) so client
  * and attorney always receive the same meetingId.
  */
+export async function fetchAdminOngoingVideoCallCount() {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  if (!session?.access_token) return 0
+
+  const baseUrl = resolvePublicApiBaseUrl()
+  const response = await fetch(`${baseUrl}/admin/ongoing-video-call-count`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+    },
+  })
+
+  let payload = null
+  try {
+    payload = await response.json()
+  } catch {
+    payload = null
+  }
+
+  if (!response.ok) {
+    console.warn('[admin] ongoing video call count failed', payload?.error || response.status)
+    return 0
+  }
+
+  const count = Number(payload?.count)
+  return Number.isFinite(count) && count >= 0 ? count : 0
+}
+
 export async function getOrCreateVideoMeeting(appointmentId) {
   if (!appointmentId) throw new Error('appointmentId is required')
 

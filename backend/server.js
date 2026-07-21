@@ -2040,6 +2040,70 @@ const createVideoSdkRoom = async (customRoomId) => {
   return { roomId: parsed.roomId, token }
 }
 
+const countActiveVideoParticipants = (session) => {
+  const participants = Array.isArray(session?.participants) ? session.participants : []
+  return participants.filter((participant) => {
+    const logs = Array.isArray(participant?.timelog) ? participant.timelog : []
+    const last = logs[logs.length - 1]
+    return last && !last.end
+  }).length
+}
+
+const countActiveParticipantsInMeeting = async (meetingId) => {
+  if (!meetingId) return 0
+
+  try {
+    const token = buildVideoSdkToken()
+    const query = new URLSearchParams({
+      roomId: String(meetingId).trim(),
+      page: '1',
+      perPage: '10',
+    })
+    const response = await fetch(`https://api.videosdk.live/v2/sessions/?${query.toString()}`, {
+      method: 'GET',
+      headers: {
+        Authorization: token,
+        'Content-Type': 'application/json',
+      },
+    })
+
+    if (!response.ok) return 0
+
+    const payload = await response.json().catch(() => ({}))
+    const sessions = Array.isArray(payload?.data) ? payload.data : []
+
+    for (const session of sessions) {
+      const status = String(session?.status || '').toLowerCase()
+      const isLive = status === 'ongoing' || !session?.end
+      if (!isLive) continue
+
+      const activeCount = countActiveVideoParticipants(session)
+      if (activeCount > 0) return activeCount
+    }
+
+    return 0
+  } catch (error) {
+    console.warn('[videosdk] active participant check failed', meetingId, error?.message || error)
+    return 0
+  }
+}
+
+const countOngoingVideoCallsFromRooms = async (rooms = []) => {
+  const meetingIds = [
+    ...new Set(
+      (rooms || [])
+        .filter((room) => room?.video_meeting_id && !room?.is_closed)
+        .map((room) => String(room.video_meeting_id).trim())
+        .filter(Boolean),
+    ),
+  ]
+
+  if (!meetingIds.length) return 0
+
+  const activeCounts = await Promise.all(meetingIds.map((meetingId) => countActiveParticipantsInMeeting(meetingId)))
+  return activeCounts.filter((count) => count > 0).length
+}
+
 const assertAppointmentVideoAccess = async (userId, appointmentId) => {
   requireSupabaseServiceConfig()
   const appointment = await supabaseSelectSingle({
@@ -2187,6 +2251,38 @@ app.post('/videosdk-meeting-for-appointment', async (req, res) => {
     const msg = err?.message || 'Unable to prepare video meeting.'
     const status = msg.includes('not allowed') || msg.includes('not found') ? 403 : 500
     return res.status(status).json({ error: msg })
+  }
+})
+
+// Live count of consultation video calls with at least one connected participant.
+app.get('/admin/ongoing-video-call-count', async (req, res) => {
+  try {
+    requireSupabaseServiceConfig()
+
+    const authHeader = String(req.headers.authorization || '').trim()
+    const jwt = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
+    if (!jwt) {
+      return res.status(401).json({ error: 'Authorization Bearer token is required.' })
+    }
+
+    await verifyCallerIsAdmin(jwt)
+
+    const rooms = await supabaseRestGetMany({
+      table: 'consultation_rooms',
+      query: new URLSearchParams({
+        video_meeting_id: 'not.is.null',
+        is_closed: 'eq.false',
+      }).toString(),
+    })
+
+    const count = await countOngoingVideoCallsFromRooms(rooms)
+    return res.json({ count })
+  } catch (err) {
+    console.error('[admin] /admin/ongoing-video-call-count error:', err)
+    const msg = err?.message || 'Unable to count ongoing video calls.'
+    const status =
+      msg.includes('Authorization') || msg.includes('Admin') ? 403 : msg.includes('not configured') ? 503 : 500
+    return res.status(status).json({ error: msg, count: 0 })
   }
 })
 

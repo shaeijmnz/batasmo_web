@@ -5,7 +5,6 @@ import {
   X, Send, Trash2, Eye, AlertCircle, CheckCircle, Calendar, Bell, Video,
 } from 'lucide-react';
 import {
-  countOngoingVideoCallRooms,
   getQueueRequestDisplayStatus,
   isOngoingVideoCallRoom,
 } from '../lib/consultationStatus';
@@ -16,6 +15,7 @@ import AdminSupportDrawer from './AdminSupportDrawer';
 import AdminRescheduleRequests from './AdminRescheduleRequests';
 import {
   fetchAdminHomeNotifications,
+  fetchAdminOngoingVideoCallCount,
   markAdminNotificationsAsRead,
   subscribeToAdminNotifications,
   signOutUser,
@@ -254,9 +254,7 @@ const Dashboard = ({ onNavigate }) => {
   );
   const [recentRequests, setRecentRequests] = useState(() => dashboardBoot?.recentRequests || []);
   const [topAttorneys, setTopAttorneys] = useState(() => dashboardBoot?.topAttorneys || []);
-  const [ongoingVideoCallCount, setOngoingVideoCallCount] = useState(
-    () => dashboardBoot?.ongoingVideoCallCount ?? 0,
-  );
+  const [ongoingVideoCallCount, setOngoingVideoCallCount] = useState(0);
 
   const [adminUserId, setAdminUserId] = useState('');
   const [adminNotifications, setAdminNotifications] = useState([]);
@@ -440,7 +438,7 @@ const Dashboard = ({ onNavigate }) => {
         if (row.appointment_id) roomByAppointment.set(row.appointment_id, row);
       });
 
-      const nextOngoingVideoCallCount = countOngoingVideoCallRooms(rooms);
+      const nextOngoingVideoCallCount = await fetchAdminOngoingVideoCallCount();
       setOngoingVideoCallCount(nextOngoingVideoCallCount);
 
       const closedRoomAppointmentIds = new Set(
@@ -1093,7 +1091,7 @@ const Dashboard = ({ onNavigate }) => {
     { label: 'Total Attorneys', value: totalAttorneys, color: '#eab308', icon: <Scale size={20}/>, page: '/attorneys' },
     {
       label: 'In Progress',
-      value: ongoingVideoCallCount,
+      value: ongoingVideoCallCount > 0 ? ongoingVideoCallCount : '—',
       color: '#3b82f6',
       icon: <Video size={20} />,
       page: '/consultations',
