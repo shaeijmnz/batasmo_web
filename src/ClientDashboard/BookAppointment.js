@@ -416,7 +416,7 @@ function BookAppointment({ onNavigate, profile }) {
 
       checkoutWindow = window.open('', '_blank');
       if (checkoutWindow) {
-        checkoutWindow.document.title = 'BatasMo Payment';
+        checkoutWindow.document.title = 'LegalLink Payment';
         checkoutWindow.document.body.innerHTML = '<p style="font-family: sans-serif; padding: 16px;">Preparing secure payment checkout...</p>';
       }
 
@@ -647,7 +647,7 @@ function BookAppointment({ onNavigate, profile }) {
           <div className="ba-sidebar__logo">
             <img src="/logo/logo.jpg" alt="Logo" className="ba-sidebar__logo-img" />
             <ScalesIcon size={26} color="#f5a623" />
-            <span>BatasMo</span>
+            <span>LegalLink</span>
           </div>
         </div>
         <nav className="ba-sidebar__nav">

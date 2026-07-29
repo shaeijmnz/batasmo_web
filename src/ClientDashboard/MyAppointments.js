@@ -242,7 +242,7 @@ function MyAppointments({ onNavigate, profile }) {
         type: 'pending',
         title: 'Reschedule pending approval',
         reason:
-          'Your new schedule is waiting for BatasMo Admin to approve. You will be notified once it is confirmed.',
+          'Your new schedule is waiting for LegalLink Admin to approve. You will be notified once it is confirmed.',
       };
     }
 
@@ -261,7 +261,7 @@ function MyAppointments({ onNavigate, profile }) {
         can: false,
         type: 'admin',
         title: 'Appointment Date Has Passed',
-        reason: 'Your consultation schedule has already passed. Please contact BatasMo Admin for further reschedule assistance.',
+        reason: 'Your consultation schedule has already passed. Please contact LegalLink Admin for further reschedule assistance.',
       };
     }
     const amount = Number(appointment.amount || 0);
@@ -282,7 +282,7 @@ function MyAppointments({ onNavigate, profile }) {
         can: false,
         type: 'admin',
         title: 'One-Time Reschedule Used',
-        reason: 'You already used your one-time reschedule option for this appointment. Please contact BatasMo Admin for further changes.',
+        reason: 'You already used your one-time reschedule option for this appointment. Please contact LegalLink Admin for further changes.',
       };
     }
     // "At least 1 day before" — same calendar day as the consultation is not
@@ -419,7 +419,7 @@ function MyAppointments({ onNavigate, profile }) {
         type: 'pending',
         title: 'Request submitted',
         reason:
-          'BatasMo Admin will review your chosen date and time. Your consultation queue updates after approval.',
+          'LegalLink Admin will review your chosen date and time. Your consultation queue updates after approval.',
         appointment: selectedAppointmentForReschedule,
       });
     } catch (error) {
@@ -507,7 +507,7 @@ function MyAppointments({ onNavigate, profile }) {
     try {
       checkoutWindow = window.open('', '_blank');
       if (checkoutWindow) {
-        checkoutWindow.document.title = 'BatasMo Payment';
+        checkoutWindow.document.title = 'LegalLink Payment';
         checkoutWindow.document.body.innerHTML = '<p style="font-family: sans-serif; padding: 16px;">Preparing secure payment checkout...</p>';
       }
 
@@ -596,7 +596,7 @@ function MyAppointments({ onNavigate, profile }) {
           <div className="ma-sidebar__logo">
             <img src="/logo/logo.jpg" alt="Logo" className="ma-sidebar__logo-img" />
             <ScalesIcon size={26} color="#f5a623" />
-            <span>BatasMo</span>
+            <span>LegalLink</span>
           </div>
         </div>
         <nav className="ma-sidebar__nav">
@@ -645,7 +645,7 @@ function MyAppointments({ onNavigate, profile }) {
           <section className="ma-reschedule-note" aria-label="Reschedule notice">
             <p className="ma-reschedule-note__title">Need to reschedule?</p>
             <p className="ma-reschedule-note__text">
-              Tap <strong>RESCHEDULE</strong> to pick a new date and time from your attorney&apos;s open slots. <strong>BatasMo Admin</strong> will review and approve your request before it updates the consultation queue. Submit at least <strong>1 day before</strong> your consultation (same-day reschedules are not allowed).
+              Tap <strong>RESCHEDULE</strong> to pick a new date and time from your attorney&apos;s open slots. <strong>LegalLink Admin</strong> will review and approve your request before it updates the consultation queue. Submit at least <strong>1 day before</strong> your consultation (same-day reschedules are not allowed).
             </p>
           </section>
 
@@ -769,7 +769,7 @@ function MyAppointments({ onNavigate, profile }) {
 
               {reschedulePolicyNotice.type !== 'pending' ? (
                 <div className="ma-policy-support-box">
-                  For further schedule changes, please contact <strong>BatasMo Admin</strong> so your request can be reviewed properly.
+                  For further schedule changes, please contact <strong>LegalLink Admin</strong> so your request can be reviewed properly.
                 </div>
               ) : null}
 

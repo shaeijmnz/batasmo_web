@@ -42,8 +42,8 @@ const Settings = ({ onNavigate }) => {
           <button className="sidebar-toggle" onClick={() => setSidebarOpen(!isSidebarOpen)}>
             <Menu size={24} />
           </button>
-          {isSidebarOpen && <img src="/logo/logo.jpg" alt="BatasMo logo" className="brand-logo" />}
-          {isSidebarOpen && <span className="logo-text">BatasMo</span>}
+          {isSidebarOpen && <img src="/logo/logo.jpg" alt="LegalLink logo" className="brand-logo" />}
+          {isSidebarOpen && <span className="logo-text">LegalLink</span>}
         </div>
         <nav className="sidebar-nav">
           {navItems.map((item) => (
@@ -111,7 +111,7 @@ const ProfileSection = () => (
       <div className="input-group"><label>Phone Number</label><input type="text" defaultValue="+63 912 345 6789" /></div>
       <div className="input-group">
         <label>Bio</label>
-        <textarea defaultValue="System administrator for BatasMo online consultation platform."></textarea>
+        <textarea defaultValue="System administrator for LegalLink online consultation platform."></textarea>
       </div>
       <button className="btn-save" onClick={() => handleQuickAction('Profile changes saved')}><Save size={16} /> Save Changes</button>
     </div>

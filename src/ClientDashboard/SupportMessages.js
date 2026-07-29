@@ -114,7 +114,7 @@ export default function SupportMessages({ profile, initialDraft = '' }) {
       <header className="support-messages__head">
         <div className="support-messages__avatar">BM</div>
         <div>
-          <h2>BatasMo Admin</h2>
+          <h2>LegalLink Admin</h2>
           <p>Reach out for booking help, payment concerns, or any follow-ups.</p>
         </div>
       </header>
@@ -125,7 +125,7 @@ export default function SupportMessages({ profile, initialDraft = '' }) {
         {conversation.length === 0 ? (
           <div className="support-messages__empty">
             <h3>Start a conversation</h3>
-            <p>Send a message to BatasMo Admin and we&apos;ll get back to you here.</p>
+            <p>Send a message to LegalLink Admin and we&apos;ll get back to you here.</p>
           </div>
         ) : (
           conversation.map((m) => (
@@ -152,7 +152,7 @@ export default function SupportMessages({ profile, initialDraft = '' }) {
             }
           }}
           rows={2}
-          placeholder="Type your message to BatasMo Admin..."
+          placeholder="Type your message to LegalLink Admin..."
           disabled={sending}
           maxLength={2000}
         />

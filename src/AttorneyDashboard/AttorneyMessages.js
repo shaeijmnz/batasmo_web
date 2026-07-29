@@ -829,7 +829,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
       <aside className={`am-sidebar ${sidebarOpen ? 'am-sidebar--open' : ''}`}>
         <div className="am-sidebar__logo">
           <ScalesIcon size={26} color="#f5a623" />
-          <span>BatasMo</span>
+          <span>LegalLink</span>
         </div>
         <nav className="am-sidebar__nav">
           {sidebarItems.map(item => (
@@ -853,7 +853,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
           </button>
           <div className="am-topbar__logo">
             <ScalesIcon size={26} color="#f5a623" />
-            <span>BatasMo</span>
+            <span>LegalLink</span>
           </div>
         </div>
         <div className="am-topbar__right">

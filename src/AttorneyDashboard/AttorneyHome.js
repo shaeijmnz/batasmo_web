@@ -279,9 +279,9 @@ function AttorneyHome({ onNavigate, profile }) {
       {/* Sidebar */}
       <aside className={`att-sidebar ${sidebarOpen ? 'att-sidebar--open' : ''}`}>
         <div className="att-sidebar__logo">
-          <img src="/logo/logo.jpg" alt="BatasMo logo" className="att-brand-logo" />
+          <img src="/logo/logo.jpg" alt="LegalLink logo" className="att-brand-logo" />
           <div className="att-brand-text-wrap">
-            <span className="att-brand-title">BatasMo</span>
+            <span className="att-brand-title">LegalLink</span>
             <span className="att-brand-sub">Attorney Console</span>
           </div>
         </div>
@@ -315,7 +315,7 @@ function AttorneyHome({ onNavigate, profile }) {
         <div className="att-topbar__left">
           <button className="att-icon-btn att-menu-btn" onClick={() => setSidebarOpen(!sidebarOpen)}><MenuIcon /></button>
           <div className="att-topbar__logo">
-            <img src="/logo/logo.jpg" alt="BatasMo" className="att-topbar__brand-logo" />
+            <img src="/logo/logo.jpg" alt="LegalLink" className="att-topbar__brand-logo" />
             <div>
               <p className="att-topbar__eyebrow">Attorney Workspace</p>
               <span>Attorney Dashboard</span>

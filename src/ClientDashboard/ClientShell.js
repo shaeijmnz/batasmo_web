@@ -19,18 +19,18 @@ const MENU_ITEMS = [
 ];
 
 const PAGE_COPY = {
-  'home-logged': 'Welcome to your BatasMo client dashboard.',
+  'home-logged': 'Welcome to your LegalLink client dashboard.',
   'book-appointment': 'Choose an attorney and confirm your consultation flow.',
   'my-appointments': 'Track your consultations and notary services.',
   'chat-room': 'Collaborate with your legal team securely.',
   'transaction-history': 'Review completed services and transactions.',
   'client-logs': 'Review completed consultations, ratings, and your attorney’s session summary.',
-  announcements: 'Read official updates and schedule notices from BatasMo Admin.',
+  announcements: 'Read official updates and schedule notices from LegalLink Admin.',
   profile: 'Manage account preferences and security.',
   'my-notarial-requests': 'Track your consultations and notary services.',
   'notarial-request': 'Track your consultations and notary services.',
-  'support-messages': 'Message BatasMo Admin for help or follow-ups.',
-  'client-notary-tracking': 'Track notary requests you started on the BatasMo mobile app.',
+  'support-messages': 'Message LegalLink Admin for help or follow-ups.',
+  'client-notary-tracking': 'Track notary requests you started on the LegalLink mobile app.',
 };
 
 const ACTIVE_MENU_BY_PAGE = {
@@ -404,8 +404,8 @@ export default function ClientShell({
       <aside className={`client-shell-sidebar ${sidebarOpen ? 'open' : 'collapsed'}`}>
         <div className="client-shell-sidebar-header">
           <button type="button" className="client-shell-brand" onClick={() => handleNavigate('home-logged')}>
-            <img src="/logo/logo.jpg" alt="BatasMo" className="client-shell-brand-logo" />
-            {sidebarOpen ? <span className="client-shell-brand-text">BATASMO</span> : null}
+            <img src="/logo/logo.jpg" alt="LegalLink" className="client-shell-brand-logo" />
+            {sidebarOpen ? <span className="client-shell-brand-text">LEGALLINK</span> : null}
           </button>
         </div>
 
@@ -572,7 +572,7 @@ export default function ClientShell({
         <div className="client-shell-notary-modal__overlay" onClick={onCloseNotaryModal}>
           <div className="client-shell-notary-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
             <div className="client-shell-notary-modal__badge">Security Required</div>
-            <h2>Continue on BatasMo Mobile App</h2>
+            <h2>Continue on LegalLink Mobile App</h2>
             <p>{notaryWarningMessage}</p>
 
             <div className="client-shell-notary-modal__features">

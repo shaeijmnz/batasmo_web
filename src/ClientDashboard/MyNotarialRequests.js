@@ -253,7 +253,7 @@ function MyNotarialRequests({ onNavigate, profile }) {
     try {
       checkoutWindow = window.open('', '_blank');
       if (checkoutWindow) {
-        checkoutWindow.document.title = 'BatasMo Payment';
+        checkoutWindow.document.title = 'LegalLink Payment';
         checkoutWindow.document.body.innerHTML = '<p style="font-family: sans-serif; padding: 16px;">Preparing secure payment checkout...</p>';
       }
 
@@ -352,7 +352,7 @@ function MyNotarialRequests({ onNavigate, profile }) {
           <div className="mnr-sidebar__logo">
             <img src="/logo/logo.jpg" alt="Logo" className="mnr-sidebar__logo-img" />
             <ScalesIcon size={26} color="#f5a623" />
-            <span>BatasMo</span>
+            <span>LegalLink</span>
           </div>
         </div>
         <nav className="mnr-sidebar__nav">

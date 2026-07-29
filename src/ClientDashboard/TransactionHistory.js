@@ -193,7 +193,7 @@ function TransactionHistory({ onNavigate, profile }) {
           <div className="th-sidebar__logo">
             <img src="/logo/logo.jpg" alt="Logo" className="th-sidebar__logo-img" />
             <ScalesIcon size={26} color="#f5a623" />
-            <span>BatasMo</span>
+            <span>LegalLink</span>
           </div>
         </div>
         <nav className="th-sidebar__nav">

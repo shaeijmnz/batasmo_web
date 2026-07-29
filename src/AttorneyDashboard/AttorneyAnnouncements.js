@@ -106,7 +106,7 @@ export default function AttorneyAnnouncements({ onNavigate, profile }) {
       <aside className={`aa-sidebar ${sidebarOpen ? 'aa-sidebar--open' : ''}`}>
         <div className="aa-sidebar__logo">
           <ScalesIcon size={26} color="#f5a623" />
-          <span>BatasMo</span>
+          <span>LegalLink</span>
         </div>
         <nav className="aa-sidebar__nav">
           {sidebarItems.map(item => (
@@ -144,7 +144,7 @@ export default function AttorneyAnnouncements({ onNavigate, profile }) {
             <MegaphoneIcon />
             <h1>Announcements</h1>
           </div>
-          <p>Stay updated with the latest news and updates from BatasMo Admin.</p>
+          <p>Stay updated with the latest news and updates from LegalLink Admin.</p>
         </div>
 
         <div className="aa-cards">

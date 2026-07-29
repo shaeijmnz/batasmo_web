@@ -39,7 +39,7 @@ const logConversation = async ({ userId, role, message, reply, intent }) => {
 export const initialChatbotMessages = [
   {
     from: 'ai',
-    text: `Hello. I am your BatasMo assistant. ${CHATBOT_DISCLAIMER}`,
+    text: `Hello. I am your LegalLink assistant. ${CHATBOT_DISCLAIMER}`,
     actions: [
       { label: 'Book consultation', page: 'book-appointment' },
       { label: 'Notarial request', page: 'notarial-request' },

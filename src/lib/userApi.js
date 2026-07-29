@@ -548,7 +548,7 @@ export async function sendAdminSupportMessage({ clientId, message }) {
   try {
     await supabase.from('notifications').insert({
       user_id: clientId,
-      title: 'Message from BatasMo Admin',
+      title: 'Message from LegalLink Admin',
       body: `${body.slice(0, 140)} [support:${clientId}]`,
       type: 'admin_general',
       is_read: false,
@@ -3488,7 +3488,7 @@ export async function rescheduleClientAppointment({ appointmentId, scheduledAt, 
       await supabase.from('notifications').insert({
         user_id: appt.client_id,
         title: 'Reschedule request submitted',
-        body: `Your request to move this consultation to ${whenLabel} was sent to BatasMo Admin for approval.`,
+        body: `Your request to move this consultation to ${whenLabel} was sent to LegalLink Admin for approval.`,
         type: 'reschedule',
         is_read: false,
         created_at: nowIso,
@@ -6283,7 +6283,7 @@ export async function fetchAttorneyAnnouncementsData(userId) {
       imageUrl: parseNotificationImageUrl(item.data),
       date: valid ? dt.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Today',
       time: valid ? dt.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' }) : 'Now',
-      author: 'BatasMo Admin',
+      author: 'LegalLink Admin',
       pinned: type.includes('important') || type.includes('admin'),
       tag: type.includes('maintenance') ? 'Maintenance' : type.includes('important') ? 'Important' : 'General',
     }

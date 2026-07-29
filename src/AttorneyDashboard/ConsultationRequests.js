@@ -203,7 +203,7 @@ function ConsultationRequests({ onNavigate, profile }) {
       <aside className={`cr-sidebar ${sidebarOpen ? 'cr-sidebar--open' : ''}`}>
         <div className="cr-sidebar__logo">
           <ScalesIcon size={26} color="#f5a623" />
-          <span>BatasMo</span>
+          <span>LegalLink</span>
         </div>
         <nav className="cr-sidebar__nav">
           {[

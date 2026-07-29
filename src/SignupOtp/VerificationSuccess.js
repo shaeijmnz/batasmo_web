@@ -18,7 +18,7 @@ function VerificationSuccess({ onNavigate }) {
         <div className="vs-nav__inner">
           <div className="vs-nav__logo" onClick={() => onNavigate('home')} style={{ cursor: 'pointer' }}>
             <ScalesIcon size={28} color="#f5a623" />
-            <span>BatasMo</span>
+            <span>LegalLink</span>
           </div>
           <ul className="vs-nav__links">
             <li><a href="#home" onClick={() => onNavigate('home')}>Home</a></li>
