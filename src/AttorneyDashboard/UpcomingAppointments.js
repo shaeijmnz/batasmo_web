@@ -328,7 +328,6 @@ function UpcomingAppointments({ onNavigate, profile }) {
       slotDate: appt.slotDate,
       slotTime: appt.slotTime,
       paymentStatus: appt.paymentStatus || 'unpaid',
-      enforceScheduleWindow: true,
     });
 
     return (

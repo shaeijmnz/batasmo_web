@@ -202,7 +202,6 @@ function AttorneyHome({ onNavigate, profile }) {
             slotTime: item.slotTime,
             paymentStatus: item.paymentStatus || 'unpaid',
             nowValue: nowTick,
-            enforceScheduleWindow: true,
           }),
         )
         .map((item) => ({
@@ -426,7 +425,6 @@ function AttorneyHome({ onNavigate, profile }) {
                   slotTime: c.slotTime,
                   paymentStatus: c.paymentStatus || 'unpaid',
                   nowValue: nowTick,
-                  enforceScheduleWindow: true,
                 });
 
                 const formatDate = (dateStr) => {

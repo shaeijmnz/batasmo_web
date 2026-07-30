@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { 
   LayoutDashboard, Users, Scale,
   BarChart3, Settings as SettingsIcon, LogOut, Menu,
@@ -6,7 +6,6 @@ import {
 } from 'lucide-react';
 import './AdminTheme.css';
 import './settings.css';
-import { getAppConfig, setAppConfig } from '../lib/userApi';
 
 const handleQuickAction = (message) => window.alert(message);
 
@@ -131,99 +130,22 @@ const ProfileSection = () => (
   </div>
 );
 
-const coerceBooleanSetting = (value, fallback = true) => {
-  if (typeof value === 'boolean') return value;
-  if (typeof value === 'string') {
-    const normalized = value.trim().toLowerCase();
-    if (normalized === 'true' || normalized === '1') return true;
-    if (normalized === 'false' || normalized === '0') return false;
-  }
-  if (typeof value === 'number') return value !== 0;
-  return fallback;
-};
-
-const SecuritySection = () => {
-  const [settings, setSettings] = useState({
-    enforce_schedule_window: true,
-  });
-  const [loading, setLoading] = useState(true);
-  const [savingKey, setSavingKey] = useState('');
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    let mounted = true;
-
-    const loadSecuritySettings = async () => {
-      try {
-        const scheduleWindow = await getAppConfig('enforce_schedule_window', true);
-
-        if (!mounted) return;
-        setSettings({
-          enforce_schedule_window: coerceBooleanSetting(scheduleWindow, true),
-        });
-        setError('');
-      } catch (loadError) {
-        if (!mounted) return;
-        setError(loadError.message || 'Unable to load security toggles.');
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-
-    loadSecuritySettings();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const updateToggle = async (key, checked) => {
-    const previous = settings[key];
-    setSettings((current) => ({ ...current, [key]: checked }));
-    setSavingKey(key);
-    setMessage('');
-    setError('');
-
-    try {
-      await setAppConfig(key, checked);
-      setMessage('Security setting saved. The app will apply this to clients and attorneys in realtime.');
-    } catch (saveError) {
-      setSettings((current) => ({ ...current, [key]: previous }));
-      setError(saveError.message || 'Failed to save security setting.');
-    } finally {
-      setSavingKey('');
-    }
-  };
-
-  return (
-    <div className="settings-stack">
-      <div className="card">
-        <h3 className="card-title"><Lock size={18} /> Chat Validation</h3>
-        {loading ? <p className="settings-hint">Loading security settings...</p> : null}
-        {error ? <p className="settings-error">{error}</p> : null}
-        {message ? <p className="settings-success">{message}</p> : null}
-
-        <div className="toggle-item">
-          <div>
-            <h4>Enforce Scheduled Chat Time</h4>
-            <p>
-              ON blocks client and attorney chat access until the scheduled consultation time.
-              OFF lets paid consultations enter the chatroom anytime for retesting.
-            </p>
-          </div>
-          <input
-            type="checkbox"
-            className="switch"
-            checked={settings.enforce_schedule_window}
-            disabled={loading || Boolean(savingKey)}
-            onChange={(event) => updateToggle('enforce_schedule_window', event.target.checked)}
-          />
+const SecuritySection = () => (
+  <div className="settings-stack">
+    <div className="card">
+      <h3 className="card-title"><Lock size={18} /> Chat Validation</h3>
+      <div className="toggle-item">
+        <div>
+          <h4>Enforce Scheduled Chat Time</h4>
+          <p>
+            Always on. Clients and attorneys can only enter the consultation room once the
+            appointment is paid and the scheduled time has started, until the session window ends.
+          </p>
         </div>
       </div>
     </div>
-  );
-};
+  </div>
+);
 
 const NotificationsSection = () => (
   <div className="settings-stack">
