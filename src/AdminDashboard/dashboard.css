@@ -258,9 +258,9 @@ body { font-family: 'Inter', sans-serif; background: radial-gradient(circle at t
 }
 
 .logout-action:hover {
-  background: rgba(21, 34, 56, 0.05);
-  color: #0B0F19;
-  border-color: rgba(21, 34, 56, 0.1);
+  background: rgba(212, 175, 55, 0.12);
+  color: #f5f4f1;
+  border-color: rgba(212, 175, 55, 0.24);
   transform: translateX(4px);
 }
 
@@ -558,7 +558,7 @@ body { font-family: 'Inter', sans-serif; background: radial-gradient(circle at t
   font-family: 'Inter', sans-serif;
   font-size: 2.5rem;
   font-weight: 800;
-  color: #0B0F19;
+  color: #f5f4f1;
   margin-bottom: 8px;
   position: relative;
   z-index: 1;
@@ -804,8 +804,8 @@ body { font-family: 'Inter', sans-serif; background: radial-gradient(circle at t
   height: 44px;
   border-radius: 50%;
   object-fit: cover;
-  border: 2px solid #e2e8f0;
-  background: #f8fafc;
+  border: 2px solid rgba(212, 175, 55, 0.24);
+  background: rgba(15, 26, 45, 0.78);
 }
 
 .attorney-rank-avatar__badge {
@@ -851,7 +851,7 @@ body { font-family: 'Inter', sans-serif; background: radial-gradient(circle at t
 .bar-track {
   width: 100%;
   height: 186px;
-  background: #eef2f7;
+  background: rgba(11, 19, 33, 0.6);
   border-radius: 10px;
   position: relative;
   overflow: hidden;
@@ -1278,7 +1278,7 @@ body { font-family: 'Inter', sans-serif; background: radial-gradient(circle at t
   border: 1px solid var(--border-color);
   border-radius: 10px;
   overflow: hidden;
-  background: #f8fafc;
+  background: rgba(11, 19, 33, 0.6);
 }
 
 .document-preview-frame {
@@ -1294,7 +1294,7 @@ body { font-family: 'Inter', sans-serif; background: radial-gradient(circle at t
   object-fit: contain;
   display: block;
   margin: 0 auto;
-  background: #f8fafc;
+  background: rgba(11, 19, 33, 0.6);
 }
 
 .admin-toast {
