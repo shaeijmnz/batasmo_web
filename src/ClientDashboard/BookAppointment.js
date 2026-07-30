@@ -402,7 +402,6 @@ function BookAppointment({ onNavigate, profile }) {
       return;
     }
 
-    let checkoutWindow = null;
     let createdAppointmentId = null;
     let paymentTransactionId = null;
     let createdNotarialRequestId = null;
@@ -415,18 +414,6 @@ function BookAppointment({ onNavigate, profile }) {
       setIsPaying(true);
       setSubmitError('');
       setPendingCheckoutUrl('');
-
-      // Open blank tab synchronously under the click gesture so browsers
-      // allow the later redirect to PayMongo (async work happens next).
-      checkoutWindow = window.open('', '_blank');
-      if (checkoutWindow) {
-        try {
-          checkoutWindow.document.title = 'LegalLink Payment';
-          checkoutWindow.document.body.innerHTML = '<p style="font-family: sans-serif; padding: 16px;">Preparing secure payment checkout...</p>';
-        } catch {
-          // Cross-origin / restricted document access — ignore, we still own the window handle.
-        }
-      }
 
       const scheduledAtIso = buildScheduledIso(selectedDate, selectedTime);
       const slotDateTime = new Date(scheduledAtIso);
@@ -505,25 +492,17 @@ function BookAppointment({ onNavigate, profile }) {
         throw new Error('Checkout URL is missing. Please try again.');
       }
 
-      let checkoutOpened = false;
-      if (checkoutWindow && !checkoutWindow.closed) {
-        try {
-          checkoutWindow.location.href = checkoutUrl;
-          checkoutOpened = true;
-        } catch {
-          checkoutOpened = false;
-        }
-      }
-      if (!checkoutOpened) {
-        const fallbackWindow = window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
-        checkoutOpened = Boolean(fallbackWindow && !fallbackWindow.closed);
-      }
-      if (!checkoutOpened) {
-        // Popup blocked — keep the PayMongo link visible so the user can open it manually.
-        setPendingCheckoutUrl(checkoutUrl);
+      // Do NOT open a blank tab first — that flashes our site / about:blank and
+      // often gets closed or bounced before PayMongo loads. Open the real
+      // checkout URL, and always keep a manual link for popup blockers.
+      const checkoutWindow = window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
+      setPendingCheckoutUrl(checkoutUrl);
+      if (!checkoutWindow || checkoutWindow.closed) {
         setSubmitError(
-          'Your browser blocked the payment window. Click “Open Payment Page” below, allow popups for this site, then complete payment.'
+          'Click “Open Payment Page” below to continue. Allow popups for this site if the tab does not open.'
         );
+      } else {
+        setSubmitError('');
       }
 
       const startedAt = Date.now();
@@ -533,9 +512,6 @@ function BookAppointment({ onNavigate, profile }) {
       const waitForNextPoll = (delayMs) =>
         new Promise((resolve) => setTimeout(resolve, delayMs));
 
-      // Cancellation is fully manual now — the user must press the
-      // "Cancel Payment" button on the booking screen. We intentionally do
-      // NOT auto-cancel from popup close or window-focus events.
       while (Date.now() - startedAt < timeoutMs) {
         if (cancelRequestedRef.current) {
           throw new Error('Payment was cancelled. Your booking has been released.');
@@ -597,15 +573,12 @@ function BookAppointment({ onNavigate, profile }) {
       setShowBooking(false);
       setShowConfirmation(true);
     } catch (error) {
-      if (checkoutWindow && !checkoutWindow.closed) {
-        checkoutWindow.close();
-      }
-      setPendingCheckoutUrl('');
       setSubmitError(error?.message || 'Unable to complete payment. Please try again.');
     } finally {
       focusReturnedAtRef.current = null;
       cancelRequestedRef.current = false;
       if (!succeeded && createdAppointmentId) {
+        setPendingCheckoutUrl('');
         try {
           await abandonAppointmentCheckout({
             appointmentId: createdAppointmentId,
@@ -1070,7 +1043,12 @@ function BookAppointment({ onNavigate, profile }) {
                         onChange={(e) => setPaymentMethod(e.target.value)}
                       >
                         <option value="QRPh">QR Ph</option>
+                        <option value="GCash">GCash</option>
+                        <option value="Maya">Maya</option>
                       </select>
+                      <small style={{ display: 'block', marginTop: 6, color: '#94a3b8' }}>
+                        PayMongo checkout will also show the other available methods.
+                      </small>
                     </div>
 
                     <div className="ba-form-group">
@@ -1121,7 +1099,7 @@ function BookAppointment({ onNavigate, profile }) {
                     </div>
                     {isPaying && (
                       <div style={{ color: '#94a3b8', fontSize: '0.85rem', marginTop: 12, textAlign: 'center' }}>
-                        Waiting for payment confirmation… Press <strong>Cancel Payment</strong> if you decide not to continue.
+                        Waiting for payment confirmation… Use <strong>Open Payment Page</strong> if no PayMongo tab appeared. Press <strong>Cancel Payment</strong> to stop.
                       </div>
                     )}
                     {pendingCheckoutUrl ? (
@@ -1131,7 +1109,7 @@ function BookAppointment({ onNavigate, profile }) {
                           target="_blank"
                           rel="noopener noreferrer"
                           className="ba-booking-btn ba-booking-btn--submit"
-                          style={{ display: 'inline-block', textDecoration: 'none', padding: '10px 16px' }}
+                          style={{ display: 'inline-block', textDecoration: 'none', padding: '12px 18px' }}
                         >
                           Open Payment Page →
                         </a>
