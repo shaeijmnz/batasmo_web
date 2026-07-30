@@ -4459,14 +4459,61 @@ export async function createAppointmentBooking({
   }
 
   if (normalizedPayload.slot_date && normalizedPayload.slot_time) {
-    const rpcSlotBook = await supabase.rpc('mark_slot_booked', {
-      p_attorney_id: normalizedPayload.attorney_id,
-      p_date: normalizedPayload.slot_date,
-      p_time: normalizedPayload.slot_time,
-    })
+    // DB time labels vary (e.g. "02:00 PM" vs "14:00"). Try exact matches
+    // first, then always resolve by parsed clock time so abandon can free by id.
+    const timeCandidates = Array.from(
+      new Set(
+        [
+          String(normalizedPayload.slot_time || '').trim(),
+          normalizeSlotTimeLabel(normalizedPayload.slot_time),
+        ].filter(Boolean),
+      ),
+    )
+    for (const timeLabel of timeCandidates) {
+      const rpcSlotBook = await supabase.rpc('mark_slot_booked', {
+        p_attorney_id: normalizedPayload.attorney_id,
+        p_date: normalizedPayload.slot_date,
+        p_time: timeLabel,
+      })
+      if (rpcSlotBook.error) {
+        console.warn('[booking] mark_slot_booked RPC failed', timeLabel, rpcSlotBook.error)
+      }
+    }
 
-    if (rpcSlotBook.error) {
-      console.warn('[booking] mark_slot_booked RPC failed', rpcSlotBook.error)
+    try {
+      const { data: candidates } = await supabase
+        .from('availability_slots')
+        .select('id, time, is_booked')
+        .eq('attorney_id', normalizedPayload.attorney_id)
+        .eq('date', normalizedPayload.slot_date)
+      const target = parseSlotDateTime(normalizedPayload.slot_date, normalizedPayload.slot_time)
+      const targetMs = target?.getTime() || 0
+      const match = (candidates || []).find((row) => {
+        const parsed = parseSlotDateTime(normalizedPayload.slot_date, row.time)
+        return parsed && parsed.getTime() === targetMs
+      })
+      if (match?.id) {
+        resolvedSlotId = match.id
+        if (!match.is_booked) {
+          await supabase
+            .from('availability_slots')
+            .update({ is_booked: true, updated_at: nowIso })
+            .eq('id', match.id)
+        }
+      }
+    } catch (fallbackErr) {
+      console.warn('[booking] mark slot by parsed time failed', fallbackErr)
+    }
+  }
+
+  if (appointmentId && resolvedSlotId) {
+    try {
+      await supabase
+        .from('appointments')
+        .update({ slot_id: resolvedSlotId, slot_date: normalizedPayload.slot_date, slot_time: normalizedPayload.slot_time })
+        .eq('id', appointmentId)
+    } catch (linkErr) {
+      console.warn('[booking] link slot_id to appointment failed', linkErr)
     }
   }
 

@@ -406,9 +406,29 @@ function BookAppointment({ onNavigate, profile }) {
     let paymentTransactionId = null;
     let createdNotarialRequestId = null;
     let succeeded = false;
+    let checkoutReady = false;
+    let shouldReleaseBooking = true;
+    let checkoutWindow = null;
 
     cancelRequestedRef.current = false;
     focusReturnedAtRef.current = null;
+
+    // Open the tab in the same user-gesture turn so popup blockers allow
+    // PayMongo QR Ph Hosted Checkout (same pattern as My Appointments).
+    try {
+      checkoutWindow = window.open('', '_blank');
+      if (checkoutWindow) {
+        try {
+          checkoutWindow.document.title = 'LegalLink Payment';
+          checkoutWindow.document.body.innerHTML =
+            '<p style="font-family: sans-serif; padding: 16px;">Preparing PayMongo QR checkout…</p>';
+        } catch {
+          // Ignore restricted document access.
+        }
+      }
+    } catch {
+      checkoutWindow = null;
+    }
 
     try {
       setIsPaying(true);
@@ -492,14 +512,25 @@ function BookAppointment({ onNavigate, profile }) {
         throw new Error('Checkout URL is missing. Please try again.');
       }
 
-      // Do NOT open a blank tab first — that flashes our site / about:blank and
-      // often gets closed or bounced before PayMongo loads. Open the real
-      // checkout URL, and always keep a manual link for popup blockers.
-      const checkoutWindow = window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
       setPendingCheckoutUrl(checkoutUrl);
-      if (!checkoutWindow || checkoutWindow.closed) {
+      checkoutReady = true;
+
+      let checkoutOpened = false;
+      if (checkoutWindow && !checkoutWindow.closed) {
+        try {
+          checkoutWindow.location.replace(checkoutUrl);
+          checkoutOpened = true;
+        } catch {
+          checkoutOpened = false;
+        }
+      }
+      if (!checkoutOpened) {
+        const fallbackWindow = window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
+        checkoutOpened = Boolean(fallbackWindow && !fallbackWindow.closed);
+      }
+      if (!checkoutOpened) {
         setSubmitError(
-          'Click “Open Payment Page” below to continue. Allow popups for this site if the tab does not open.'
+          'Click “Open Payment Page” below to open PayMongo QR. Allow popups for this site if needed.'
         );
       } else {
         setSubmitError('');
@@ -538,7 +569,12 @@ function BookAppointment({ onNavigate, profile }) {
       }
 
       if (!paid) {
-        throw new Error('Payment is still pending. Complete checkout, then try again in a few seconds.');
+        // Keep unpaid booking + slot so the client can finish QR pay from
+        // My Appointments (PAY NOW) instead of burning the slot on timeout.
+        shouldReleaseBooking = false;
+        throw new Error(
+          'Payment is still pending. Keep the PayMongo tab open, scan the QR, then use PAY NOW under My Appointments if needed.'
+        );
       }
 
       try {
@@ -574,10 +610,20 @@ function BookAppointment({ onNavigate, profile }) {
       setShowConfirmation(true);
     } catch (error) {
       setSubmitError(error?.message || 'Unable to complete payment. Please try again.');
+      if (checkoutReady) {
+        shouldReleaseBooking = cancelRequestedRef.current || /payment failed/i.test(String(error?.message || ''));
+      } else if (checkoutWindow && !checkoutWindow.closed) {
+        try {
+          checkoutWindow.close();
+        } catch {
+          // ignore
+        }
+      }
     } finally {
       focusReturnedAtRef.current = null;
+      const wasCancelled = cancelRequestedRef.current;
       cancelRequestedRef.current = false;
-      if (!succeeded && createdAppointmentId) {
+      if (!succeeded && createdAppointmentId && (shouldReleaseBooking || wasCancelled)) {
         setPendingCheckoutUrl('');
         try {
           await abandonAppointmentCheckout({

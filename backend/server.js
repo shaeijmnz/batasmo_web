@@ -1579,8 +1579,8 @@ const supabaseAbandonPendingConsultation = async (appointmentId) => {
   })
   if (paidRows.length > 0) return { ok: true, reason: 'already_paid' }
 
-  if (st !== 'pending') return { ok: true, reason: 'not_pending_status' }
-
+  // Free unpaid bookings even if status is not exactly "pending" (some RPC
+  // paths may leave confirmed/other labels). Slot recovery is the priority.
   const nowIso = new Date().toISOString()
 
   await supabaseRestPatch({
@@ -1647,6 +1647,30 @@ const supabaseAbandonPendingConsultation = async (appointmentId) => {
     }
   } else if (attorneyId && slotDate && slotTime) {
     try {
+      // Broader free: any booked row that parses to the same local date/time.
+      const candidateSlots = await supabaseRestGetMany({
+        table: 'availability_slots',
+        query: new URLSearchParams({
+          attorney_id: `eq.${attorneyId}`,
+          date: `eq.${slotDate}`,
+          is_booked: 'eq.true',
+        }).toString(),
+      })
+      const targetParsed = parseSlotDateTimeNode(slotDate, slotTime)
+      const targetMs = targetParsed?.getTime() || 0
+      for (const slot of candidateSlots) {
+        const slotParsed = parseSlotDateTimeNode(slotDate, slot?.time)
+        if (!slotParsed || slotParsed.getTime() !== targetMs || !slot?.id) continue
+        try {
+          await supabaseRestPatch({
+            table: 'availability_slots',
+            query: new URLSearchParams({ id: `eq.${slot.id}` }).toString(),
+            body: { is_booked: false, updated_at: nowIso },
+          })
+        } catch (e) {
+          console.warn('[payments] abandon: broad slot free failed', slot.id, e?.message || e)
+        }
+      }
       await supabaseRestPatch({
         table: 'availability_slots',
         query: new URLSearchParams({
@@ -1791,8 +1815,11 @@ const createPaymongoCheckoutSession = async ({
   // Always offer multiple channels. A single disabled method (e.g. QR Ph not
   // activated on the PayMongo account) causes Hosted Checkout to bounce
   // straight back to cancel_url — which looks like "opens then returns".
-  const methodSet = ['gcash', 'paymaya', 'qrph']
-  const paymentMethodTypes = [preferred, ...methodSet.filter((m) => m !== preferred)].filter(
+  // Prefer qrph first when the client asked for QR Ph so the QR screen shows.
+  const methodSet = preferred === 'qrph'
+    ? ['qrph', 'gcash', 'paymaya']
+    : [preferred, 'gcash', 'paymaya', 'qrph']
+  const paymentMethodTypes = [...new Set(methodSet)].filter(
     (m) => m === 'gcash' || m === 'paymaya' || m === 'qrph',
   )
 
