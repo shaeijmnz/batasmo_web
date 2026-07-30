@@ -956,7 +956,6 @@ function BookAppointment({ onNavigate, profile }) {
                           Add notarial request to this payment
                           <small>Pay consultation and notarial service in one receipt.</small>
                         </span>
-                        <strong>Included for testing</strong>
                       </label>
 
                       {includeNotarial ? (
