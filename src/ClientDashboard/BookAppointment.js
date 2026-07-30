@@ -182,6 +182,7 @@ function BookAppointment({ onNavigate, profile }) {
   const [hiddenPastSlotsCount, setHiddenPastSlotsCount] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState('QRPh');
   const [isPaying, setIsPaying] = useState(false);
+  const [pendingCheckoutUrl, setPendingCheckoutUrl] = useState('');
   const [confirmedSlot, setConfirmedSlot] = useState(null);
   const [calendarRefreshKey, setCalendarRefreshKey] = useState(0);
   const [loadError, setLoadError] = useState('');
@@ -413,11 +414,18 @@ function BookAppointment({ onNavigate, profile }) {
     try {
       setIsPaying(true);
       setSubmitError('');
+      setPendingCheckoutUrl('');
 
+      // Open blank tab synchronously under the click gesture so browsers
+      // allow the later redirect to PayMongo (async work happens next).
       checkoutWindow = window.open('', '_blank');
       if (checkoutWindow) {
-        checkoutWindow.document.title = 'LegalLink Payment';
-        checkoutWindow.document.body.innerHTML = '<p style="font-family: sans-serif; padding: 16px;">Preparing secure payment checkout...</p>';
+        try {
+          checkoutWindow.document.title = 'LegalLink Payment';
+          checkoutWindow.document.body.innerHTML = '<p style="font-family: sans-serif; padding: 16px;">Preparing secure payment checkout...</p>';
+        } catch {
+          // Cross-origin / restricted document access — ignore, we still own the window handle.
+        }
       }
 
       const scheduledAtIso = buildScheduledIso(selectedDate, selectedTime);
@@ -492,12 +500,30 @@ function BookAppointment({ onNavigate, profile }) {
       });
       paymentTransactionId = session?.transactionId || null;
 
-      if (session?.checkoutUrl && checkoutWindow) {
-        checkoutWindow.location.href = session.checkoutUrl;
-      } else if (session?.checkoutUrl) {
-        window.open(session.checkoutUrl, '_blank', 'noopener,noreferrer');
-      } else {
+      const checkoutUrl = String(session?.checkoutUrl || '').trim();
+      if (!checkoutUrl) {
         throw new Error('Checkout URL is missing. Please try again.');
+      }
+
+      let checkoutOpened = false;
+      if (checkoutWindow && !checkoutWindow.closed) {
+        try {
+          checkoutWindow.location.href = checkoutUrl;
+          checkoutOpened = true;
+        } catch {
+          checkoutOpened = false;
+        }
+      }
+      if (!checkoutOpened) {
+        const fallbackWindow = window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
+        checkoutOpened = Boolean(fallbackWindow && !fallbackWindow.closed);
+      }
+      if (!checkoutOpened) {
+        // Popup blocked — keep the PayMongo link visible so the user can open it manually.
+        setPendingCheckoutUrl(checkoutUrl);
+        setSubmitError(
+          'Your browser blocked the payment window. Click “Open Payment Page” below, allow popups for this site, then complete payment.'
+        );
       }
 
       const startedAt = Date.now();
@@ -567,12 +593,14 @@ function BookAppointment({ onNavigate, profile }) {
         timeLabel: selectedTime,
       });
       setConfirmedAttorney(bookingAttorney);
+      setPendingCheckoutUrl('');
       setShowBooking(false);
       setShowConfirmation(true);
     } catch (error) {
       if (checkoutWindow && !checkoutWindow.closed) {
         checkoutWindow.close();
       }
+      setPendingCheckoutUrl('');
       setSubmitError(error?.message || 'Unable to complete payment. Please try again.');
     } finally {
       focusReturnedAtRef.current = null;
@@ -1097,6 +1125,19 @@ function BookAppointment({ onNavigate, profile }) {
                         Waiting for payment confirmation… Press <strong>Cancel Payment</strong> if you decide not to continue.
                       </div>
                     )}
+                    {pendingCheckoutUrl ? (
+                      <div style={{ marginTop: 12, textAlign: 'center' }}>
+                        <a
+                          href={pendingCheckoutUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ba-booking-btn ba-booking-btn--submit"
+                          style={{ display: 'inline-block', textDecoration: 'none', padding: '10px 16px' }}
+                        >
+                          Open Payment Page →
+                        </a>
+                      </div>
+                    ) : null}
                   </>
                 )}
               </div>
