@@ -36,7 +36,17 @@
 .consult-wait-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 10px;
   margin-top: 18px;
+}
+
+.consult-wait-btn--primary {
+  background: #f5a623;
+  color: #152238;
+}
+
+.consult-wait-btn--primary:hover {
+  background: #e09515;
 }
 
 .consult-wait-btn {

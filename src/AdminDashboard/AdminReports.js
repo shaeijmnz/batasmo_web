@@ -642,8 +642,8 @@ const Reports = ({ onNavigate }) => {
           <button className="sidebar-toggle" onClick={() => setSidebarOpen(!isSidebarOpen)}>
             <Menu size={24} />
           </button>
-          {isSidebarOpen && <img src="/logo/logo.jpg" alt="LegalLink logo" className="brand-logo" />}
-          {isSidebarOpen && <span className="logo-text">LegalLink</span>}
+          {isSidebarOpen && <img src="/logo/logo.jpg" alt="BatasMo logo" className="brand-logo" />}
+          {isSidebarOpen && <span className="logo-text">BatasMo</span>}
         </div>
         <nav className="sidebar-nav">
           {navItems.map((item) => (

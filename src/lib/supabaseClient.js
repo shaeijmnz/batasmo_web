@@ -16,7 +16,7 @@ export const SUPABASE_PUBLISHABLE_KEY_WARNING =
   'Login needs the legacy anon key (starts with eyJ), not sb_publishable_. In Supabase: Settings → API Keys → Legacy anon, public — then set REACT_APP_SUPABASE_ANON_KEY on Vercel and redeploy.'
 
 export const SUPABASE_REACHABILITY_ERROR =
-  'Cannot reach the LegalLink database (Supabase). The project may be paused or deleted. In Supabase Dashboard restore or create a project, then set REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY in Vercel → Settings → Environment Variables and redeploy.'
+  'Cannot reach the BatasMo database (Supabase). The project may be paused or deleted. In Supabase Dashboard restore or create a project, then set REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY in Vercel → Settings → Environment Variables and redeploy.'
 
 /** Returns a user-facing message when Supabase env is missing or uses a publishable/secret key. */
 export function getSupabaseConfigError() {

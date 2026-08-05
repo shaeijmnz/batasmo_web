@@ -1,18 +1,5 @@
-:root {
-  --avail-bg: linear-gradient(180deg, #152238 0%, #0f1a2d 100%);
-  --avail-surface: rgba(27, 43, 71, 0.94);
-  --avail-surface-soft: rgba(15, 26, 45, 0.72);
-  --avail-line: rgba(212, 175, 55, 0.18);
-  --avail-line-soft: rgba(212, 175, 55, 0.12);
-  --avail-text: #f5f4f1;
-  --avail-muted: #b8c2d1;
-  --avail-gold: #d4af37;
-  --avail-gold-soft: #e4c46a;
-  --avail-ink: #0b1321;
-}
-
 .availability-page-overlay {
-  background: rgba(7, 12, 22, 0.62);
+  background: rgba(15, 23, 42, 0.42);
   inset: 0;
   overflow: auto;
   padding: 28px;
@@ -21,11 +8,10 @@
 }
 
 .availability-page {
-  background: var(--avail-bg);
-  border: 1px solid var(--avail-line);
+  background: #f5f1eb;
+  border: 1px solid #e2e8f0;
   border-radius: 24px;
-  box-shadow: 0 28px 80px rgba(7, 12, 22, 0.46);
-  color: var(--avail-text);
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.28);
   margin: 0 auto;
   max-width: 1180px;
   min-height: calc(100vh - 56px);
@@ -41,22 +27,18 @@
 }
 
 .availability-page__header h2 {
-  color: var(--avail-text);
+  color: #0f172a;
   font-size: 2rem;
   margin: 4px 0 6px;
 }
 
 .availability-page__header p {
-  color: var(--avail-muted);
+  color: #64748b;
   margin: 0;
 }
 
-.availability-page__header strong {
-  color: var(--avail-gold-soft);
-}
-
 .availability-kicker {
-  color: var(--avail-gold) !important;
+  color: #d4a017 !important;
   font-size: 0.78rem;
   font-weight: 800;
   letter-spacing: 0.12em;
@@ -65,20 +47,17 @@
 
 .availability-close-btn {
   align-items: center;
-  background: rgba(15, 26, 45, 0.72);
-  border: 1px solid var(--avail-line);
+  background: #ffffff;
+  border: 1px solid #d8dde6;
   border-radius: 14px;
-  color: var(--avail-muted);
+  color: #64748b;
   cursor: pointer;
   display: inline-flex;
   padding: 10px;
-  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
 .availability-close-btn:hover {
-  background: rgba(34, 54, 86, 0.9);
-  border-color: var(--avail-gold);
-  color: var(--avail-text);
+  color: #0f172a;
 }
 
 .availability-error,
@@ -94,21 +73,18 @@
 }
 
 .availability-error {
-  background: rgba(153, 27, 27, 0.24);
-  border: 1px solid rgba(248, 113, 113, 0.4);
-  color: #fca5a5;
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 .availability-success {
-  background: rgba(22, 101, 52, 0.24);
-  border: 1px solid rgba(74, 222, 128, 0.35);
-  color: #86efac;
+  background: #dcfce7;
+  color: #166534;
 }
 
 .availability-info {
-  background: rgba(7, 89, 133, 0.24);
-  border: 1px solid rgba(56, 189, 248, 0.35);
-  color: #7dd3fc;
+  background: #e0f2fe;
+  color: #075985;
 }
 
 .availability-layout {
@@ -118,10 +94,10 @@
 }
 
 .availability-card {
-  background: var(--avail-surface);
-  border: 1px solid var(--avail-line);
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid #d8dde6;
   border-radius: 20px;
-  box-shadow: 0 18px 44px rgba(7, 12, 22, 0.3);
+  box-shadow: 0 10px 30px rgba(21, 34, 56, 0.1);
   padding: 22px;
 }
 
@@ -135,26 +111,20 @@
 
 .availability-calendar-head h3,
 .availability-slots-head h3 {
-  color: var(--avail-text);
+  color: #0f172a;
   margin: 0;
 }
 
 .availability-calendar-head button {
-  background: rgba(15, 26, 45, 0.72);
-  border: 1px solid var(--avail-line);
+  background: #152238;
+  border: none;
   border-radius: 12px;
-  color: var(--avail-gold);
+  color: #ffffff;
   cursor: pointer;
   font-size: 1.4rem;
   font-weight: 800;
   height: 38px;
   width: 38px;
-  transition: background 0.2s ease, border-color 0.2s ease;
-}
-
-.availability-calendar-head button:hover {
-  background: rgba(34, 54, 86, 0.9);
-  border-color: var(--avail-gold);
 }
 
 .availability-weekdays,
@@ -165,7 +135,7 @@
 }
 
 .availability-weekdays span {
-  color: var(--avail-muted);
+  color: #4f5a68;
   font-size: 0.8rem;
   font-weight: 800;
   text-align: center;
@@ -174,21 +144,15 @@
 .availability-day {
   align-items: center;
   aspect-ratio: 1;
-  background: rgba(15, 26, 45, 0.72);
-  border: 1px solid var(--avail-line-soft);
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
   border-radius: 14px;
-  color: var(--avail-text);
+  color: #1b2432;
   cursor: pointer;
   display: flex;
   font-weight: 800;
   justify-content: center;
   position: relative;
-  transition: background 0.2s ease, border-color 0.2s ease;
-}
-
-.availability-day:hover {
-  background: rgba(34, 54, 86, 0.9);
-  border-color: var(--avail-line);
 }
 
 .availability-day--blank {
@@ -197,19 +161,17 @@
 }
 
 .availability-day--today {
-  border-color: var(--avail-gold);
-  box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.22);
+  border-color: #b78949;
+  box-shadow: 0 0 0 2px rgba(183, 137, 73, 0.2);
 }
 
-.availability-day--selected,
-.availability-day--selected:hover {
-  background: linear-gradient(135deg, var(--avail-gold) 0%, var(--avail-gold-soft) 100%);
-  border-color: var(--avail-gold);
-  color: var(--avail-ink);
+.availability-day--selected {
+  background: #152238;
+  color: #ffffff;
 }
 
 .availability-dot {
-  background: var(--avail-gold);
+  background: #b78949;
   border-radius: 999px;
   bottom: 8px;
   height: 6px;
@@ -217,21 +179,17 @@
   width: 6px;
 }
 
-.availability-day--selected .availability-dot {
-  background: var(--avail-ink);
-}
-
 .availability-slots-head p,
 .availability-muted {
-  color: var(--avail-muted);
+  color: #64748b;
   margin: 4px 0 0;
 }
 
 .availability-save-btn {
-  background: linear-gradient(135deg, var(--avail-gold) 0%, var(--avail-gold-soft) 100%);
+  background: linear-gradient(135deg, #152238 0%, #243652 100%);
   border: none;
   border-radius: 12px;
-  color: var(--avail-ink);
+  color: #ffffff;
   cursor: pointer;
   font-weight: 800;
   padding: 11px 16px;
@@ -252,12 +210,12 @@
 .monthly-weekday-chip:hover,
 .monthly-time-chip:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 18px rgba(7, 12, 22, 0.35);
+  box-shadow: 0 8px 18px rgba(36, 29, 20, 0.12);
 }
 
 .availability-save-modal-overlay {
   align-items: center;
-  background: rgba(7, 12, 22, 0.68);
+  background: rgba(15, 23, 42, 0.55);
   display: flex;
   inset: 0;
   justify-content: center;
@@ -268,11 +226,10 @@
 
 .availability-save-modal {
   animation: availability-save-modal-in 0.28s ease-out;
-  background: var(--avail-bg);
-  border: 1px solid var(--avail-line);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
   border-radius: 20px;
-  box-shadow: 0 24px 64px rgba(7, 12, 22, 0.5);
-  color: var(--avail-text);
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.22);
   max-width: 420px;
   padding: 28px 26px 24px;
   text-align: center;
@@ -293,10 +250,9 @@
 
 .availability-save-modal__icon {
   align-items: center;
-  background: rgba(22, 101, 52, 0.28);
-  border: 1px solid rgba(74, 222, 128, 0.35);
+  background: #ecfdf3;
   border-radius: 999px;
-  color: #86efac;
+  color: #15803d;
   display: flex;
   height: 72px;
   justify-content: center;
@@ -305,23 +261,23 @@
 }
 
 .availability-save-modal h3 {
-  color: var(--avail-text);
+  color: #0f172a;
   font-size: 1.35rem;
   margin: 0 0 10px;
 }
 
 .availability-save-modal__lead {
-  color: var(--avail-muted);
+  color: #334155;
   font-size: 0.95rem;
   line-height: 1.5;
   margin: 0 0 14px;
 }
 
 .availability-save-modal__stats {
-  background: rgba(15, 26, 45, 0.72);
-  border: 1px solid var(--avail-line-soft);
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
   border-radius: 14px;
-  color: var(--avail-muted);
+  color: #475569;
   font-size: 0.9rem;
   list-style: none;
   margin: 0 0 12px;
@@ -334,21 +290,21 @@
 }
 
 .availability-save-modal__stats strong {
-  color: var(--avail-gold-soft);
+  color: #0f172a;
 }
 
 .availability-save-modal__hint {
-  color: var(--avail-muted);
+  color: #64748b;
   font-size: 0.85rem;
   line-height: 1.45;
   margin: 0 0 18px;
 }
 
 .availability-save-modal__btn {
-  background: linear-gradient(135deg, var(--avail-gold) 0%, var(--avail-gold-soft) 100%);
+  background: #152238;
   border: none;
   border-radius: 12px;
-  color: var(--avail-ink);
+  color: #ffffff;
   cursor: pointer;
   font-size: 0.95rem;
   font-weight: 800;
@@ -357,7 +313,7 @@
 }
 
 .availability-save-modal__btn:hover {
-  background: linear-gradient(135deg, var(--avail-gold-soft) 0%, #f0d98b 100%);
+  background: #1e2f4a;
 }
 
 .availability-slot-grid {
@@ -367,10 +323,10 @@
 }
 
 .availability-time-chip {
-  background: rgba(15, 26, 45, 0.72);
-  border: 1px solid var(--avail-line-soft);
+  background: #f8fafc;
+  border: 1px solid #d8dde6;
   border-radius: 16px;
-  color: var(--avail-text);
+  color: #0f172a;
   cursor: pointer;
   display: flex;
   flex-direction: column;
@@ -380,18 +336,18 @@
 }
 
 .availability-time-chip span {
-  color: var(--avail-muted);
+  color: #64748b;
   font-size: 0.8rem;
 }
 
 .availability-time-chip--active {
-  background: linear-gradient(135deg, var(--avail-gold) 0%, var(--avail-gold-soft) 100%);
-  border-color: var(--avail-gold);
-  color: var(--avail-ink);
+  background: #152238;
+  border-color: #152238;
+  color: #ffffff;
 }
 
 .availability-time-chip--active span {
-  color: rgba(11, 19, 33, 0.75);
+  color: #dbeafe;
 }
 
 .availability-time-chip--disabled {
@@ -400,8 +356,8 @@
 }
 
 .monthly-template-card {
-  background: rgba(15, 26, 45, 0.6);
-  border: 1px dashed var(--avail-line);
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
   border-radius: 18px;
   margin-top: 18px;
   padding: 16px;
@@ -416,14 +372,14 @@
 }
 
 .monthly-template-head h4 {
-  color: var(--avail-text);
+  color: #0f172a;
   font-size: 1rem;
   margin: 0 0 4px;
 }
 
 .monthly-template-head p,
 .monthly-template-label {
-  color: var(--avail-muted);
+  color: #64748b;
   margin: 0;
 }
 
@@ -432,10 +388,10 @@
 }
 
 .monthly-apply-btn {
-  background: rgba(21, 34, 56, 0.9);
-  border: 1px solid var(--avail-gold);
+  background: #152238;
+  border: none;
   border-radius: 12px;
-  color: var(--avail-gold);
+  color: #ffffff;
   cursor: pointer;
   flex-shrink: 0;
   font-weight: 800;
@@ -443,8 +399,7 @@
 }
 
 .monthly-apply-btn:hover {
-  background: var(--avail-gold);
-  color: var(--avail-ink);
+  background: #1e2d45;
 }
 
 .monthly-template-section {
@@ -469,10 +424,10 @@
 
 .monthly-weekday-chip,
 .monthly-time-chip {
-  background: rgba(15, 26, 45, 0.72);
-  border: 1px solid var(--avail-line-soft);
+  background: #ffffff;
+  border: 1px solid #d8dde6;
   border-radius: 999px;
-  color: var(--avail-text);
+  color: #0f172a;
   cursor: pointer;
   font-weight: 800;
   padding: 9px 12px;
@@ -480,10 +435,11 @@
 
 .monthly-weekday-chip--active,
 .monthly-time-chip--active {
-  background: linear-gradient(135deg, var(--avail-gold) 0%, var(--avail-gold-soft) 100%);
-  border-color: var(--avail-gold);
-  color: var(--avail-ink);
+  background: #d4a017;
+  border-color: #d4a017;
+  color: #ffffff;
 }
+
 
 .availability-page--embedded {
   background: transparent;
@@ -493,6 +449,92 @@
   max-width: none;
   min-height: 0;
   padding: 0;
+}
+
+.availability-page--attorney {
+  background: linear-gradient(180deg, rgba(27, 43, 71, 0.94) 0%, rgba(15, 26, 45, 0.98) 100%);
+  border: 1px solid #d9c8b1;
+  color: #1b2432;
+}
+
+.availability-page--attorney .availability-page__header h2,
+.availability-page--attorney .availability-calendar-head h3,
+.availability-page--attorney .availability-slots-head h3,
+.availability-page--attorney .monthly-template-head h4 {
+  color: #1b2432;
+}
+
+.availability-page--attorney .availability-page__header p,
+.availability-page--attorney .availability-muted,
+.availability-page--attorney .availability-slots-head p,
+.availability-page--attorney .monthly-template-head p,
+.availability-page--attorney .monthly-template-label {
+  color: #5f6672;
+}
+
+.availability-page--attorney .availability-card {
+  background: linear-gradient(180deg, rgba(27, 43, 71, 0.94) 0%, rgba(15, 26, 45, 0.98) 100%);
+  border-color: #d9c8b1;
+}
+
+.availability-page--attorney .availability-day {
+  background: #fffaf2;
+  border-color: #d9c8b1;
+  color: #1b2432;
+}
+
+.availability-page--attorney .availability-day--selected {
+  background: linear-gradient(135deg, #152238 0%, #243652 100%);
+  border-color: #152238;
+  color: #ffffff;
+}
+
+.availability-page--attorney .availability-time-chip {
+  background: #fffaf2;
+  border-color: #d9c8b1;
+  color: #1b2432;
+}
+
+.availability-page--attorney .availability-time-chip span {
+  color: #5f6672;
+}
+
+.availability-page--attorney .availability-time-chip--active {
+  background: linear-gradient(135deg, #152238 0%, #243652 100%);
+  border-color: #152238;
+  color: #ffffff;
+  box-shadow: 0 10px 22px rgba(21, 34, 56, 0.24);
+}
+
+.availability-page--attorney .availability-time-chip--active span {
+  color: #e7edf8;
+}
+
+.availability-page--attorney .monthly-template-card {
+  background: #fffaf2;
+  border-color: #d9c8b1;
+}
+
+.availability-page--attorney .monthly-weekday-chip,
+.availability-page--attorney .monthly-time-chip {
+  background: #fffaf2;
+  border-color: #d9c8b1;
+  color: #1b2432;
+}
+
+.availability-page--attorney .monthly-weekday-chip--active,
+.availability-page--attorney .monthly-time-chip--active,
+.availability-page--attorney .availability-save-btn,
+.availability-page--attorney .monthly-apply-btn {
+  background: linear-gradient(135deg, #152238 0%, #243652 100%);
+  border-color: #152238;
+  color: #ffffff;
+}
+
+.availability-page--attorney .availability-calendar-head button {
+  background: #fffaf2;
+  color: #152238;
+  border: 1px solid #d9c8b1;
 }
 
 @media (max-width: 900px) {

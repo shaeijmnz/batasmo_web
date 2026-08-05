@@ -367,7 +367,7 @@ export async function notifyClientNotarialStatusUpdate({
     },
     picked_up: {
       title: 'Notary Completed',
-      body: `Your notarized document for "${label}" has been picked up. Thank you for using LegalLink.`,
+      body: `Your notarized document for "${label}" has been picked up. Thank you for using BatasMo.`,
     },
   }
 

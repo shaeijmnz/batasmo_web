@@ -150,7 +150,7 @@ function NotarialRequest({ onNavigate, profile }) {
           <div className="nr-sidebar__logo">
             <img src="/logo/logo.jpg" alt="Logo" className="nr-sidebar__logo-img" />
             <ScalesIcon size={26} color="#f5a623" />
-            <span>LegalLink</span>
+            <span>BatasMo</span>
           </div>
         </div>
         <nav className="nr-sidebar__nav">

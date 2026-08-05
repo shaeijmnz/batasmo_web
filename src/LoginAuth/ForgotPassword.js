@@ -161,7 +161,7 @@ function ForgotPassword({ onNavigate }) {
         <div className="fp-nav__inner">
           <div className="fp-nav__logo" onClick={() => onNavigate('home')} style={{ cursor: 'pointer' }}>
             <ScalesIcon size={28} color="#f5a623" />
-            <span>LegalLink</span>
+            <span>BatasMo</span>
           </div>
           <ul className="fp-nav__links">
             <li><a href="#home" onClick={() => onNavigate('home')}>Home</a></li>

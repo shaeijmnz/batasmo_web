@@ -12,7 +12,7 @@ import {
   runAttorneyConsultationScheduleNotifications,
 } from '../lib/userApi';
 import { attachLiveDataRefresh } from '../lib/liveDataRefresh';
-import { watchConsultationPresenceAlerts } from '../lib/consultationChatPresence';
+import { watchConsultationPresenceAlerts, watchConsultationVideoCallAlerts } from '../lib/consultationChatPresence';
 import ConsultationWaitingPopup from '../components/ConsultationWaitingPopup';
 import AttorneyNotificationDropdown from './AttorneyNotificationDropdown';
 
@@ -96,6 +96,7 @@ function AttorneyHome({ onNavigate, profile }) {
   });
   const [loadError, setLoadError] = useState('');
   const [waitingPopup, setWaitingPopup] = useState(null);
+  const [videoCallPopup, setVideoCallPopup] = useState(null);
   const [nowTick, setNowTick] = useState(() => new Date());
 
   useEffect(() => {
@@ -202,6 +203,7 @@ function AttorneyHome({ onNavigate, profile }) {
             slotTime: item.slotTime,
             paymentStatus: item.paymentStatus || 'unpaid',
             nowValue: nowTick,
+            enforceScheduleWindow: true,
           }),
         )
         .map((item) => ({
@@ -220,6 +222,17 @@ function AttorneyHome({ onNavigate, profile }) {
       watches: presenceWatches,
       role: 'attorney',
       onWaitingPopup: (payload) => setWaitingPopup(payload),
+    });
+  }, [profile?.id, presenceWatchKey, presenceWatches]);
+
+  useEffect(() => {
+    if (!profile?.id || !presenceWatches.length) {
+      return undefined;
+    }
+    return watchConsultationVideoCallAlerts({
+      watches: presenceWatches,
+      role: 'attorney',
+      onVideoCallPopup: (payload) => setVideoCallPopup(payload),
     });
   }, [profile?.id, presenceWatchKey, presenceWatches]);
 
@@ -278,9 +291,9 @@ function AttorneyHome({ onNavigate, profile }) {
       {/* Sidebar */}
       <aside className={`att-sidebar ${sidebarOpen ? 'att-sidebar--open' : ''}`}>
         <div className="att-sidebar__logo">
-          <img src="/logo/logo.jpg" alt="LegalLink logo" className="att-brand-logo" />
+          <img src="/logo/logo.jpg" alt="BatasMo logo" className="att-brand-logo" />
           <div className="att-brand-text-wrap">
-            <span className="att-brand-title">LegalLink</span>
+            <span className="att-brand-title">BatasMo</span>
             <span className="att-brand-sub">Attorney Console</span>
           </div>
         </div>
@@ -314,7 +327,7 @@ function AttorneyHome({ onNavigate, profile }) {
         <div className="att-topbar__left">
           <button className="att-icon-btn att-menu-btn" onClick={() => setSidebarOpen(!sidebarOpen)}><MenuIcon /></button>
           <div className="att-topbar__logo">
-            <img src="/logo/logo.jpg" alt="LegalLink" className="att-topbar__brand-logo" />
+            <img src="/logo/logo.jpg" alt="BatasMo" className="att-topbar__brand-logo" />
             <div>
               <p className="att-topbar__eyebrow">Attorney Workspace</p>
               <span>Attorney Dashboard</span>
@@ -425,6 +438,7 @@ function AttorneyHome({ onNavigate, profile }) {
                   slotTime: c.slotTime,
                   paymentStatus: c.paymentStatus || 'unpaid',
                   nowValue: nowTick,
+                  enforceScheduleWindow: true,
                 });
 
                 const formatDate = (dateStr) => {
@@ -512,6 +526,19 @@ function AttorneyHome({ onNavigate, profile }) {
           title={waitingPopup.title}
           body={waitingPopup.body}
           onClose={() => setWaitingPopup(null)}
+        />
+      ) : null}
+      {videoCallPopup ? (
+        <ConsultationWaitingPopup
+          title={videoCallPopup.title}
+          body={videoCallPopup.body}
+          actionLabel="Join Video Call"
+          onAction={() => {
+            if (videoCallPopup.appointmentId) {
+              onNavigate('attorney-messages', { appointmentId: videoCallPopup.appointmentId });
+            }
+          }}
+          onClose={() => setVideoCallPopup(null)}
         />
       ) : null}
     </div>

@@ -35,7 +35,7 @@ function buildWorkflow(req) {
       phase: 'mobile',
       label: 'Continue on mobile',
       tone: 'warn',
-      summary: 'Finish payment, ID upload, and face verification in the LegalLink mobile app.',
+      summary: 'Finish payment, ID upload, and face verification in the BatasMo mobile app.',
       stepIndex: 0,
     };
   }
@@ -45,7 +45,7 @@ function buildWorkflow(req) {
       phase: 'done',
       label: 'Completed',
       tone: 'success',
-      summary: 'You have picked up your notarized document. Thank you for using LegalLink.',
+      summary: 'You have picked up your notarized document. Thank you for using BatasMo.',
       stepIndex: 4,
     };
   }
@@ -160,7 +160,7 @@ function ClientNotaryTracking({ profile }) {
           <p className="cnt-hero__eyebrow">Notary services</p>
           <h2>Track your notary requests</h2>
           <p>
-            Requests started on the <strong>LegalLink mobile app</strong> appear here after you complete
+            Requests started on the <strong>BatasMo mobile app</strong> appear here after you complete
             payment. Watch each step from processing to pickup.
           </p>
         </div>
@@ -274,7 +274,7 @@ function ClientNotaryTracking({ profile }) {
                     ) : null}
                     {flow.phase === 'mobile' ? (
                       <p className="cnt-card__mobile-hint">
-                        Open the LegalLink app to upload your ID, complete face verification, and pay.
+                        Open the BatasMo app to upload your ID, complete face verification, and pay.
                       </p>
                     ) : null}
                   </div>

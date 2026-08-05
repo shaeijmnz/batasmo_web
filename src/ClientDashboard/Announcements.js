@@ -172,7 +172,7 @@ function Announcements({ onNavigate, profile }) {
             date: Number.isNaN(dt.getTime()) ? 'Today' : dt.toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }),
             priority: normalizedType === 'reschedule' || normalizedType === 'reminder' ? 'high' : 'normal',
             read: !!item.is_read,
-            adminName: 'LegalLink Admin',
+            adminName: 'BatasMo Admin',
           };
         });
 
@@ -213,7 +213,7 @@ function Announcements({ onNavigate, profile }) {
           <div className="ann-sidebar__logo">
             <img src="/logo/logo.jpg" alt="Logo" className="ann-sidebar__logo-img" />
             <ScalesIcon size={26} color="#f5a623" />
-            <span>LegalLink</span>
+            <span>BatasMo</span>
           </div>
         </div>
         <nav className="ann-sidebar__nav">
@@ -252,7 +252,7 @@ function Announcements({ onNavigate, profile }) {
                   <span className="ann-header__unread-badge">{unreadCount} new</span>
                 )}
               </div>
-              <p>Messages and updates from LegalLink Admin</p>
+              <p>Messages and updates from BatasMo Admin</p>
             </div>
             {hasAnnouncements && unreadCount > 0 && (
               <button className="ann-mark-all-btn" onClick={markAllRead}>

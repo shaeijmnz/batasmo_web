@@ -1,18 +1,18 @@
 @import './AdminDetail.css';
 
-/* Notarial Requests page — navy + gold, aligned with AdminTheme. */
-.adm-detail-page {
-	--ui-accent: #d4af37;
-	--ui-accent-hover: #e4c46a;
-	--ui-accent-light: #f0d98b;
-	--ui-text-primary: #f5f4f1;
-	--ui-text-secondary: #b8c2d1;
-	--ui-text-muted: #7d8da6;
-	--ui-border: rgba(212, 175, 55, 0.18);
-	--ui-bg-page: #0b1321;
-	--ui-bg-card: rgba(27, 43, 71, 0.94);
-	--ui-shadow-soft: 0 3px 12px rgba(7, 12, 22, 0.24);
-	--ui-shadow-medium: 0 10px 26px rgba(7, 12, 22, 0.3);
+/* Align with AdminTheme palette */
+:root {
+	--ui-accent: #152238;
+	--ui-accent-hover: #1e2d45;
+	--ui-accent-light: #2a3a55;
+	--ui-text-primary: #0b0f19;
+	--ui-text-secondary: #4b5563;
+	--ui-text-muted: #6b7280;
+	--ui-border: #d1d5db;
+	--ui-bg-page: #f5f1eb;
+	--ui-bg-card: rgba(255, 255, 255, 0.96);
+	--ui-shadow-soft: 0 3px 12px rgba(21, 34, 56, 0.08);
+	--ui-shadow-medium: 0 6px 20px rgba(21, 34, 56, 0.1);
 	--ui-radius-md: 12px;
 	--ui-radius-lg: 16px;
 }
@@ -24,20 +24,20 @@
 }
 
 .adm-detail-row-btn--view {
-	background: rgba(15, 26, 45, 0.78);
+	background: rgba(21, 34, 56, 0.06);
 	color: var(--ui-accent);
 	border: 1px solid var(--ui-border);
 }
 
 .adm-detail-row-btn--view:hover {
-	background: rgba(34, 54, 86, 0.9);
-	border-color: var(--ui-accent);
+	background: rgba(21, 34, 56, 0.1);
+	border-color: var(--ui-accent-light);
 }
 
-/* Notarial action buttons — gold primary, muted secondary */
+/* Notarial action buttons — navy primary, muted secondary */
 .adm-nr-btn--process {
 	background: var(--ui-accent);
-	color: #0b1321;
+	color: #fff;
 	border: 1px solid var(--ui-accent);
 }
 
@@ -47,31 +47,31 @@
 }
 
 .adm-nr-btn--pickup {
-	background: rgba(212, 175, 55, 0.16);
-	color: var(--ui-accent-hover);
-	border: 1px solid rgba(212, 175, 55, 0.4);
+	background: var(--ui-accent-light);
+	color: #fff;
+	border: 1px solid var(--ui-accent-light);
 }
 
 .adm-nr-btn--pickup:hover:not(:disabled) {
-	background: rgba(212, 175, 55, 0.26);
-	border-color: var(--ui-accent);
+	background: var(--ui-accent-hover);
+	border-color: var(--ui-accent-hover);
 }
 
 .adm-nr-btn--close {
-	background: rgba(15, 26, 45, 0.78);
+	background: #fff;
 	color: var(--ui-text-secondary);
 	border: 1px solid var(--ui-border);
 }
 
 .adm-nr-btn--close:hover:not(:disabled) {
-	background: rgba(34, 54, 86, 0.9);
-	border-color: var(--ui-accent);
-	color: var(--ui-text-primary);
+	background: rgba(21, 34, 56, 0.04);
+	border-color: var(--ui-accent-light);
+	color: var(--ui-accent);
 }
 
 .adm-nr-btn--picked-up {
 	background: var(--ui-accent);
-	color: #0b1321;
+	color: #fff;
 	border: 1px solid var(--ui-accent);
 }
 
@@ -101,7 +101,7 @@
 	background: var(--ui-bg-card);
 	border-radius: var(--ui-radius-md);
 	box-shadow: var(--ui-shadow-soft);
-	border: 1px solid var(--ui-border);
+	border: 1px solid rgba(21, 34, 56, 0.1);
 	padding: 16px 24px;
 	display: flex;
 	flex-direction: column;
@@ -131,7 +131,7 @@
 	font-size: 1.8rem;
 	font-weight: 800;
 	line-height: 1;
-	color: var(--ui-text-primary);
+	color: var(--ui-accent);
 }
 
 .adm-nr-stat-label {
@@ -154,7 +154,7 @@
 	padding: 8px 18px;
 	border: 1px solid var(--ui-border);
 	border-radius: 999px;
-	background: rgba(15, 26, 45, 0.78);
+	background: #fff;
 	color: var(--ui-text-secondary);
 	font-size: 0.85rem;
 	font-weight: 600;
@@ -163,26 +163,26 @@
 }
 
 .adm-nr-tab:hover {
-	border-color: var(--ui-accent);
-	color: var(--ui-text-primary);
-	background: rgba(34, 54, 86, 0.9);
+	border-color: var(--ui-accent-light);
+	color: var(--ui-accent);
+	background: rgba(21, 34, 56, 0.04);
 }
 
 .adm-nr-tab--active {
 	background: var(--ui-accent);
 	border-color: var(--ui-accent);
-	color: #0b1321;
+	color: #fff;
 }
 
 .adm-nr-tab--active:hover {
 	background: var(--ui-accent-hover);
 	border-color: var(--ui-accent-hover);
-	color: #0b1321;
+	color: #fff;
 }
 
 /* Error */
 .adm-nr-error {
-	color: #fca5a5;
+	color: #b91c1c;
 	font-size: 0.9rem;
 	margin-bottom: 16px;
 }
@@ -197,19 +197,18 @@
 	border-radius: 8px;
 	font-size: 0.9rem;
 	font-weight: 600;
+	color: #fff;
 	z-index: 9999;
 	box-shadow: var(--ui-shadow-medium);
 	pointer-events: none;
 }
 
 .adm-nr-toast--success {
-	background: #d4af37;
-	color: #0b1321;
+	background: var(--ui-accent);
 }
 
 .adm-nr-toast--error {
 	background: #991b1b;
-	color: #fff;
 }
 
 .adm-detail-files {
@@ -223,7 +222,7 @@
 	align-items: center;
 	justify-content: space-between;
 	gap: 12px;
-	background: rgba(15, 26, 45, 0.78);
+	background: rgba(21, 34, 56, 0.03);
 	border: 1px solid var(--ui-border);
 	border-radius: 8px;
 	padding: 10px 12px;
@@ -238,7 +237,7 @@
 
 .adm-detail-file-open {
 	background: var(--ui-accent);
-	color: #0b1321;
+	color: #fff;
 	border: none;
 	border-radius: 6px;
 	padding: 6px 12px;

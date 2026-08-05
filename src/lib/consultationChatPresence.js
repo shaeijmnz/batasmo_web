@@ -184,3 +184,95 @@ export function attachConsultationChatPresence({
     supabase.removeChannel(channel)
   }
 }
+
+const videoAlertStorageKey = (appointmentId, role) =>
+  `consult-video-shown:${String(appointmentId)}:${role === 'attorney' ? 'attorney' : 'client'}`
+
+const hasShownVideoAlert = (appointmentId, role) => {
+  try {
+    return sessionStorage.getItem(videoAlertStorageKey(appointmentId, role)) === '1'
+  } catch {
+    return false
+  }
+}
+
+const markVideoAlertShown = (appointmentId, role) => {
+  try {
+    sessionStorage.setItem(videoAlertStorageKey(appointmentId, role), '1')
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Listen-only: notify when the other party starts a video call while this user
+ * is outside the chatroom (e.g. attorney dashboard).
+ */
+export function watchConsultationVideoCallAlerts({ watches = [], role, onVideoCallPopup }) {
+  const normalizedRole = role === 'attorney' ? 'attorney' : 'client'
+  const otherRole = OTHER_ROLE[normalizedRole]
+  const channels = []
+
+  watches.forEach(({ appointmentId, otherPartyName }) => {
+    if (!appointmentId || hasShownVideoAlert(appointmentId, normalizedRole)) return
+
+    const channel = supabase.channel(`consultation-video-alert:${appointmentId}`)
+
+    const maybeAlert = (videoMeetingId) => {
+      const meetingId = String(videoMeetingId || '').trim()
+      if (!meetingId || hasShownVideoAlert(appointmentId, normalizedRole)) return
+
+      markVideoAlertShown(appointmentId, normalizedRole)
+      if (typeof onVideoCallPopup !== 'function') return
+
+      const label = otherRole === 'attorney' ? 'Attorney' : 'Client'
+      const name = String(otherPartyName || '').trim() || label
+      onVideoCallPopup({
+        appointmentId,
+        title: `${name} started a video call`,
+        body: 'Open the consultation chat to join the video session.',
+      })
+    }
+
+    ;(async () => {
+      try {
+        const { data } = await supabase
+          .from('consultation_rooms')
+          .select('video_meeting_id')
+          .eq('appointment_id', appointmentId)
+          .maybeSingle()
+        if (data?.video_meeting_id) {
+          maybeAlert(data.video_meeting_id)
+        }
+      } catch {
+        /* Realtime listener still covers new calls */
+      }
+    })()
+
+    channel
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'consultation_rooms',
+          filter: `appointment_id=eq.${appointmentId}`,
+        },
+        (payload) => {
+          const previous = String(payload?.old?.video_meeting_id || '').trim()
+          const next = String(payload?.new?.video_meeting_id || '').trim()
+          if (!next || previous === next) return
+          maybeAlert(next)
+        },
+      )
+      .subscribe()
+
+    channels.push(channel)
+  })
+
+  return () => {
+    channels.forEach((channel) => {
+      supabase.removeChannel(channel)
+    })
+  }
+}

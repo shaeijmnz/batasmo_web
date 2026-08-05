@@ -163,7 +163,7 @@ function NotarialRequestsAtty({ onNavigate, profile }) {
       <aside className={`nra-sidebar ${sidebarOpen ? 'nra-sidebar--open' : ''}`}>
         <div className="nra-sidebar__logo">
           <ScalesIcon size={26} color="#f5a623" />
-          <span>LegalLink</span>
+          <span>BatasMo</span>
         </div>
         <nav className="nra-sidebar__nav">
           {[
@@ -196,7 +196,7 @@ function NotarialRequestsAtty({ onNavigate, profile }) {
           </button>
           <div className="nra-topbar__logo">
             <ScalesIcon size={26} color="#f5a623" />
-            <span>LegalLink</span>
+            <span>BatasMo</span>
           </div>
         </div>
         <div className="nra-topbar__right">

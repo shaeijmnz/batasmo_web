@@ -303,7 +303,7 @@ function HomePage({ onNavigate, profile, onSignOut }) {
           <div className="hp-sidebar__logo">
             <img src="/logo/logo.jpg" alt="Logo" className="hp-sidebar__logo-img" />
             <ScalesIcon size={26} color="#f5a623" />
-            <span>LegalLink</span>
+            <span>BatasMo</span>
           </div>
         </div>
         <nav className="hp-sidebar__nav">
@@ -454,7 +454,7 @@ function HomePage({ onNavigate, profile, onSignOut }) {
           <div className="hp-chat-window__header">
             <div className="hp-chat-window__title">
               <AIIcon />
-              <span>LegalLink AI</span>
+              <span>BatasMo AI</span>
             </div>
             <button className="hp-chat-window__close" onClick={() => setChatOpen(false)}>✕</button>
           </div>

@@ -210,8 +210,8 @@ function SignUp({ onNavigate, onEmailChange }) {
           </button>
 
           <div className="su-brand-badge" onClick={() => onNavigate('home')}>
-            <img src="/auth/logo.jpg" alt="LegalLink" className="su-brand-logo" />
-            <span className="su-brand-text">LegalLink</span>
+            <img src="/auth/logo.jpg" alt="BatasMo" className="su-brand-logo" />
+            <span className="su-brand-text">BatasMo</span>
           </div>
         </div>
 
@@ -228,7 +228,7 @@ function SignUp({ onNavigate, onEmailChange }) {
 
         <section className="su-form-card">
           <div className="su-form-heading">
-            <h2>Join LegalLink</h2>
+            <h2>Join BatasMo</h2>
             <p>Create your legal profile and continue with OTP verification.</p>
           </div>
 
@@ -390,12 +390,12 @@ function SignUp({ onNavigate, onEmailChange }) {
               >
                 <p style={{ margin: '0 0 12px', fontWeight: 600, color: '#e5e7eb' }}>Terms and Conditions</p>
                 <p style={{ margin: '0 0 12px' }}>
-                  By accessing and using the LegalLink platform, you agree to provide accurate and complete information and
+                  By accessing and using the BatasMo platform, you agree to provide accurate and complete information and
                   to use the system only for lawful purposes. Users are responsible for maintaining the confidentiality of
                   their account and any activities performed under it.
                 </p>
                 <p style={{ margin: '0 0 12px' }}>
-                  LegalLink respects and protects your personal data in accordance with the Data Privacy Act of 2012
+                  BatasMo respects and protects your personal data in accordance with the Data Privacy Act of 2012
                   (Republic Act No. 10173). All information submitted in the system will be securely stored and used
                   solely for the purpose of providing legal consultation and related services.
                 </p>

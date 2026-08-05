@@ -1,13 +1,15 @@
 /* Shared layout primitives used by Admin "detail" pages (e.g. AdminRequests).
- * Palette follows AdminTheme.css: navy surfaces, gold accents, light text.
+ * These were referenced by AdminRequests.css via @import but the source file
+ * was missing on this branch. Styling here is intentionally conservative so
+ * pages render correctly until a designer revisits the page.
  */
 
 .adm-detail-page {
 	display: flex;
 	flex-direction: column;
 	min-height: 100vh;
-	background: linear-gradient(180deg, #152238 0%, #0b1321 100%);
-	color: #f5f4f1;
+	background: #f5f1eb;
+	color: #0b0f19;
 	font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
@@ -17,10 +19,8 @@
 	justify-content: space-between;
 	gap: 16px;
 	padding: 18px 28px;
-	background: rgba(15, 26, 45, 0.92);
-	border-bottom: 1px solid rgba(212, 175, 55, 0.18);
-	backdrop-filter: blur(14px);
-	-webkit-backdrop-filter: blur(14px);
+	background: #fff;
+	border-bottom: 1px solid #e5e7eb;
 	position: sticky;
 	top: 0;
 	z-index: 10;
@@ -40,23 +40,23 @@
 	width: 36px;
 	height: 36px;
 	border-radius: 8px;
-	border: 1px solid rgba(212, 175, 55, 0.18);
-	background: rgba(27, 43, 71, 0.94);
-	color: #d4af37;
+	border: 1px solid #e5e7eb;
+	background: #fff;
+	color: #374151;
 	cursor: pointer;
 	transition: all 0.15s ease;
 }
 
 .adm-detail-back-btn:hover {
-	background: rgba(34, 54, 86, 0.98);
-	border-color: #d4af37;
+	background: #f3f4f6;
+	border-color: #d1d5db;
 }
 
 .adm-detail-title {
 	font-size: 1.25rem;
 	font-weight: 700;
 	margin: 0;
-	color: #f5f4f1;
+	color: #111827;
 }
 
 .adm-detail-count {
@@ -67,8 +67,8 @@
 	height: 24px;
 	padding: 0 8px;
 	border-radius: 999px;
-	background: #d4af37;
-	color: #0b1321;
+	background: #152238;
+	color: #fff;
 	font-size: 0.75rem;
 	font-weight: 700;
 }
@@ -83,11 +83,11 @@
 }
 
 .adm-detail-card {
-	background: rgba(27, 43, 71, 0.94);
+	background: #fff;
 	border-radius: 12px;
-	box-shadow: 0 18px 44px rgba(7, 12, 22, 0.3);
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 	padding: 20px;
-	border: 1px solid rgba(212, 175, 55, 0.18);
+	border: 1px solid #e5e7eb;
 }
 
 .adm-detail-search {
@@ -97,23 +97,19 @@
 .adm-detail-input {
 	width: 100%;
 	padding: 10px 14px;
-	border: 1px solid rgba(212, 175, 55, 0.18);
+	border: 1px solid #e5e7eb;
 	border-radius: 8px;
 	font-size: 0.9rem;
-	color: #f5f4f1;
-	background: rgba(15, 26, 45, 0.78);
+	color: #1f2937;
+	background: #fff;
 	box-sizing: border-box;
 	transition: border-color 0.15s ease;
 }
 
-.adm-detail-input::placeholder {
-	color: #7d8da6;
-}
-
 .adm-detail-input:focus {
 	outline: none;
-	border-color: #d4af37;
-	box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.16);
+	border-color: #152238;
+	box-shadow: 0 0 0 3px rgba(21, 34, 56, 0.12);
 }
 
 .adm-detail-table {
@@ -125,19 +121,19 @@
 .adm-detail-table thead th {
 	text-align: left;
 	padding: 10px 12px;
-	background: rgba(15, 26, 45, 0.78);
-	color: #b8c2d1;
+	background: #f9fafb;
+	color: #6b7280;
 	font-weight: 600;
 	font-size: 0.75rem;
 	letter-spacing: 0.04em;
 	text-transform: uppercase;
-	border-bottom: 1px solid rgba(212, 175, 55, 0.18);
+	border-bottom: 1px solid #e5e7eb;
 }
 
 .adm-detail-table tbody td {
 	padding: 12px;
-	border-bottom: 1px solid rgba(212, 175, 55, 0.1);
-	color: #e7ecf4;
+	border-bottom: 1px solid #f3f4f6;
+	color: #1f2937;
 	vertical-align: middle;
 }
 
@@ -147,7 +143,7 @@
 }
 
 .adm-detail-table__row--clickable:hover {
-	background: rgba(34, 54, 86, 0.6);
+	background: #f9fafb;
 }
 
 .adm-detail-row-btn {
@@ -163,7 +159,7 @@
 .adm-detail-modal-overlay {
 	position: fixed;
 	inset: 0;
-	background: rgba(7, 12, 22, 0.66);
+	background: rgba(15, 23, 42, 0.5);
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -172,8 +168,7 @@
 }
 
 .adm-detail-modal {
-	background: linear-gradient(180deg, #152238 0%, #0f1a2d 100%);
-	border: 1px solid rgba(212, 175, 55, 0.18);
+	background: #fff;
 	border-radius: 12px;
 	width: 100%;
 	max-width: 640px;
@@ -181,7 +176,7 @@
 	overflow: hidden;
 	display: flex;
 	flex-direction: column;
-	box-shadow: 0 24px 64px rgba(7, 12, 22, 0.5);
+	box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
 }
 
 .adm-detail-modal__header {
@@ -189,23 +184,23 @@
 	align-items: center;
 	justify-content: space-between;
 	padding: 16px 20px;
-	border-bottom: 1px solid rgba(212, 175, 55, 0.18);
+	border-bottom: 1px solid #e5e7eb;
 	font-weight: 700;
-	color: #f5f4f1;
+	color: #111827;
 }
 
 .adm-detail-modal__header h2 {
 	margin: 0;
 	font-size: 1.125rem;
 	font-weight: 700;
-	color: #f5f4f1;
+	color: #111827;
 }
 
 .adm-detail-modal__close {
 	background: none;
 	border: none;
 	font-size: 1.5rem;
-	color: #b8c2d1;
+	color: #6b7280;
 	cursor: pointer;
 	line-height: 1;
 	padding: 4px 8px;
@@ -213,8 +208,8 @@
 }
 
 .adm-detail-modal__close:hover {
-	background: rgba(34, 54, 86, 0.9);
-	color: #f5f4f1;
+	background: #f3f4f6;
+	color: #111827;
 }
 
 .adm-detail-modal__content {
@@ -229,13 +224,13 @@
 	display: flex;
 	gap: 12px;
 	font-size: 0.9rem;
-	color: #e7ecf4;
+	color: #374151;
 	align-items: flex-start;
 }
 
 .adm-detail-modal__row label {
 	flex: 0 0 140px;
-	color: #7d8da6;
+	color: #6b7280;
 	font-weight: 600;
 	font-size: 0.8rem;
 	text-transform: uppercase;
@@ -257,8 +252,8 @@
 	justify-content: flex-end;
 	align-items: center;
 	padding: 16px 20px;
-	border-top: 1px solid rgba(212, 175, 55, 0.18);
-	background: rgba(11, 19, 33, 0.6);
+	border-top: 1px solid #e5e7eb;
+	background: #f9fafb;
 	flex-shrink: 0;
 }
 
@@ -283,35 +278,32 @@
 }
 
 .adm-detail-modal__btn--approve {
-	background: #d4af37;
-	color: #0b1321;
+	background: #152238;
+	color: #fff;
 }
 
 .adm-detail-modal__btn--approve:hover:not(:disabled) {
-	background: #e4c46a;
+	background: #1e2d45;
 }
 
 .adm-detail-modal__btn--pickup {
-	background: rgba(212, 175, 55, 0.16);
-	color: #e4c46a;
-	border: 1px solid rgba(212, 175, 55, 0.4);
+	background: #2a3a55;
+	color: #fff;
 }
 
 .adm-detail-modal__btn--pickup:hover:not(:disabled) {
-	background: rgba(212, 175, 55, 0.26);
-	border-color: #d4af37;
+	background: #1e2d45;
 }
 
 .adm-detail-modal__btn--dismiss {
-	background: rgba(15, 26, 45, 0.78);
-	color: #b8c2d1;
-	border: 1px solid rgba(212, 175, 55, 0.18);
+	background: #fff;
+	color: #374151;
+	border: 1px solid #d1d5db;
 }
 
 .adm-detail-modal__btn--dismiss:hover:not(:disabled) {
-	background: rgba(34, 54, 86, 0.9);
-	border-color: rgba(212, 175, 55, 0.4);
-	color: #f5f4f1;
+	background: #f3f4f6;
+	border-color: #9ca3af;
 }
 
 .adm-detail-badge {
@@ -324,37 +316,37 @@
 }
 
 .adm-detail-badge--pending {
-	background: rgba(184, 194, 209, 0.16);
-	color: #dbe3ef;
+	background: rgba(21, 34, 56, 0.08);
+	color: #152238;
 }
 
 .adm-detail-badge--in-progress {
-	background: rgba(212, 175, 55, 0.16);
-	color: #e4c46a;
+	background: rgba(21, 34, 56, 0.12);
+	color: #1e2d45;
 }
 
 .adm-detail-badge--active {
-	background: rgba(212, 175, 55, 0.22);
-	color: #f0d98b;
+	background: rgba(21, 34, 56, 0.16);
+	color: #152238;
 }
 
 .adm-detail-badge--inactive {
-	background: rgba(125, 141, 166, 0.18);
-	color: #b8c2d1;
+	background: rgba(107, 114, 128, 0.12);
+	color: #4b5563;
 }
 
 .adm-detail-badge--completed {
-	background: linear-gradient(135deg, #d4af37 0%, #e4c46a 100%);
-	color: #0b1321;
+	background: linear-gradient(135deg, #152238 0%, #1e2d45 100%);
+	color: #fff;
 }
 
 .adm-detail-modal__btn--picked-up {
-	background: #d4af37;
-	color: #0b1321;
+	background: #152238;
+	color: #fff;
 }
 
 .adm-detail-modal__btn--picked-up:hover:not(:disabled) {
-	background: #e4c46a;
+	background: #1e2d45;
 }
 
 @media (max-width: 640px) {

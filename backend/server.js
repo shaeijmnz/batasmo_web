@@ -46,28 +46,8 @@ const FACEPLUS_API_BASE = String(process.env.FACEPLUS_API_BASE || 'https://api-u
   .trim()
   .replace(/\/+$/, '')
 // Root URL avoids deep-link + auth race (PayMongo "back to merchant" should land on client home, not login).
-const DEFAULT_FRONTEND_ORIGIN = 'https://batasmo-web.vercel.app'
-const resolvePaymentReturnUrl = (configured, fallbackPath = '/') => {
-  const raw = String(configured || '').trim()
-  if (raw && !/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(raw)) {
-    return raw.replace(/\/+$/, '') + (raw.includes('?') ? '' : '')
-  }
-  const base =
-    ALLOWED_ORIGIN_BASE && !/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(ALLOWED_ORIGIN_BASE)
-      ? ALLOWED_ORIGIN_BASE
-      : DEFAULT_FRONTEND_ORIGIN
-  if (raw && raw.startsWith('/')) return `${base}${raw}`
-  const path = fallbackPath.startsWith('/') ? fallbackPath : `/${fallbackPath}`
-  return `${base}${path === '/' ? '/' : path}`
-}
-const PAYMENT_SUCCESS_URL = resolvePaymentReturnUrl(
-  process.env.PAYMENT_SUCCESS_URL || `${ALLOWED_ORIGIN_BASE}/`,
-  '/',
-)
-const PAYMENT_CANCEL_URL = resolvePaymentReturnUrl(
-  process.env.PAYMENT_CANCEL_URL || `${ALLOWED_ORIGIN_BASE}/`,
-  '/',
-)
+const PAYMENT_SUCCESS_URL = String(process.env.PAYMENT_SUCCESS_URL || `${ALLOWED_ORIGIN_BASE}/`).trim()
+const PAYMENT_CANCEL_URL = String(process.env.PAYMENT_CANCEL_URL || `${ALLOWED_ORIGIN_BASE}/my-appointments`).trim()
 const GEMINI_MODEL_CANDIDATES = [
   'gemini-2.5-flash',
   'gemini-2.5-pro',
@@ -1579,8 +1559,8 @@ const supabaseAbandonPendingConsultation = async (appointmentId) => {
   })
   if (paidRows.length > 0) return { ok: true, reason: 'already_paid' }
 
-  // Free unpaid bookings even if status is not exactly "pending" (some RPC
-  // paths may leave confirmed/other labels). Slot recovery is the priority.
+  if (st !== 'pending') return { ok: true, reason: 'not_pending_status' }
+
   const nowIso = new Date().toISOString()
 
   await supabaseRestPatch({
@@ -1647,30 +1627,6 @@ const supabaseAbandonPendingConsultation = async (appointmentId) => {
     }
   } else if (attorneyId && slotDate && slotTime) {
     try {
-      // Broader free: any booked row that parses to the same local date/time.
-      const candidateSlots = await supabaseRestGetMany({
-        table: 'availability_slots',
-        query: new URLSearchParams({
-          attorney_id: `eq.${attorneyId}`,
-          date: `eq.${slotDate}`,
-          is_booked: 'eq.true',
-        }).toString(),
-      })
-      const targetParsed = parseSlotDateTimeNode(slotDate, slotTime)
-      const targetMs = targetParsed?.getTime() || 0
-      for (const slot of candidateSlots) {
-        const slotParsed = parseSlotDateTimeNode(slotDate, slot?.time)
-        if (!slotParsed || slotParsed.getTime() !== targetMs || !slot?.id) continue
-        try {
-          await supabaseRestPatch({
-            table: 'availability_slots',
-            query: new URLSearchParams({ id: `eq.${slot.id}` }).toString(),
-            body: { is_booked: false, updated_at: nowIso },
-          })
-        } catch (e) {
-          console.warn('[payments] abandon: broad slot free failed', slot.id, e?.message || e)
-        }
-      }
       await supabaseRestPatch({
         table: 'availability_slots',
         query: new URLSearchParams({
@@ -1807,27 +1763,17 @@ const createPaymongoCheckoutSession = async ({
   notarialRequestId,
   transactionId,
   paymentMethod,
-  itemName = 'LegalLink Consultation Booking',
+  itemName = 'BatasMo Consultation Booking',
   description,
 }) => {
   const lineAmount = Math.max(1, Math.round(Number(amount || 0) * 100))
-  const preferred = normalizePaymentMethod(paymentMethod)
-  // Always offer multiple channels. A single disabled method (e.g. QR Ph not
-  // activated on the PayMongo account) causes Hosted Checkout to bounce
-  // straight back to cancel_url — which looks like "opens then returns".
-  // Prefer qrph first when the client asked for QR Ph so the QR screen shows.
-  const methodSet = preferred === 'qrph'
-    ? ['qrph', 'gcash', 'paymaya']
-    : [preferred, 'gcash', 'paymaya', 'qrph']
-  const paymentMethodTypes = [...new Set(methodSet)].filter(
-    (m) => m === 'gcash' || m === 'paymaya' || m === 'qrph',
-  )
+  const method = normalizePaymentMethod(paymentMethod)
 
   const body = {
     data: {
       attributes: {
         billing: {
-          name: 'LegalLink Client',
+          name: 'BatasMo Client',
         },
         send_email_receipt: false,
         show_description: true,
@@ -1840,14 +1786,14 @@ const createPaymongoCheckoutSession = async ({
             quantity: 1,
           },
         ],
-        payment_method_types: paymentMethodTypes,
+        payment_method_types: [method],
         description:
           description ||
           (appointmentId
             ? `Consultation payment for appointment ${appointmentId}`
             : `Notarial payment for request ${notarialRequestId}`),
-        success_url: `${PAYMENT_SUCCESS_URL}${PAYMENT_SUCCESS_URL.includes('?') ? '&' : '?'}payment=success&tx=${transactionId}${appointmentId ? `&appointmentId=${appointmentId}` : ''}${notarialRequestId ? `&notarialRequestId=${notarialRequestId}` : ''}`,
-        cancel_url: `${PAYMENT_CANCEL_URL}${PAYMENT_CANCEL_URL.includes('?') ? '&' : '?'}payment=cancelled&tx=${transactionId}${appointmentId ? `&appointmentId=${appointmentId}` : ''}${notarialRequestId ? `&notarialRequestId=${notarialRequestId}` : ''}`,
+        success_url: `${PAYMENT_SUCCESS_URL}?payment=success&tx=${transactionId}${appointmentId ? `&appointmentId=${appointmentId}` : ''}${notarialRequestId ? `&notarialRequestId=${notarialRequestId}` : ''}`,
+        cancel_url: `${PAYMENT_CANCEL_URL}?payment=cancelled&tx=${transactionId}${appointmentId ? `&appointmentId=${appointmentId}` : ''}${notarialRequestId ? `&notarialRequestId=${notarialRequestId}` : ''}`,
         metadata: {
           ...(appointmentId ? { appointment_id: String(appointmentId) } : {}),
           ...(notarialRequestId ? { notarial_request_id: String(notarialRequestId) } : {}),

@@ -98,7 +98,6 @@ function MyAppointments({ onNavigate, profile }) {
   const [paymentCode, setPaymentCode] = useState('');
   const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [paymentError, setPaymentError] = useState('');
-  const [pendingCheckoutUrl, setPendingCheckoutUrl] = useState('');
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [selectedAppointmentForReschedule, setSelectedAppointmentForReschedule] = useState(null);
   const [rescheduleDate, setRescheduleDate] = useState('');
@@ -243,7 +242,7 @@ function MyAppointments({ onNavigate, profile }) {
         type: 'pending',
         title: 'Reschedule pending approval',
         reason:
-          'Your new schedule is waiting for LegalLink Admin to approve. You will be notified once it is confirmed.',
+          'Your new schedule is waiting for BatasMo Admin to approve. You will be notified once it is confirmed.',
       };
     }
 
@@ -262,7 +261,7 @@ function MyAppointments({ onNavigate, profile }) {
         can: false,
         type: 'admin',
         title: 'Appointment Date Has Passed',
-        reason: 'Your consultation schedule has already passed. Please contact LegalLink Admin for further reschedule assistance.',
+        reason: 'Your consultation schedule has already passed. Please contact BatasMo Admin for further reschedule assistance.',
       };
     }
     const amount = Number(appointment.amount || 0);
@@ -283,7 +282,7 @@ function MyAppointments({ onNavigate, profile }) {
         can: false,
         type: 'admin',
         title: 'One-Time Reschedule Used',
-        reason: 'You already used your one-time reschedule option for this appointment. Please contact LegalLink Admin for further changes.',
+        reason: 'You already used your one-time reschedule option for this appointment. Please contact BatasMo Admin for further changes.',
       };
     }
     // "At least 1 day before" — same calendar day as the consultation is not
@@ -420,7 +419,7 @@ function MyAppointments({ onNavigate, profile }) {
         type: 'pending',
         title: 'Request submitted',
         reason:
-          'LegalLink Admin will review your chosen date and time. Your consultation queue updates after approval.',
+          'BatasMo Admin will review your chosen date and time. Your consultation queue updates after approval.',
         appointment: selectedAppointmentForReschedule,
       });
     } catch (error) {
@@ -431,12 +430,7 @@ function MyAppointments({ onNavigate, profile }) {
   };
 
   const renderAppointmentCard = (appointment) => {
-    const isPaid = String(appointment.payment || '').toUpperCase() === 'PAID';
-    const canEnterChat = appointment.chatAccessible && isPaid && appointment.status !== 'COMPLETED';
-    const canPayNow =
-      !isPaid &&
-      Number(appointment.amount || 0) > 0 &&
-      !['COMPLETED', 'CANCELLED', 'REJECTED'].includes(String(appointment.status || '').toUpperCase());
+    const canEnterChat = appointment.chatAccessible && appointment.payment === 'PAID' && appointment.status !== 'COMPLETED';
     const reschedulePolicy = getReschedulePolicyState(appointment);
     const attorneyName = formatAttorneyName(appointment.attorney);
     const areaLabel = String(appointment.specialty || 'Consultation').toUpperCase();
@@ -448,9 +442,6 @@ function MyAppointments({ onNavigate, profile }) {
           <div className="ma-queue-card__info">
             <h3 className="ma-attorney-name">{attorneyName}</h3>
             <p className="ma-queue-card__area">CONSULTATION - {areaLabel}</p>
-            <p className="ma-queue-card__area" style={{ marginTop: 4, opacity: 0.85 }}>
-              {isPaid ? 'PAID' : 'UNPAID'} · {appointment.fee || `PHP ${Number(appointment.amount || 0).toFixed(2)}`}
-            </p>
           </div>
         </div>
 
@@ -461,14 +452,6 @@ function MyAppointments({ onNavigate, profile }) {
           </div>
 
           <div className="ma-queue-card__btns">
-            {canPayNow ? (
-              <button
-                className="ma-btn ma-btn--queue-primary"
-                onClick={() => openPaymentModal(appointment)}
-              >
-                PAY NOW
-              </button>
-            ) : null}
             {appointment.pendingReschedule ? (
               <span className="ma-btn ma-btn--queue-pending" title="Waiting for admin approval">
                 PENDING RESCHEDULE
@@ -500,17 +483,6 @@ function MyAppointments({ onNavigate, profile }) {
     );
   };
 
-  const openPaymentModal = (appointment) => {
-    setSelectedAppointmentForPayment(appointment);
-    setSelectedPaymentMethod('QRPh');
-    setPhoneNumber('');
-    setPaymentCode('');
-    setPaymentError('');
-    setPendingCheckoutUrl('');
-    setPaymentProcessing(false);
-    setShowPaymentModal(true);
-  };
-
   const closePaymentModal = () => {
     setShowPaymentModal(false);
     setSelectedAppointmentForPayment(null);
@@ -518,7 +490,6 @@ function MyAppointments({ onNavigate, profile }) {
     setPhoneNumber('');
     setPaymentCode('');
     setPaymentError('');
-    setPendingCheckoutUrl('');
     setPaymentProcessing(false);
   };
 
@@ -529,7 +500,6 @@ function MyAppointments({ onNavigate, profile }) {
     }
 
     setPaymentError('');
-    setPendingCheckoutUrl('');
     setPaymentProcessing(true);
 
     let checkoutWindow = null;
@@ -537,12 +507,8 @@ function MyAppointments({ onNavigate, profile }) {
     try {
       checkoutWindow = window.open('', '_blank');
       if (checkoutWindow) {
-        try {
-          checkoutWindow.document.title = 'LegalLink Payment';
-          checkoutWindow.document.body.innerHTML = '<p style="font-family: sans-serif; padding: 16px;">Preparing secure payment checkout...</p>';
-        } catch {
-          // Ignore restricted document access.
-        }
+        checkoutWindow.document.title = 'BatasMo Payment';
+        checkoutWindow.document.body.innerHTML = '<p style="font-family: sans-serif; padding: 16px;">Preparing secure payment checkout...</p>';
       }
 
       const session = await payForAppointment({
@@ -553,29 +519,12 @@ function MyAppointments({ onNavigate, profile }) {
         method: selectedPaymentMethod,
       });
 
-      const checkoutUrl = String(session?.checkoutUrl || '').trim();
-      if (!checkoutUrl) {
+      if (session?.checkoutUrl && checkoutWindow) {
+        checkoutWindow.location.href = session.checkoutUrl;
+      } else if (session?.checkoutUrl) {
+        window.open(session.checkoutUrl, '_blank', 'noopener,noreferrer');
+      } else {
         throw new Error('Checkout URL is missing. Please try again.');
-      }
-
-      let checkoutOpened = false;
-      if (checkoutWindow && !checkoutWindow.closed) {
-        try {
-          checkoutWindow.location.href = checkoutUrl;
-          checkoutOpened = true;
-        } catch {
-          checkoutOpened = false;
-        }
-      }
-      if (!checkoutOpened) {
-        const fallbackWindow = window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
-        checkoutOpened = Boolean(fallbackWindow && !fallbackWindow.closed);
-      }
-      if (!checkoutOpened) {
-        setPendingCheckoutUrl(checkoutUrl);
-        setPaymentError(
-          'Your browser blocked the payment window. Click “Open Payment Page” below, allow popups for this site, then complete payment.'
-        );
       }
 
       const startedAt = Date.now();
@@ -598,6 +547,7 @@ function MyAppointments({ onNavigate, profile }) {
         if (status === 'failed') {
           throw new Error('Payment failed. Please try again.');
         }
+        // Gradually slow polling to reduce load while waiting.
         pollDelayMs = Math.min(6000, pollDelayMs + 500);
       }
 
@@ -606,7 +556,6 @@ function MyAppointments({ onNavigate, profile }) {
       }
 
       await loadAppointments();
-      setPendingCheckoutUrl('');
       setShowPaymentModal(false);
       setShowPaymentConfirmation(true);
       setLoadError('');
@@ -647,7 +596,7 @@ function MyAppointments({ onNavigate, profile }) {
           <div className="ma-sidebar__logo">
             <img src="/logo/logo.jpg" alt="Logo" className="ma-sidebar__logo-img" />
             <ScalesIcon size={26} color="#f5a623" />
-            <span>LegalLink</span>
+            <span>BatasMo</span>
           </div>
         </div>
         <nav className="ma-sidebar__nav">
@@ -696,7 +645,7 @@ function MyAppointments({ onNavigate, profile }) {
           <section className="ma-reschedule-note" aria-label="Reschedule notice">
             <p className="ma-reschedule-note__title">Need to reschedule?</p>
             <p className="ma-reschedule-note__text">
-              Tap <strong>RESCHEDULE</strong> to pick a new date and time from your attorney&apos;s open slots. <strong>LegalLink Admin</strong> will review and approve your request before it updates the consultation queue. Submit at least <strong>1 day before</strong> your consultation (same-day reschedules are not allowed).
+              Tap <strong>RESCHEDULE</strong> to pick a new date and time from your attorney&apos;s open slots. <strong>BatasMo Admin</strong> will review and approve your request before it updates the consultation queue. Submit at least <strong>1 day before</strong> your consultation (same-day reschedules are not allowed).
             </p>
           </section>
 
@@ -820,7 +769,7 @@ function MyAppointments({ onNavigate, profile }) {
 
               {reschedulePolicyNotice.type !== 'pending' ? (
                 <div className="ma-policy-support-box">
-                  For further schedule changes, please contact <strong>LegalLink Admin</strong> so your request can be reviewed properly.
+                  For further schedule changes, please contact <strong>BatasMo Admin</strong> so your request can be reviewed properly.
                 </div>
               ) : null}
 
@@ -907,22 +856,6 @@ function MyAppointments({ onNavigate, profile }) {
               <div className="ma-payment-methods">
                 <h4>Select Payment Method</h4>
                 <div className="ma-payment-options">
-                  <div
-                    className={`ma-payment-option ${selectedPaymentMethod === 'QRPh' ? 'ma-payment-option--selected' : ''}`}
-                    onClick={() => setSelectedPaymentMethod('QRPh')}
-                  >
-                    <div className="ma-payment-option-logo">
-                      <span>QR</span>
-                    </div>
-                    <div className="ma-payment-option-info">
-                      <strong>QR Ph</strong>
-                      <small>Pay via QR Ph checkout</small>
-                    </div>
-                    <div className="ma-payment-option-check">
-                      {selectedPaymentMethod === 'QRPh' && <span>✓</span>}
-                    </div>
-                  </div>
-
                   <div 
                     className={`ma-payment-option ${selectedPaymentMethod === 'gcash' ? 'ma-payment-option--selected' : ''}`}
                     onClick={() => setSelectedPaymentMethod('gcash')}
@@ -957,36 +890,55 @@ function MyAppointments({ onNavigate, profile }) {
                 </div>
               </div>
 
-              {selectedPaymentMethod ? (
-                <div className="ma-payment-link-info" style={{ marginTop: 12 }}>
-                  <span className="ma-link-icon">🔗</span>
-                  <span>We will open a secure PayMongo checkout. Complete the payment there, then this page will update automatically.</span>
+              {/* Payment Details */}
+              {selectedPaymentMethod && (
+                <div className="ma-payment-details-form">
+                  <h4>Enter {selectedPaymentMethod === 'gcash' ? 'GCash' : 'Maya'} Details</h4>
+                  
+                  <div className="ma-payment-link-info">
+                    <span className="ma-link-icon">🔗</span>
+                    <span>Connecting to {selectedPaymentMethod === 'gcash' ? 'GCash' : 'Maya'} payment gateway...</span>
+                  </div>
+
+                  <div className="ma-form-group">
+                    <label>Mobile Number</label>
+                    <div className="ma-phone-input-wrapper">
+                      <span className="ma-phone-prefix">+63</span>
+                      <input
+                        type="tel"
+                        className="ma-form-input ma-phone-input"
+                        placeholder="9XX XXX XXXX"
+                        maxLength="11"
+                        value={phoneNumber}
+                        onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="ma-form-group">
+                    <label>{selectedPaymentMethod === 'gcash' ? 'GCash' : 'Maya'} Authentication Code</label>
+                    <input
+                      type="password"
+                      className="ma-form-input"
+                      placeholder="Enter your authentication code"
+                      value={paymentCode}
+                      onChange={(e) => setPaymentCode(e.target.value)}
+                    />
+                    <small>Enter the code sent to your registered {selectedPaymentMethod === 'gcash' ? 'GCash' : 'Maya'} number</small>
+                  </div>
                 </div>
-              ) : null}
+              )}
 
               {paymentError && (
                 <div className="ma-error-message">{paymentError}</div>
               )}
-              {pendingCheckoutUrl ? (
-                <div style={{ marginTop: 12, textAlign: 'center' }}>
-                  <a
-                    href={pendingCheckoutUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="ma-btn ma-btn--pay"
-                    style={{ display: 'inline-block', textDecoration: 'none' }}
-                  >
-                    Open Payment Page →
-                  </a>
-                </div>
-              ) : null}
 
               <div className="ma-payment-actions">
                 <button className="ma-btn ma-btn--cancel" onClick={closePaymentModal}>Cancel</button>
                 <button 
                   className="ma-btn ma-btn--pay" 
                   onClick={handlePaymentSubmit}
-                  disabled={paymentProcessing || !selectedPaymentMethod}
+                  disabled={paymentProcessing}
                 >
                   {paymentProcessing ? (
                     <span className="ma-processing">
@@ -1014,7 +966,7 @@ function MyAppointments({ onNavigate, profile }) {
               <h2 className="ma-confirm-title">Payment Successful!</h2>
 
               <div className="ma-confirm-message">
-                <p>Your payment of <strong>{selectedAppointmentForPayment.fee}</strong> has been received via <strong>{selectedPaymentMethod === 'gcash' ? 'GCash' : selectedPaymentMethod === 'maya' ? 'Maya' : 'QR Ph'}</strong>.</p>
+                <p>Your payment of <strong>{selectedAppointmentForPayment.fee}</strong> has been received via <strong>{selectedPaymentMethod === 'gcash' ? 'GCash' : 'Maya'}</strong>.</p>
               </div>
 
               <div className="ma-payment-receipt">

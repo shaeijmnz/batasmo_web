@@ -80,8 +80,8 @@ function LandingPage({ onNavigate }) {
       <nav className="lp-nav">
         <div className="lp-shell lp-nav-shell">
           <div className="lp-brand-wrap">
-            <img src="/logo/logo.jpg" alt="LegalLink" className="lp-brand-logo" />
-            <h2 className="lp-brand">LegalLink</h2>
+            <img src="/logo/logo.jpg" alt="BatasMo" className="lp-brand-logo" />
+            <h2 className="lp-brand">BatasMo</h2>
           </div>
 
           <div className="lp-nav-links">
@@ -137,11 +137,11 @@ function LandingPage({ onNavigate }) {
       <section className="lp-legacy" id="about">
         <div className="lp-shell lp-legacy-grid">
           <div className="lp-legacy-panel">
-            <p className="lp-eyebrow">ABOUT LEGALLINK</p>
+            <p className="lp-eyebrow">ABOUT BATASMO</p>
             <h2>Accessible legal support for every Filipino.</h2>
             <p>
               We connect you with verified attorneys and trusted notarial services through one secure platform.
-              Whether you need legal consultation or document notarization, LegalLink makes each step clear,
+              Whether you need legal consultation or document notarization, BatasMo makes each step clear,
               convenient, and mobile-first.
             </p>
             <a href="#services">Explore services</a>
@@ -239,7 +239,7 @@ function LandingPage({ onNavigate }) {
           <blockquote>
             Legal counsel should be as personal as it is professional.
           </blockquote>
-          <p className="lp-cta-name">LegalLink Legal Network</p>
+          <p className="lp-cta-name">BatasMo Legal Network</p>
           <p className="lp-cta-role">TRUSTED DIGITAL LEGAL PLATFORM</p>
 
           <div className="lp-cta-panel">
@@ -258,7 +258,7 @@ function LandingPage({ onNavigate }) {
       <footer className="lp-footer" id="contact">
         <div className="lp-shell lp-footer-grid">
           <div>
-            <h2 className="lp-brand">LegalLink</h2>
+            <h2 className="lp-brand">BatasMo</h2>
           </div>
           <div>
             <h4>PRACTICE AREAS</h4>
@@ -282,7 +282,7 @@ function LandingPage({ onNavigate }) {
           </div>
         </div>
         <div className="lp-shell lp-footer-bottom">
-          <p>Copyright 2026 LegalLink. All rights reserved.</p>
+          <p>Copyright 2026 BatasMo. All rights reserved.</p>
           <p>Reliable | Trustworthy | Committed</p>
         </div>
       </footer>

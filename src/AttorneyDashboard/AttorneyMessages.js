@@ -121,6 +121,26 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
   const [videoCallError, setVideoCallError] = useState('');
   const videoCallRef = useRef(null);
   const messagesEndRef = useRef(null);
+
+  const openVideoCall = (callData) => {
+    videoCallRef.current = callData;
+    setVideoCall(callData);
+  };
+
+  const tryOpenExistingVideoCall = async ({ videoMeetingId, roomId, isClosed: closed }) => {
+    if (closed || !videoMeetingId || videoCallRef.current) return;
+    try {
+      const token = await getVideoSdkToken();
+      openVideoCall({
+        meetingId: videoMeetingId,
+        roomId,
+        token,
+      });
+    } catch {
+      // Attorney can still tap "Video Call" to join the shared room.
+    }
+  };
+
   const imagePickerRef = useRef(null);
   const filePickerRef = useRef(null);
   const timerStartedAtByAppointmentRef = useRef({});
@@ -291,7 +311,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
     const currentAppointmentId = activeAppointmentId;
     const loadMessages = async () => {
       try {
-        const { messages: rows, isClosed: closed } = await fetchAppointmentMessages(currentAppointmentId);
+        const { messages: rows, isClosed: closed, roomId, videoMeetingId } = await fetchAppointmentMessages(currentAppointmentId);
         if (!isMounted) return;
         const mapped = rows.map((item) => ({
           id: item.id,
@@ -316,6 +336,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
         setMessages(mapped);
         setIsClosed(closed);
         setLoadError('');
+        await tryOpenExistingVideoCall({ videoMeetingId, roomId, isClosed: closed });
       } catch (error) {
         if (!isMounted) return;
         setLoadError(error.message || 'Unable to load messages.');
@@ -459,7 +480,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
 
     const refreshMessages = async () => {
       try {
-        const { messages: rows, isClosed: closed } = await fetchAppointmentMessages(activeAppointmentId);
+        const { messages: rows, isClosed: closed, roomId, videoMeetingId } = await fetchAppointmentMessages(activeAppointmentId);
         if (cancelled) return;
 
         const mapped = rows.map((item) => ({
@@ -493,6 +514,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
           );
         });
         setIsClosed(Boolean(closed));
+        await tryOpenExistingVideoCall({ videoMeetingId, roomId, isClosed: closed });
       } catch {
         // Preserve current state when background refresh fails.
       }
@@ -761,11 +783,6 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
   const timerLabel = formatTimerLabel(remainingSeconds);
   const isTenMinuteWindow = remainingSeconds <= 10 * 60;
 
-  const openVideoCall = (callData) => {
-    videoCallRef.current = callData;
-    setVideoCall(callData);
-  };
-
   const handleStartVideoCall = async () => {
     if (!activeAppointmentId || videoCallLoading) return;
     setVideoCallLoading(true);
@@ -793,18 +810,12 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
 
     const unsubscribe = subscribeToConsultationRoomStatus(
       activeAppointmentId,
-      async ({ videoMeetingId, consultationRoomId }) => {
-        if (!videoMeetingId || videoCallRef.current) return;
-        try {
-          const token = await getVideoSdkToken();
-          openVideoCall({
-            meetingId: videoMeetingId,
-            roomId: consultationRoomId,
-            token,
-          });
-        } catch {
-          // Attorney can still tap "Video Call" to join the shared room.
-        }
+      async ({ isClosed: closed, videoMeetingId, consultationRoomId }) => {
+        await tryOpenExistingVideoCall({
+          videoMeetingId,
+          roomId: consultationRoomId,
+          isClosed: closed,
+        });
       },
     );
 
@@ -829,7 +840,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
       <aside className={`am-sidebar ${sidebarOpen ? 'am-sidebar--open' : ''}`}>
         <div className="am-sidebar__logo">
           <ScalesIcon size={26} color="#f5a623" />
-          <span>LegalLink</span>
+          <span>BatasMo</span>
         </div>
         <nav className="am-sidebar__nav">
           {sidebarItems.map(item => (
@@ -853,7 +864,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
           </button>
           <div className="am-topbar__logo">
             <ScalesIcon size={26} color="#f5a623" />
-            <span>LegalLink</span>
+            <span>BatasMo</span>
           </div>
         </div>
         <div className="am-topbar__right">

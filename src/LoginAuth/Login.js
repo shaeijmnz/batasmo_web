@@ -174,8 +174,8 @@ function Login({ onNavigate, onAuthSuccess }) {
           </button>
 
           <div className="lg-brand-badge" onClick={() => onNavigate('home')}>
-            <img src="/auth/logo.jpg" alt="LegalLink" className="lg-brand-logo" />
-            <span className="lg-brand-text">LegalLink</span>
+            <img src="/auth/logo.jpg" alt="BatasMo" className="lg-brand-logo" />
+            <span className="lg-brand-text">BatasMo</span>
           </div>
         </div>
 

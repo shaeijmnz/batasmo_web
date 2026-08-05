@@ -72,7 +72,7 @@ export default function AttorneyAvailability({ onNavigate, profile }) {
       <aside className={`aa-sidebar ${drawerOpen ? 'aa-sidebar--open' : ''}`}>
         <div className="aa-sidebar__logo">
           <ScalesIcon size={26} color="#f5a623" />
-          <span>LegalLink</span>
+          <span>BatasMo</span>
         </div>
         <nav className="aa-sidebar__nav">
           {NAV_ITEMS.map((item) => (
@@ -98,7 +98,7 @@ export default function AttorneyAvailability({ onNavigate, profile }) {
             <MenuIcon />
           </button>
           <div className="aa-topbar__logo">
-            <img src="/logo/logo.jpg" alt="LegalLink" className="aa-topbar__brand-logo" />
+            <img src="/logo/logo.jpg" alt="BatasMo" className="aa-topbar__brand-logo" />
             <div>
               <p className="aa-topbar__eyebrow">Attorney Workspace</p>
               <span>My Availability</span>
