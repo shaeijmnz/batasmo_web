@@ -111,6 +111,18 @@ const isVisibleInAttorneyPaidConsultationQueue = (appt) => {
 /** How long a booked slot stays on the attorney dashboard queue after its start time. */
 export const ATTORNEY_QUEUE_SLOT_DURATION_MS = 90 * 60 * 1000
 
+/** Both parties may enter shortly before the slot so nobody waits on an exact clock tick. */
+export const CHAT_EARLY_JOIN_GRACE_MS = 15 * 60 * 1000
+
+/**
+ * When the schedule window is not enforced, a paid consultation can be opened
+ * at any time (before or after its slot). The Admin > Settings toggle is the
+ * source of truth; the env flag only sets the default for deployments where
+ * app_config has not been seeded yet.
+ */
+export const isScheduleWindowEnforced = () =>
+  isAppConfigFlagOn('enforce_schedule_window', process.env.REACT_APP_BYPASS_CHAT_WINDOW !== 'true')
+
 export function parseAppointmentScheduleDate(appt = {}) {
   return parseChatScheduleDate({
     scheduledAt: appt?.scheduled_value || appt?.scheduled_at || appt?.scheduledAt,
@@ -147,6 +159,8 @@ export function isAttorneyConsultationQueueVisible(appt, nowValue = new Date()) 
   const scheduled = parseAppointmentScheduleDate(appt)
   if (!scheduled || Number.isNaN(scheduled.getTime())) return false
 
+  if (!isScheduleWindowEnforced()) return true
+
   const now = nowValue instanceof Date ? nowValue : new Date(nowValue)
   const windowEndMs = scheduled.getTime() + ATTORNEY_QUEUE_SLOT_DURATION_MS
   return now.getTime() < windowEndMs
@@ -171,6 +185,8 @@ export function isClientConsultationQueueVisible(appt, nowValue = new Date()) {
 
   const scheduled = parseAppointmentScheduleDate(appt)
   if (!scheduled || Number.isNaN(scheduled.getTime())) return false
+
+  if (!isScheduleWindowEnforced()) return true
 
   const now = nowValue instanceof Date ? nowValue : new Date(nowValue)
   const windowEndMs = scheduled.getTime() + ATTORNEY_QUEUE_SLOT_DURATION_MS
@@ -2479,6 +2495,7 @@ export function isConsultationChatEnterAllowed({
   slotTime,
   nowValue,
   paymentStatus,
+  enforceScheduleWindow = isScheduleWindowEnforced(),
 } = {}) {
   const normalizedStatus = String(status || '').toLowerCase()
   const paid = String(paymentStatus || '').toLowerCase() === 'paid'
@@ -2487,13 +2504,16 @@ export function isConsultationChatEnterAllowed({
 
   if (!paidAwaitingConfirm && !isConsultationChatActiveStatus(status)) return false
 
+  // Bypass mode: any active booking can be opened regardless of its slot time.
+  if (!enforceScheduleWindow) return true
+
   const scheduled = parseChatScheduleDate({ scheduledAt, slotDate, slotTime })
   if (!scheduled || Number.isNaN(scheduled.getTime())) return false
 
   const now = nowValue instanceof Date ? nowValue : new Date(nowValue || Date.now())
   if (Number.isNaN(now.getTime())) return false
 
-  if (now.getTime() < scheduled.getTime()) return false
+  if (now.getTime() < scheduled.getTime() - CHAT_EARLY_JOIN_GRACE_MS) return false
 
   if (now.getTime() >= scheduled.getTime() + ATTORNEY_QUEUE_SLOT_DURATION_MS) return false
 
@@ -6449,7 +6469,7 @@ export async function clearVideoMeetingId(consultationRoomId) {
 // and a single realtime subscription keeps the cache in sync when an admin
 // toggles a value in the Settings page.
 
-const APP_CONFIG_KNOWN_KEYS = []
+const APP_CONFIG_KNOWN_KEYS = ['enforce_schedule_window']
 const appConfigCache = new Map()
 let appConfigLoadPromise = null
 let appConfigChannel = null
