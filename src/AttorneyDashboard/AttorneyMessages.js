@@ -348,7 +348,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
     return () => {
       isMounted = false;
     };
-  }, [profile?.id, activeAppointmentId]);
+  }, [profile?.id, activeAppointmentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!activeAppointmentId) return undefined;
@@ -543,7 +543,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
       window.removeEventListener('focus', handleWindowFocus);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [activeAppointmentId]);
+  }, [activeAppointmentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSend = async () => {
     if (!input.trim() || !activeAppointmentId || isClosed || sending) return;
