@@ -328,7 +328,6 @@ function UpcomingAppointments({ onNavigate, profile }) {
       slotDate: appt.slotDate,
       slotTime: appt.slotTime,
       paymentStatus: appt.paymentStatus || 'unpaid',
-      enforceScheduleWindow: true,
     });
 
     return (
@@ -406,7 +405,7 @@ function UpcomingAppointments({ onNavigate, profile }) {
       <aside className={`ua-sidebar ${drawerOpen ? 'ua-sidebar--open' : ''}`}>
         <div className="ua-sidebar__logo">
           <ScalesIcon size={26} color="#f5a623" />
-          <span>BatasMo</span>
+          <span>LegalLink</span>
         </div>
         <nav className="ua-sidebar__nav">
           {[
@@ -439,7 +438,7 @@ function UpcomingAppointments({ onNavigate, profile }) {
             <MenuIcon />
           </button>
           <div className="ua-topbar__logo">
-            <img src="/logo/logo.jpg" alt="BatasMo" className="ua-topbar__brand-logo" />
+            <img src="/logo/logo.jpg" alt="LegalLink" className="ua-topbar__brand-logo" />
             <div>
               <p className="ua-topbar__eyebrow">Attorney Workspace</p>
               <span>My Appointments</span>

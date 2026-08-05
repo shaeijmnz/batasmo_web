@@ -292,7 +292,7 @@ function ProfilePage({
           <div className="pp-sidebar__logo">
             <img src="/logo/logo.jpg" alt="Logo" className="pp-sidebar__logo-img" />
             <ScalesIcon size={26} color="#f5a623" />
-            <span>BatasMo</span>
+            <span>LegalLink</span>
           </div>
         </div>
         <nav className="pp-sidebar__nav">

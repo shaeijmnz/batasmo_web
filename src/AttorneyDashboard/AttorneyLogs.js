@@ -254,7 +254,7 @@ export default function AttorneyLogs({ onNavigate, profile, initialAppointmentId
       <aside className={`al-sidebar ${sidebarOpen ? 'al-sidebar--open' : ''}`}>
         <div className="al-sidebar__logo">
           <ScalesIcon size={26} color="#f5a623" />
-          <span>BatasMo</span>
+          <span>LegalLink</span>
         </div>
         <nav className="al-sidebar__nav">
           {sidebarItems.map((item) => (

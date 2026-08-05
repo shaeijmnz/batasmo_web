@@ -548,7 +548,7 @@ export async function sendAdminSupportMessage({ clientId, message }) {
   try {
     await supabase.from('notifications').insert({
       user_id: clientId,
-      title: 'Message from BatasMo Admin',
+      title: 'Message from LegalLink Admin',
       body: `${body.slice(0, 140)} [support:${clientId}]`,
       type: 'admin_general',
       is_read: false,
@@ -2471,7 +2471,7 @@ const validateChatAttachment = (sizeBytes, mime) => {
 export const isConsultationChatActiveStatus = (status) =>
   CHAT_ACTIVE_APPOINTMENT_STATUSES.has(String(status || '').toLowerCase())
 
-/** Attorney queue/chat buttons: paid + active status + within slot window; optional schedule-time gate. */
+/** Client/attorney chat buttons: paid + active status + within the scheduled slot window. */
 export function isConsultationChatEnterAllowed({
   status,
   scheduledAt,
@@ -2479,10 +2479,7 @@ export function isConsultationChatEnterAllowed({
   slotTime,
   nowValue,
   paymentStatus,
-  enforceScheduleWindow = true,
 } = {}) {
-  if (process.env.REACT_APP_BYPASS_CHAT_WINDOW === 'true') return true
-
   const normalizedStatus = String(status || '').toLowerCase()
   const paid = String(paymentStatus || '').toLowerCase() === 'paid'
   const paidAwaitingConfirm =
@@ -2496,7 +2493,7 @@ export function isConsultationChatEnterAllowed({
   const now = nowValue instanceof Date ? nowValue : new Date(nowValue || Date.now())
   if (Number.isNaN(now.getTime())) return false
 
-  if (enforceScheduleWindow && now.getTime() < scheduled.getTime()) return false
+  if (now.getTime() < scheduled.getTime()) return false
 
   if (now.getTime() >= scheduled.getTime() + ATTORNEY_QUEUE_SLOT_DURATION_MS) return false
 
@@ -2518,7 +2515,6 @@ export const isConsultationChatWindowOpen = ({
     slotTime,
     nowValue,
     paymentStatus,
-    enforceScheduleWindow: isAppConfigFlagOn('enforce_schedule_window', true),
   })
 
 export async function fetchClientAppointmentsData(userId) {
@@ -3488,7 +3484,7 @@ export async function rescheduleClientAppointment({ appointmentId, scheduledAt, 
       await supabase.from('notifications').insert({
         user_id: appt.client_id,
         title: 'Reschedule request submitted',
-        body: `Your request to move this consultation to ${whenLabel} was sent to BatasMo Admin for approval.`,
+        body: `Your request to move this consultation to ${whenLabel} was sent to LegalLink Admin for approval.`,
         type: 'reschedule',
         is_read: false,
         created_at: nowIso,
@@ -4459,14 +4455,61 @@ export async function createAppointmentBooking({
   }
 
   if (normalizedPayload.slot_date && normalizedPayload.slot_time) {
-    const rpcSlotBook = await supabase.rpc('mark_slot_booked', {
-      p_attorney_id: normalizedPayload.attorney_id,
-      p_date: normalizedPayload.slot_date,
-      p_time: normalizedPayload.slot_time,
-    })
+    // DB time labels vary (e.g. "02:00 PM" vs "14:00"). Try exact matches
+    // first, then always resolve by parsed clock time so abandon can free by id.
+    const timeCandidates = Array.from(
+      new Set(
+        [
+          String(normalizedPayload.slot_time || '').trim(),
+          normalizeSlotTimeLabel(normalizedPayload.slot_time),
+        ].filter(Boolean),
+      ),
+    )
+    for (const timeLabel of timeCandidates) {
+      const rpcSlotBook = await supabase.rpc('mark_slot_booked', {
+        p_attorney_id: normalizedPayload.attorney_id,
+        p_date: normalizedPayload.slot_date,
+        p_time: timeLabel,
+      })
+      if (rpcSlotBook.error) {
+        console.warn('[booking] mark_slot_booked RPC failed', timeLabel, rpcSlotBook.error)
+      }
+    }
 
-    if (rpcSlotBook.error) {
-      console.warn('[booking] mark_slot_booked RPC failed', rpcSlotBook.error)
+    try {
+      const { data: candidates } = await supabase
+        .from('availability_slots')
+        .select('id, time, is_booked')
+        .eq('attorney_id', normalizedPayload.attorney_id)
+        .eq('date', normalizedPayload.slot_date)
+      const target = parseSlotDateTime(normalizedPayload.slot_date, normalizedPayload.slot_time)
+      const targetMs = target?.getTime() || 0
+      const match = (candidates || []).find((row) => {
+        const parsed = parseSlotDateTime(normalizedPayload.slot_date, row.time)
+        return parsed && parsed.getTime() === targetMs
+      })
+      if (match?.id) {
+        resolvedSlotId = match.id
+        if (!match.is_booked) {
+          await supabase
+            .from('availability_slots')
+            .update({ is_booked: true, updated_at: nowIso })
+            .eq('id', match.id)
+        }
+      }
+    } catch (fallbackErr) {
+      console.warn('[booking] mark slot by parsed time failed', fallbackErr)
+    }
+  }
+
+  if (appointmentId && resolvedSlotId) {
+    try {
+      await supabase
+        .from('appointments')
+        .update({ slot_id: resolvedSlotId, slot_date: normalizedPayload.slot_date, slot_time: normalizedPayload.slot_time })
+        .eq('id', appointmentId)
+    } catch (linkErr) {
+      console.warn('[booking] link slot_id to appointment failed', linkErr)
     }
   }
 
@@ -4656,8 +4699,6 @@ export async function createAppointmentBooking({
 }
 
 async function getOrCreateConsultationRoom(appointmentId) {
-  const devBypass = process.env.REACT_APP_BYPASS_CHAT_WINDOW === 'true'
-
   // Older deployments of the appointments table do not have the optional
   // slot_date / slot_time columns. Try the rich query first and fall back
   // to a minimal one if Postgres reports a missing column.
@@ -4667,40 +4708,30 @@ async function getOrCreateConsultationRoom(appointmentId) {
   let appointment = null
   let appointmentError = null
 
-  if (!devBypass) {
-    const richRes = await supabase
-      .from('appointments')
-      .select(richFields)
-      .eq('id', appointmentId)
-      .maybeSingle()
+  const richRes = await supabase
+    .from('appointments')
+    .select(richFields)
+    .eq('id', appointmentId)
+    .maybeSingle()
 
-    if (richRes.error && isMissingColumnError(richRes.error, 'slot_date')) {
-      const minRes = await supabase
-        .from('appointments')
-        .select(minimalFields)
-        .eq('id', appointmentId)
-        .maybeSingle()
-      appointment = minRes.data || null
-      appointmentError = minRes.error || null
-    } else {
-      appointment = richRes.data || null
-      appointmentError = richRes.error || null
-    }
-  } else {
-    const res = await supabase
+  if (richRes.error && isMissingColumnError(richRes.error, 'slot_date')) {
+    const minRes = await supabase
       .from('appointments')
-      .select('status')
+      .select(minimalFields)
       .eq('id', appointmentId)
       .maybeSingle()
-    appointment = res.data || null
-    appointmentError = res.error || null
+    appointment = minRes.data || null
+    appointmentError = minRes.error || null
+  } else {
+    appointment = richRes.data || null
+    appointmentError = richRes.error || null
   }
 
   if (appointmentError) throw appointmentError
 
   const status = String(appointment?.status || '').toLowerCase()
 
-  if (!devBypass && !isConsultationChatActiveStatus(status)) {
+  if (!isConsultationChatActiveStatus(status)) {
     const awaitingPaymentConfirm = status === 'pending' || status === 'approved' || status === ''
     if (awaitingPaymentConfirm) {
       const paidIds = await fetchPaidAppointmentIdsForIdList([appointmentId])
@@ -4713,7 +4744,6 @@ async function getOrCreateConsultationRoom(appointmentId) {
   }
 
   if (
-    !devBypass &&
     !isConsultationChatWindowOpen({
       status,
       scheduledAt: appointment?.scheduled_at,
@@ -6306,7 +6336,7 @@ export async function fetchAttorneyAnnouncementsData(userId) {
       imageUrl: parseNotificationImageUrl(item.data),
       date: valid ? dt.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Today',
       time: valid ? dt.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' }) : 'Now',
-      author: 'BatasMo Admin',
+      author: 'LegalLink Admin',
       pinned: type.includes('important') || type.includes('admin'),
       tag: type.includes('maintenance') ? 'Maintenance' : type.includes('important') ? 'Important' : 'General',
     }
@@ -6419,7 +6449,7 @@ export async function clearVideoMeetingId(consultationRoomId) {
 // and a single realtime subscription keeps the cache in sync when an admin
 // toggles a value in the Settings page.
 
-const APP_CONFIG_KNOWN_KEYS = ['enforce_schedule_window']
+const APP_CONFIG_KNOWN_KEYS = []
 const appConfigCache = new Map()
 let appConfigLoadPromise = null
 let appConfigChannel = null

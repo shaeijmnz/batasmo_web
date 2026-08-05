@@ -111,7 +111,6 @@ const Reports = ({ onNavigate, onSignOut }) => {
     };
     onNavigate?.(pageMap[path] || 'admin-home');
   };
-
   const navItems = [
     { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/' },
     { label: 'Clients', icon: <Users size={20} />, path: '/clients' },
@@ -642,8 +641,8 @@ const Reports = ({ onNavigate, onSignOut }) => {
           <button className="sidebar-toggle" onClick={() => setSidebarOpen(!isSidebarOpen)}>
             <Menu size={24} />
           </button>
-          {isSidebarOpen && <img src="/logo/logo.jpg" alt="BatasMo logo" className="brand-logo" />}
-          {isSidebarOpen && <span className="logo-text">BatasMo</span>}
+          {isSidebarOpen && <img src="/logo/logo.jpg" alt="LegalLink logo" className="brand-logo" />}
+          {isSidebarOpen && <span className="logo-text">LegalLink</span>}
         </div>
         <nav className="sidebar-nav">
           {navItems.map((item) => (

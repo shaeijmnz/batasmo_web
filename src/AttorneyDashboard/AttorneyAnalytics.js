@@ -163,7 +163,7 @@ export default function AttorneyAnalytics({ onNavigate, profile }) {
       <aside className={`aa-sidebar ${sidebarOpen ? 'aa-sidebar--open' : ''}`}>
         <div className="aa-sidebar__logo">
           <ScalesIcon size={26} color="#f5a623" />
-          <span>BatasMo</span>
+          <span>LegalLink</span>
         </div>
         <nav className="aa-sidebar__nav">
           {sidebarItems.map((item) => (

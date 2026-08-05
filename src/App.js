@@ -257,8 +257,8 @@ function App() {
   }, [])
 
   useEffect(() => {
-    // Warm the admin-controlled feature flags cache (enforce_schedule_window)
-    // and keep it in sync when the admin toggles.
+    // Warm the admin-controlled feature flags cache and keep it in sync
+    // when the admin toggles a value in Settings.
     // The realtime channel is module-scoped so it lives for the whole
     // page lifetime; we do not tear it down on unmount.
     ensureAppConfigLoaded();

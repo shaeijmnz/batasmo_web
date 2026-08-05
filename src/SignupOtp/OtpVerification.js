@@ -277,7 +277,7 @@ function OtpVerification({ onNavigate, onAuthSuccess, email = '', role = 'Client
         <div className="otp-nav__inner">
           <div className="otp-nav__logo" onClick={() => onNavigate('home')} style={{ cursor: 'pointer' }}>
             <ScalesIcon size={28} color="#f5a623" />
-            <span>BatasMo</span>
+            <span>LegalLink</span>
           </div>
           <ul className="otp-nav__links">
             <li><a href="#home" onClick={() => onNavigate('home')}>Home</a></li>

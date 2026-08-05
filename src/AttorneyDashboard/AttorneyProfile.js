@@ -10,7 +10,7 @@ import {
   VALID_PHONE_MESSAGE,
 } from '../lib/validators';
 
-/* ── BatasMo Styled Icons ── */
+/* ── LegalLink Styled Icons ── */
 const ScalesIcon = ({ size = 24, color = '#f2c879' }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <line x1="12" y1="3" x2="12" y2="21" /><path d="M5 21h14" /><path d="M3 6l9-3 9 3" />
@@ -159,7 +159,7 @@ export default function AttorneyProfile({ onNavigate, profile: sessionProfile, o
       <aside className={`ap-sidebar ${sidebarOpen ? 'ap-sidebar--open' : ''}`}>
         <div className="ap-sidebar__logo">
           <ScalesIcon size={28} />
-          <span>BatasMo</span>
+          <span>LegalLink</span>
         </div>
         <nav className="ap-sidebar__nav">
           {sidebarItems.map(item => (
@@ -181,7 +181,7 @@ export default function AttorneyProfile({ onNavigate, profile: sessionProfile, o
             <MenuIcon />
           </button>
           <div className="ap-topbar__logo">
-            <img src="/logo/logo.jpg" alt="BatasMo" className="ap-topbar__brand-logo" />
+            <img src="/logo/logo.jpg" alt="LegalLink" className="ap-topbar__brand-logo" />
             <div>
               <p className="ap-topbar__eyebrow">Attorney Workspace</p>
               <span>Attorney Dashboard</span>

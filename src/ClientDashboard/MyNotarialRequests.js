@@ -110,6 +110,7 @@ function MyNotarialRequests({ onNavigate, profile }) {
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('qrph');
   const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [paymentError, setPaymentError] = useState('');
+  const [pendingCheckoutUrl, setPendingCheckoutUrl] = useState('');
   const [paymentReference, setPaymentReference] = useState('');
   const [showPaymentConfirmation, setShowPaymentConfirmation] = useState(false);
   const [loadError, setLoadError] = useState('');
@@ -230,6 +231,7 @@ function MyNotarialRequests({ onNavigate, profile }) {
     setShowPaymentModal(true);
     setSelectedPaymentMethod('qrph');
     setPaymentError('');
+    setPendingCheckoutUrl('');
     setPaymentReference('');
     setPaymentProcessing(false);
   };
@@ -239,6 +241,7 @@ function MyNotarialRequests({ onNavigate, profile }) {
     setSelectedRequest(null);
     setSelectedPaymentMethod('qrph');
     setPaymentError('');
+    setPendingCheckoutUrl('');
     setPaymentReference('');
     setPaymentProcessing(false);
   };
@@ -247,14 +250,19 @@ function MyNotarialRequests({ onNavigate, profile }) {
     if (!selectedPaymentMethod) { setPaymentError('Please select a payment method'); return; }
 
     setPaymentError('');
+    setPendingCheckoutUrl('');
     setPaymentProcessing(true);
     let checkoutWindow = null;
 
     try {
       checkoutWindow = window.open('', '_blank');
       if (checkoutWindow) {
-        checkoutWindow.document.title = 'BatasMo Payment';
-        checkoutWindow.document.body.innerHTML = '<p style="font-family: sans-serif; padding: 16px;">Preparing secure payment checkout...</p>';
+        try {
+          checkoutWindow.document.title = 'LegalLink Payment';
+          checkoutWindow.document.body.innerHTML = '<p style="font-family: sans-serif; padding: 16px;">Preparing secure payment checkout...</p>';
+        } catch {
+          // Ignore restricted document access.
+        }
       }
 
       const session = await payForNotarialRequestViaPaymongo({
@@ -265,12 +273,29 @@ function MyNotarialRequests({ onNavigate, profile }) {
         method: selectedPaymentMethod,
       });
 
-      if (session?.checkoutUrl && checkoutWindow) {
-        checkoutWindow.location.href = session.checkoutUrl;
-      } else if (session?.checkoutUrl) {
-        window.open(session.checkoutUrl, '_blank', 'noopener,noreferrer');
-      } else {
+      const checkoutUrl = String(session?.checkoutUrl || '').trim();
+      if (!checkoutUrl) {
         throw new Error('Checkout URL is missing. Please try again.');
+      }
+
+      let checkoutOpened = false;
+      if (checkoutWindow && !checkoutWindow.closed) {
+        try {
+          checkoutWindow.location.href = checkoutUrl;
+          checkoutOpened = true;
+        } catch {
+          checkoutOpened = false;
+        }
+      }
+      if (!checkoutOpened) {
+        const fallbackWindow = window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
+        checkoutOpened = Boolean(fallbackWindow && !fallbackWindow.closed);
+      }
+      if (!checkoutOpened) {
+        setPendingCheckoutUrl(checkoutUrl);
+        setPaymentError(
+          'Your browser blocked the payment window. Click “Open Payment Page” below, allow popups for this site, then complete payment.'
+        );
       }
 
       const startedAt = Date.now();
@@ -300,6 +325,7 @@ function MyNotarialRequests({ onNavigate, profile }) {
       }
 
       setPaymentProcessing(false);
+      setPendingCheckoutUrl('');
       setShowPaymentModal(false);
       setPaymentReference(session?.transactionId || '');
       setShowPaymentConfirmation(true);
@@ -352,7 +378,7 @@ function MyNotarialRequests({ onNavigate, profile }) {
           <div className="mnr-sidebar__logo">
             <img src="/logo/logo.jpg" alt="Logo" className="mnr-sidebar__logo-img" />
             <ScalesIcon size={26} color="#f5a623" />
-            <span>BatasMo</span>
+            <span>LegalLink</span>
           </div>
         </div>
         <nav className="mnr-sidebar__nav">
@@ -646,6 +672,19 @@ function MyNotarialRequests({ onNavigate, profile }) {
             )}
 
             {paymentError && <div className="mnr-payment-modal__error">{paymentError}</div>}
+            {pendingCheckoutUrl ? (
+              <div style={{ marginTop: 12, textAlign: 'center' }}>
+                <a
+                  href={pendingCheckoutUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mnr-btn mnr-btn--primary"
+                  style={{ display: 'inline-block', textDecoration: 'none' }}
+                >
+                  Open Payment Page →
+                </a>
+              </div>
+            ) : null}
 
             <div className="mnr-payment-modal__actions">
               <button className="mnr-btn mnr-btn--secondary" onClick={closePaymentModal} disabled={paymentProcessing}>Cancel</button>

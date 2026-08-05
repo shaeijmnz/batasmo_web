@@ -116,9 +116,9 @@ export function mapLoginErrorMessage(error) {
     normalized === 'failed to fetch' ||
     normalized.includes('networkerror') ||
     normalized.includes('network request failed') ||
-    normalized.includes('cannot reach the batasmo database')
+    normalized.includes('cannot reach the legallink database')
   ) {
-    return 'Cannot connect to BatasMo servers. The database may be offline — restore Supabase and redeploy Vercel with updated environment variables.';
+    return 'Cannot connect to LegalLink servers. The database may be offline — restore Supabase and redeploy Vercel with updated environment variables.';
   }
   return raw;
 }

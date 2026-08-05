@@ -115,7 +115,7 @@
 .client-name { font-weight: 700; font-size: 1rem; color: var(--ui-text-primary); }
 .status-badge { background: linear-gradient(135deg, var(--ui-accent) 0%, var(--ui-accent-hover) 100%); color: white; font-size: 0.7rem; padding: 2px 8px; border-radius: 10px; font-weight: 700; }
 .status-badge.online { background: #dcfce7; color: #166534; }
-.status-badge.offline { background: #e5e7eb; color: #4b5563; }
+.status-badge.offline { background: rgba(125, 141, 166, 0.22); color: #dbe3ef; }
 .contact-info { display: flex; gap: 15px; color: var(--ui-text-secondary); font-size: 0.8rem; }
 .contact-info span { display: flex; align-items: center; gap: 5px; }
 
@@ -132,9 +132,9 @@
   gap: 6px;
   padding: 8px 12px;
   border-radius: 10px;
-  border: 1px solid rgba(21, 34, 56, 0.2);
-  background: #fff;
-  color: #152238;
+  border: 1px solid rgba(212, 175, 55, 0.28);
+  background: rgba(15, 26, 45, 0.78);
+  color: #e4c46a;
   font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -217,9 +217,9 @@
   gap: 6px;
   padding: 8px 12px;
   border-radius: 10px;
-  border: 1px solid rgba(185, 28, 28, 0.35);
-  background: #fff;
-  color: #b91c1c;
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  background: rgba(153, 27, 27, 0.24);
+  color: #fca5a5;
   font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -358,7 +358,7 @@
   border: 1px solid var(--ui-border);
   font-size: 0.9rem;
   color: var(--ui-text-primary);
-  background: #fff;
+  background: rgba(11, 19, 33, 0.7);
 }
 
 .clients-modal__input:focus {
