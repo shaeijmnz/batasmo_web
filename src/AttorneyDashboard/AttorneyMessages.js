@@ -123,8 +123,25 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
   const messagesEndRef = useRef(null);
 
   const openVideoCall = (callData) => {
+    // Re-opening the same meeting would remount the SDK and force a rejoin.
+    if (videoCallRef.current?.meetingId === callData?.meetingId) return;
     videoCallRef.current = callData;
     setVideoCall(callData);
+  };
+
+  const closeVideoCall = () => {
+    videoCallRef.current = null;
+    setVideoCall(null);
+  };
+
+  const warmupMediaPermissions = async () => {
+    if (!navigator?.mediaDevices?.getUserMedia) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      stream.getTracks().forEach((track) => track.stop());
+    } catch {
+      // Keep call flow working even when the prompt is dismissed.
+    }
   };
 
   const tryOpenExistingVideoCall = async ({ videoMeetingId, roomId, isClosed: closed }) => {
@@ -686,6 +703,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
     try {
       setEndingSession(true);
       setEndSessionConfirmOpen(false);
+      closeVideoCall();
       await endConsultationSession(activeAppointmentId);
       setIsClosed(true);
       setLoadError('');
@@ -788,6 +806,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
     setVideoCallError('');
     try {
       const { meetingId, roomId, token } = await getOrCreateVideoMeeting(activeAppointmentId);
+      await warmupMediaPermissions();
       openVideoCall({ meetingId, roomId, token });
     } catch (err) {
       setVideoCallError(err.message || 'Failed to start video call.');
@@ -796,12 +815,9 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
     }
   };
 
-  const handleCloseVideoCall = () => {
-    // Leave the call UI only — keep video_meeting_id so both sides can rejoin
-    // the same room until the attorney ends the consultation session.
-    videoCallRef.current = null;
-    setVideoCall(null);
-  };
+  // Leave the call UI only — keep video_meeting_id so both sides can rejoin
+  // the same room until the attorney ends the consultation session.
+  const handleCloseVideoCall = closeVideoCall;
 
   // Auto-open video call when client starts one (video_meeting_id appears in DB)
   useEffect(() => {
@@ -810,6 +826,14 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
     const unsubscribe = subscribeToConsultationRoomStatus(
       activeAppointmentId,
       async ({ isClosed: closed, videoMeetingId, consultationRoomId }) => {
+        setIsClosed(Boolean(closed));
+
+        // Ending the session (from any device) tears down the call right away.
+        if (closed || !videoMeetingId) {
+          if (closed) closeVideoCall();
+          return;
+        }
+
         await tryOpenExistingVideoCall({
           videoMeetingId,
           roomId: consultationRoomId,
@@ -821,14 +845,15 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
     return () => unsubscribe();
   }, [activeAppointmentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Prefetch VideoSDK token in the background so the first time the attorney
-  // hits "Video Call" the join is noticeably faster (token is cached 110 min).
+  // Prefetch the VideoSDK token and clear the camera/mic prompt in the
+  // background so the first "Video Call" tap joins without extra delay.
   useEffect(() => {
-    if (!activeAppointmentId || isClosed) return;
+    if (!activeAppointmentId || isClosed || videoCall) return;
     getVideoSdkToken().catch(() => {
       // Will retry on actual call start.
     });
-  }, [activeAppointmentId, isClosed]);
+    warmupMediaPermissions();
+  }, [activeAppointmentId, isClosed, videoCall]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="am-page">

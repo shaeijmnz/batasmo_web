@@ -249,6 +249,14 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
       async ({ isClosed, videoMeetingId, consultationRoomId }) => {
         setIsClosed(Boolean(isClosed));
 
+        // The attorney ended the session — drop out of the call immediately.
+        if (isClosed) {
+          videoCallRef.current = null;
+          setVideoCall(null);
+          setIncomingCallData(null);
+          return;
+        }
+
         // Auto-open when attorney starts video (same meetingId for both parties)
         if (videoMeetingId && consultationRoomId && !videoCallRef.current) {
           try {
@@ -557,9 +565,11 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
   };
 
   const openVideoCall = (callData) => {
+    setIncomingCallData(null);
+    // Re-opening the same meeting would remount the SDK and force a rejoin.
+    if (videoCallRef.current?.meetingId === callData?.meetingId) return;
     videoCallRef.current = callData;
     setVideoCall(callData);
-    setIncomingCallData(null);
   };
 
   const warmupMediaPermissions = async () => {

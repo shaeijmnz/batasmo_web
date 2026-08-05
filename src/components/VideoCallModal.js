@@ -240,6 +240,8 @@ function MeetingView({ meetingId, onLeave }) {
   const [joinError, setJoinError] = useState('');
   const [participantLayoutEpoch, setParticipantLayoutEpoch] = useState(0);
   const hasJoinedRef = useRef(false);
+  const hasLeftRef = useRef(false);
+  const leaveRef = useRef(null);
   const timeoutRef = useRef(null);
   const retryCountRef = useRef(0);
 
@@ -331,9 +333,26 @@ function MeetingView({ meetingId, onLeave }) {
     return () => clearTimeout(timeoutRef.current);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  leaveRef.current = leave;
+
+  // Always signal VideoSDK that we left, including when the modal is closed
+  // from the outside (attorney ends the session). Without this the other
+  // participant keeps seeing a frozen tile until the SDK times us out.
+  const leaveMeeting = useCallback(() => {
+    if (hasLeftRef.current) return;
+    hasLeftRef.current = true;
+    try {
+      leaveRef.current?.();
+    } catch {
+      // Meeting was already torn down.
+    }
+  }, []);
+
+  useEffect(() => () => leaveMeeting(), [leaveMeeting]);
+
   const handleLeave = () => {
     clearTimeout(timeoutRef.current);
-    leave();
+    leaveMeeting();
     onLeave();
   };
 
