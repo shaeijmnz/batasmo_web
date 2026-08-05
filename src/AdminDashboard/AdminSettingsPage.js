@@ -7,10 +7,11 @@ import {
 import './AdminTheme.css';
 import './settings.css';
 import { getAppConfig, setAppConfig } from '../lib/userApi';
+import { performAdminLogout } from '../lib/adminLogout';
 
 const handleQuickAction = (message) => window.alert(message);
 
-const Settings = ({ onNavigate }) => {
+const Settings = ({ onNavigate, onSignOut }) => {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('Profile');
   const navigate = (path) => {
@@ -62,7 +63,7 @@ const Settings = ({ onNavigate }) => {
             <div className="profile-avatar">AD</div>
             {isSidebarOpen && <div className="profile-info"><p className="name">Admin User</p><p className="email">admin@batasmo.com</p></div>}
           </div>
-          <button className="logout-btn" onClick={() => handleQuickAction('Logout clicked')}><LogOut size={18} /> {isSidebarOpen && "Logout"}</button>
+          <button className="logout-btn" onClick={() => performAdminLogout({ onSignOut, onNavigate })}><LogOut size={18} /> {isSidebarOpen && "Logout"}</button>
         </div>
       </aside>
 

@@ -18,8 +18,8 @@ import {
   fetchAdminOngoingVideoCallCount,
   markAdminNotificationsAsRead,
   subscribeToAdminNotifications,
-  signOutUser,
 } from '../lib/userApi';
+import { performAdminLogout } from '../lib/adminLogout';
 import { fetchPaidNotarialRequests, notifyClientNotarialStatusUpdate } from '../lib/adminApi';
 import { attachLiveDataRefresh } from '../lib/liveDataRefresh';
 import { patchAdminPageCache, readAdminPageCache } from '../lib/adminPageCache';
@@ -208,7 +208,7 @@ const resolveAttorneyImage = (name) => {
   return `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'Attorney')}&background=152238&color=ffffff`;
 };
 
-const Dashboard = ({ onNavigate }) => {
+const Dashboard = ({ onNavigate, onSignOut }) => {
   const dashboardBoot = useMemo(() => readAdminPageCache(DASHBOARD_CACHE_KEY), []);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [activeModal, setActiveModal] = useState(null);
@@ -1150,15 +1150,7 @@ const Dashboard = ({ onNavigate }) => {
           </div>
           <button
             className="logout-action"
-            onClick={async () => {
-              try {
-                await signOutUser();
-              } catch (error) {
-                console.warn('[admin] sign out failed', error);
-              } finally {
-                onNavigate?.('login');
-              }
-            }}
+            onClick={() => performAdminLogout({ onSignOut, onNavigate })}
           >
             <LogOut size={18} />
             {isSidebarOpen && <span>Logout</span>}

@@ -20,6 +20,7 @@ import {
   uploadAnnouncementImage,
   validateAnnouncementImageFile,
 } from '../lib/announcementImages';
+import { performAdminLogout } from '../lib/adminLogout';
 import './AdminTheme.css';
 import './reports.css';
 
@@ -63,7 +64,7 @@ const percentChange = (current, previous) => {
   return `${delta >= 0 ? '+' : ''}${delta.toFixed(1)}%`;
 };
 
-const Reports = ({ onNavigate }) => {
+const Reports = ({ onNavigate, onSignOut }) => {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -110,7 +111,6 @@ const Reports = ({ onNavigate }) => {
     };
     onNavigate?.(pageMap[path] || 'admin-home');
   };
-  const handleQuickAction = (message) => window.alert(message);
 
   const navItems = [
     { label: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/' },
@@ -667,7 +667,7 @@ const Reports = ({ onNavigate }) => {
               </div>
             )}
           </div>
-          <button className="logout-btn" onClick={() => handleQuickAction('Logout clicked')}><LogOut size={18} /> {isSidebarOpen && 'Logout'}</button>
+          <button className="logout-btn" onClick={() => performAdminLogout({ onSignOut, onNavigate })}><LogOut size={18} /> {isSidebarOpen && 'Logout'}</button>
         </div>
       </aside>
 

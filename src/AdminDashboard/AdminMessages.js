@@ -10,7 +10,7 @@ import {
   Menu,
 } from 'lucide-react';
 import AdminSupportDrawer from './AdminSupportDrawer';
-import { signOutUser } from '../lib/userApi';
+import { performAdminLogout } from '../lib/adminLogout';
 import './AdminTheme.css';
 import './AdminMessages.css';
 
@@ -26,7 +26,7 @@ const NavItem = ({ icon, label, active, open, onClick }) => (
   </button>
 );
 
-const AdminMessages = ({ onNavigate }) => {
+const AdminMessages = ({ onNavigate, onSignOut }) => {
   const [isSidebarOpen, setSidebarOpen] = useState(true);
 
   const navigate = (path) => {
@@ -52,15 +52,7 @@ const AdminMessages = ({ onNavigate }) => {
     { label: 'Settings', icon: <Settings size={20} />, path: '/settings' },
   ];
 
-  const handleLogout = async () => {
-    try {
-      await signOutUser();
-    } catch (error) {
-      console.warn('[admin] sign out failed', error);
-    } finally {
-      onNavigate?.('login');
-    }
-  };
+  const handleLogout = () => performAdminLogout({ onSignOut, onNavigate });
 
   return (
     <div className="app-container">

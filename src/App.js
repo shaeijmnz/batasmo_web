@@ -712,14 +712,14 @@ function App() {
     );
   if (page === 'attorney-announcements') return renderLazy(<AttorneyAnnouncements onNavigate={handleNavigate} profile={currentProfile} />);
   if (page === 'attorney-profile') return renderLazy(<AttorneyProfile onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} onProfileUpdated={setCurrentProfile} />);
-  if (page === 'admin-home') return renderLazy(<AdminDashboard onNavigate={handleNavigate} />);
-  if (page === 'admin-clients') return renderLazy(<AdminClients onNavigate={handleNavigate} />);
-  if (page === 'admin-attorneys') return renderLazy(<AdminAttorneys onNavigate={handleNavigate} />);
+  if (page === 'admin-home') return renderLazy(<AdminDashboard onNavigate={handleNavigate} onSignOut={handleSignOut} />);
+  if (page === 'admin-clients') return renderLazy(<AdminClients onNavigate={handleNavigate} onSignOut={handleSignOut} />);
+  if (page === 'admin-attorneys') return renderLazy(<AdminAttorneys onNavigate={handleNavigate} onSignOut={handleSignOut} />);
   if (page === 'admin-requests') return renderLazy(<AdminRequests onNavigate={handleNavigate} />);
-  if (page === 'admin-consultations') return renderLazy(<AdminConsultations onNavigate={handleNavigate} />);
-  if (page === 'admin-reports') return renderLazy(<AdminReports onNavigate={handleNavigate} />);
-  if (page === 'admin-settings') return renderLazy(<AdminSettingsPage onNavigate={handleNavigate} />);
-  if (page === 'admin-messages') return renderLazy(<AdminMessages onNavigate={handleNavigate} />);
+  if (page === 'admin-consultations') return renderLazy(<AdminConsultations onNavigate={handleNavigate} onSignOut={handleSignOut} />);
+  if (page === 'admin-reports') return renderLazy(<AdminReports onNavigate={handleNavigate} onSignOut={handleSignOut} />);
+  if (page === 'admin-settings') return renderLazy(<AdminSettingsPage onNavigate={handleNavigate} onSignOut={handleSignOut} />);
+  if (page === 'admin-messages') return renderLazy(<AdminMessages onNavigate={handleNavigate} onSignOut={handleSignOut} />);
 
   return <LandingPage onNavigate={handleNavigate} />;
 }

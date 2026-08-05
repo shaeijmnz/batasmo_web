@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { getConsultationSessionStatus } from '../lib/consultationStatus';
+import { performAdminLogout } from '../lib/adminLogout';
 import './AdminTheme.css';
 import './consultations.css';
 
@@ -23,7 +24,7 @@ const formatScheduleForUi = (scheduledAt) => {
 
 const formatDurationLabel = (minutes) => `${Number(minutes || 60)} min`;
 
-const Consultations = ({ onNavigate }) => {
+const Consultations = ({ onNavigate, onSignOut }) => {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('All');
   const [expandedId, setExpandedId] = useState(null);
@@ -234,7 +235,7 @@ const Consultations = ({ onNavigate }) => {
               </div>
             )}
           </div>
-          <button className="logout-btn" onClick={() => handleQuickAction('Logout clicked')}><LogOut size={18} /> {isSidebarOpen && <span>Logout</span>}</button>
+          <button className="logout-btn" onClick={() => performAdminLogout({ onSignOut, onNavigate })}><LogOut size={18} /> {isSidebarOpen && <span>Logout</span>}</button>
         </div>
       </aside>
 

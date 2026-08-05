@@ -7,6 +7,7 @@ import {
 import { supabase } from '../lib/supabaseClient';
 import { readAdminPageCache, writeAdminPageCache } from '../lib/adminPageCache';
 import { adminCreateWalkInClient } from '../lib/userApi';
+import { performAdminLogout } from '../lib/adminLogout';
 import { GMAIL_REQUIRED_MESSAGE, isGmailEmail } from '../lib/validators';
 import './AdminTheme.css';
 import './clients.css';
@@ -25,7 +26,7 @@ const initialsFromName = (name) => {
   return parts.slice(0, 2).map((part) => part[0].toUpperCase()).join('');
 };
 
-const Clients = ({ onNavigate }) => {
+const Clients = ({ onNavigate, onSignOut }) => {
   const clientsBoot = useMemo(() => readAdminPageCache(CLIENTS_CACHE_KEY), []);
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -293,7 +294,7 @@ const Clients = ({ onNavigate }) => {
               </div>
             )}
           </div>
-          <button className="logout-btn" onClick={() => handleQuickAction('Logout clicked')}>
+          <button className="logout-btn" onClick={() => performAdminLogout({ onSignOut, onNavigate })}>
             <LogOut size={18} />
             {isSidebarOpen && <span>Logout</span>}
           </button>

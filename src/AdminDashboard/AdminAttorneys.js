@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { adminCreateWalkInAttorney } from '../lib/userApi';
+import { performAdminLogout } from '../lib/adminLogout';
 import { isValidEmail, VALID_EMAIL_MESSAGE } from '../lib/validators';
 import ManageAvailabilityPanel from '../components/ManageAvailabilityPanel';
 import './AdminTheme.css';
@@ -52,7 +53,7 @@ const resolveAttorneyImage = (name) => {
   return `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'Attorney')}&background=152238&color=ffffff`;
 };
 
-const Attorneys = ({ onNavigate }) => {
+const Attorneys = ({ onNavigate, onSignOut }) => {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [attorneyStats, setAttorneyStats] = useState([
@@ -346,7 +347,7 @@ const Attorneys = ({ onNavigate }) => {
               </div>
             )}
           </div>
-          <button className="logout-btn" onClick={() => handleQuickAction('Logout clicked')}>
+          <button className="logout-btn" onClick={() => performAdminLogout({ onSignOut, onNavigate })}>
             <LogOut size={18} />
             {isSidebarOpen && <span>Logout</span>}
           </button>
