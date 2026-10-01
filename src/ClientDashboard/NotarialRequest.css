@@ -617,10 +617,6 @@
   box-sizing: border-box;
 }
 
-.nr-confirmation-btn--link {
-  margin-bottom: 10px;
-}
-
 .nr-confirmation-btn--ghost {
   margin-top: 10px;
   background: transparent;

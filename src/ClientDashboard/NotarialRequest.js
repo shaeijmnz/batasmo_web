@@ -83,7 +83,6 @@ function NotarialRequest({ onNavigate, profile }) {
   const [notes, setNotes] = useState('');
   const [paymentPhase, setPaymentPhase] = useState(null);
   const [isPaying, setIsPaying] = useState(false);
-  const [pendingCheckoutUrl, setPendingCheckoutUrl] = useState('');
   const [paymentReference, setPaymentReference] = useState('');
   const [showError, setShowError] = useState(false);
   const [errorTitle, setErrorTitle] = useState('Missing Information');
@@ -203,7 +202,6 @@ function NotarialRequest({ onNavigate, profile }) {
     try {
       setIsPaying(true);
       setShowError(false);
-      setPendingCheckoutUrl('');
       setPaymentReference('');
       setPaymentPhase('paying');
 
@@ -220,7 +218,6 @@ function NotarialRequest({ onNavigate, profile }) {
         throw new Error('Checkout URL is missing. Please try again.');
       }
 
-      setPendingCheckoutUrl(checkoutUrl);
       checkoutReady = true;
 
       let checkoutOpened = false;
@@ -233,8 +230,12 @@ function NotarialRequest({ onNavigate, profile }) {
         }
       }
       if (!checkoutOpened) {
-        const fallbackWindow = window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
+        const fallbackWindow = window.open(checkoutUrl, '_blank');
         checkoutOpened = Boolean(fallbackWindow && !fallbackWindow.closed);
+        if (checkoutOpened) checkoutWindowRef.current = fallbackWindow;
+      }
+      if (!checkoutOpened) {
+        throw new Error('The payment tab was blocked. Allow popups for this site, then press Proceed to Payment again.');
       }
 
       const startedAt = Date.now();
@@ -271,7 +272,6 @@ function NotarialRequest({ onNavigate, profile }) {
       }
 
       setPaymentReference(session?.transactionId || '');
-      setPendingCheckoutUrl('');
       setPaymentPhase('paid');
     } catch (error) {
       if (!checkoutReady && checkoutWindow && !checkoutWindow.closed) {
@@ -316,7 +316,6 @@ function NotarialRequest({ onNavigate, profile }) {
       setUploadedFile(null);
       setNotes('');
       setPaymentReference('');
-      setPendingCheckoutUrl('');
       onNavigate('client-notary-tracking');
       pendingTimeoutRef.current = null;
     }, 300);
@@ -512,18 +511,7 @@ function NotarialRequest({ onNavigate, profile }) {
                       </div>
                     </div>
                   </div>
-                  {pendingCheckoutUrl ? (
-                    <a
-                      className="nr-confirmation-btn nr-confirmation-btn--link"
-                      href={pendingCheckoutUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Open PayMongo
-                    </a>
-                  ) : (
-                    <p className="nr-pay-waiting">Preparing secure checkout…</p>
-                  )}
+                  <p className="nr-pay-waiting">The PayMongo tab is open. Finish the payment there.</p>
                   <button type="button" className="nr-confirmation-btn nr-confirmation-btn--ghost" onClick={handleCancelPayment}>
                     Cancel payment
                   </button>
