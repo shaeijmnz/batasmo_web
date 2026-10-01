@@ -135,22 +135,27 @@ function ClientNotaryTracking({ profile }) {
     });
   }, [loadRequests, profile?.id]);
 
+  const paidRequests = useMemo(
+    () => requests.filter((req) => req.payment === 'PAID'),
+    [requests],
+  );
+
   const stats = useMemo(() => {
     let active = 0;
     let pickup = 0;
     let done = 0;
-    requests.forEach((req) => {
+    paidRequests.forEach((req) => {
       const flow = buildWorkflow(req);
       if (flow.phase === 'pickup') pickup += 1;
       else if (flow.phase === 'done') done += 1;
       else if (flow.phase !== 'rejected') active += 1;
     });
-    return { active, pickup, done, total: requests.length };
-  }, [requests]);
+    return { active, pickup, done, total: paidRequests.length };
+  }, [paidRequests]);
 
   const visible = useMemo(
-    () => requests.filter((req) => matchesFilter(req, activeFilter)),
-    [requests, activeFilter],
+    () => paidRequests.filter((req) => matchesFilter(req, activeFilter)),
+    [paidRequests, activeFilter],
   );
 
   return (
@@ -160,13 +165,13 @@ function ClientNotaryTracking({ profile }) {
           <p className="cnt-hero__eyebrow">Notary services</p>
           <h2>Track your notary requests</h2>
           <p>
-            Requests started on the <strong>LegalLink mobile app</strong> appear here after you complete
-            payment. Watch each step from processing to pickup.
+            Only requests that are <strong>paid through PayMongo</strong> appear in this queue.
+            Unpaid checkouts stay out.
           </p>
         </div>
         <div className="cnt-hero__mobile-card">
           <span className="cnt-hero__mobile-badge">New request?</span>
-          <p>Use the mobile app to book notary, upload documents, verify your ID, and pay securely.</p>
+          <p>Upload your document and pay with PayMongo. It enters this queue only after payment is confirmed.</p>
         </div>
       </section>
 
@@ -211,8 +216,7 @@ function ClientNotaryTracking({ profile }) {
           </div>
           <h3>No notary requests yet</h3>
           <p>
-            When you submit a notary request on mobile and payment is completed, it will show up here
-            with live status updates.
+            Nothing unpaid is in this queue. A request shows up here only after PayMongo confirms payment.
           </p>
         </div>
       ) : (

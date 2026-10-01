@@ -3652,9 +3652,16 @@ export async function fetchClientNotarialRequests(userId) {
   if (requestsRes.error) throw requestsRes.error
   if (transactionsRes.error) throw transactionsRes.error
 
-  const paymentByRequest = new Map(
-    (transactionsRes.data || []).map((tx) => [tx.notarial_request_id, tx.payment_status]),
-  )
+  const paymentByRequest = new Map()
+  for (const tx of transactionsRes.data || []) {
+    const requestId = tx.notarial_request_id
+    if (!requestId) continue
+    const status = String(tx.payment_status || '').toLowerCase()
+    const isPaid = status === 'paid' || status === 'succeeded' || status === 'success'
+    if (isPaid || !paymentByRequest.has(requestId)) {
+      paymentByRequest.set(requestId, isPaid ? 'paid' : status || 'unpaid')
+    }
+  }
 
   return (requestsRes.data || []).map((item) => {
     const status = normalizeNotarialStatus(item.status)
@@ -5707,30 +5714,8 @@ export async function createNotarialRequest({ clientId, serviceType, preferredDa
 
   const requestId = insertResult.data?.id || null
 
-  // Notify all verified attorneys so a new notarial request is visible in
-  // every attorney's bell as soon as the client submits it.
-  try {
-    const [clientName, attorneyIds] = await Promise.all([
-      resolveClientDisplayName(clientId),
-      fetchVerifiedAttorneyUserIds(),
-    ])
-    await insertNotificationForAttorneys({
-      attorneyIds,
-      title: 'New Notarial Request',
-      body: `${clientName} submitted a ${serviceType || 'notarial'} request.`,
-      type: 'notarial_update',
-    })
-
-    await notifyAdminsWithBodyMarker({
-      title: 'New notarial request',
-      body: `${clientName} submitted a ${serviceType || 'notarial'} request.`,
-      type: 'admin_general',
-      marker: `[adminnewnot:${clientId}:${Date.now()}]`,
-    })
-  } catch (notifyError) {
-    console.warn('[notarial] attorney notify failed', notifyError)
-  }
-
+  // Stay out of Notary Status and the admin queue until PayMongo marks the
+  // transaction paid. Notifications are sent from the payment backend then.
   return { requestId, documentUrl }
 }
 

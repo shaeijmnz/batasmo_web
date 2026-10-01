@@ -708,6 +708,128 @@ const supabaseConfirmAppointment = async ({ appointmentId }) => {
   }
 }
 
+const isPaidPaymentStatus = (status) => {
+  const value = String(status || '').toLowerCase()
+  return value === 'paid' || value === 'succeeded' || value === 'success'
+}
+
+const notifyNotarialRequestEnteredQueue = async ({ requestId }) => {
+  if (!requestId) return
+  const marker = `[notaryqueue:${requestId}]`
+  const existing = await supabaseRestGetMany({
+    table: 'notifications',
+    query: new URLSearchParams({
+      type: 'eq.admin_general',
+      body: `ilike.*${marker}*`,
+      limit: '1',
+    }).toString(),
+  })
+  if (existing.length) return
+
+  const request = await supabaseSelectSingle({
+    table: 'notarial_requests',
+    query: new URLSearchParams({ id: `eq.${requestId}` }).toString(),
+  })
+  if (!request) return
+
+  let clientName = 'A client'
+  if (request.client_id) {
+    const client = await supabaseSelectSingle({
+      table: 'profiles',
+      query: new URLSearchParams({ id: `eq.${request.client_id}` }).toString(),
+    })
+    clientName = client?.full_name || clientName
+  }
+
+  const service = request.service_type || 'notarial request'
+  const body = `${clientName} paid for ${service}. It is now in the notary queue. ${marker}`
+  const admins = await supabaseRestGetMany({
+    table: 'profiles',
+    query: new URLSearchParams({
+      or: '(role.eq.Admin,role.eq.admin)',
+      limit: '50',
+    }).toString(),
+  })
+
+  for (const admin of admins) {
+    if (!admin?.id) continue
+    await supabaseInsertNotification({
+      userId: admin.id,
+      title: 'Notarial payment received',
+      body,
+      type: 'admin_general',
+    })
+  }
+
+  if (request.attorney_id) {
+    await supabaseInsertNotification({
+      userId: request.attorney_id,
+      title: 'Notarial payment received',
+      body,
+      type: 'notarial_update',
+    })
+  }
+}
+
+const clearUnpaidNotarialQueueOnce = async () => {
+  const flagKey = 'notarial_unpaid_queue_cleared_v1'
+  const existingFlag = await supabaseSelectSingle({
+    table: 'app_config',
+    query: new URLSearchParams({ key: `eq.${flagKey}` }).toString(),
+  })
+  if (existingFlag) return
+
+  const transactions = await supabaseRestGetMany({
+    table: 'transactions',
+    query: new URLSearchParams({
+      notarial_request_id: 'not.is.null',
+      limit: '1000',
+    }).toString(),
+  })
+  const paidIds = new Set(
+    transactions
+      .filter((tx) => isPaidPaymentStatus(tx.payment_status))
+      .map((tx) => tx.notarial_request_id)
+      .filter(Boolean),
+  )
+
+  const pending = await supabaseRestGetMany({
+    table: 'notarial_requests',
+    query: new URLSearchParams({
+      status: 'eq.pending',
+      limit: '1000',
+    }).toString(),
+  })
+  const unpaidIds = pending.map((row) => row.id).filter((id) => id && !paidIds.has(id))
+
+  for (let index = 0; index < unpaidIds.length; index += 40) {
+    const batch = unpaidIds.slice(index, index + 40)
+    await supabaseRestPatch({
+      table: 'notarial_requests',
+      query: new URLSearchParams({ id: `in.(${batch.join(',')})` }).toString(),
+      body: { status: 'cancelled', updated_at: new Date().toISOString() },
+    })
+  }
+
+  const flagResponse = await fetch(`${SUPABASE_URL}/rest/v1/app_config`, {
+    method: 'POST',
+    headers: {
+      ...supabaseRestHeaders(),
+      Prefer: 'resolution=merge-duplicates,return=minimal',
+    },
+    body: JSON.stringify({
+      key: flagKey,
+      value: { cleared_at: new Date().toISOString(), cancelled: unpaidIds.length },
+    }),
+  })
+  if (!flagResponse.ok) {
+    const payload = await flagResponse.json().catch(() => null)
+    throw new Error(payload?.message || payload?.error || `Failed to store notary queue clear flag (${flagResponse.status})`)
+  }
+
+  console.log('[notarial] cleared unpaid queue', { cancelled: unpaidIds.length })
+}
+
 const supabaseUpdateNotarialRequestTimestamp = async ({ requestId }) => {
   if (!requestId) return
   const query = new URLSearchParams({ id: `eq.${requestId}` }).toString()
@@ -2827,6 +2949,13 @@ app.get('/payments/appointments/status/:transactionId', async (req, res) => {
 
       if (effectiveStatus === 'paid' && tx.notarial_request_id) {
         await supabaseUpdateNotarialRequestTimestamp({ requestId: tx.notarial_request_id })
+        if (previousStatus !== 'paid') {
+          try {
+            await notifyNotarialRequestEnteredQueue({ requestId: tx.notarial_request_id })
+          } catch (queueNotifyError) {
+            console.warn('[payments] notarial queue notify failed', queueNotifyError?.message || queueNotifyError)
+          }
+        }
       }
 
       if (effectiveStatus === 'paid' && previousStatus !== 'paid' && tx.client_id) {
@@ -3006,6 +3135,9 @@ app.get('/health', (req, res) => {
 // ============================================================================
 
 app.listen(PORT, () => {
+  clearUnpaidNotarialQueueOnce().catch((error) => {
+    console.warn('[notarial] unpaid queue clear failed', error?.message || error)
+  })
   console.log(`
 ╔═════════════════════════════════════════════════════════╗
 ║  BatasMo Chatbot Backend (Gemini 2.5)                  ║
