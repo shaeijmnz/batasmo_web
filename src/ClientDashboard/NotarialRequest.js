@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import './NotarialRequest.css';
-import { createNotarialRequest } from '../lib/userApi';
+import {
+  createNotarialRequest,
+  getNotarialPaymentStatus,
+  payForNotarialRequestViaPaymongo,
+  replaceClientNotarialRequestDocument,
+} from '../lib/userApi';
 
 const MenuIcon = () => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -66,15 +71,29 @@ const notarialServices = [
   { id: 1, name: 'Affidavit of Loss', description: 'Prepare and notarize an affidavit for lost documents or IDs.', amount: 1 },
 ];
 
+const MAX_NOTARIAL_FILE_BYTES = 10 * 1024 * 1024;
+
+const formatPeso = (amount) =>
+  `PHP ${Number(amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
 function NotarialRequest({ onNavigate, profile }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [selectedService, setSelectedService] = useState(null);
   const [uploadedFile, setUploadedFile] = useState(null);
   const [notes, setNotes] = useState('');
-  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [paymentPhase, setPaymentPhase] = useState(null);
+  const [isPaying, setIsPaying] = useState(false);
+  const [pendingCheckoutUrl, setPendingCheckoutUrl] = useState('');
+  const [paymentReference, setPaymentReference] = useState('');
   const [showError, setShowError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const pendingTimeoutRef = useRef(null);
+  const cancelRequestedRef = useRef(false);
+  const checkoutWindowRef = useRef(null);
+  const draftRequestRef = useRef(null);
+
+  const selectedServiceRow = notarialServices.find((item) => item.id === selectedService) || null;
+  const payableAmount = Number(selectedServiceRow?.amount || 0);
 
   useEffect(() => {
     return () => {
@@ -87,37 +106,195 @@ function NotarialRequest({ onNavigate, profile }) {
   }, []);
 
   const handleServiceToggle = (serviceId) => {
+    if (isPaying) return;
     setSelectedService(selectedService === serviceId ? null : serviceId);
   };
 
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
-    if (file) {
-      setUploadedFile(file);
+    if (!file) return;
+    if (file.size > MAX_NOTARIAL_FILE_BYTES) {
+      setUploadedFile(null);
+      setErrorMessage('File is too large. Please keep it under 10 MB.');
+      setShowError(true);
+      e.target.value = '';
+      return;
     }
+    setUploadedFile(file);
+  };
+
+  const ensureDraftRequest = async () => {
+    const existing = draftRequestRef.current;
+    if (existing?.requestId && existing.fileName === uploadedFile.name && existing.serviceType === selectedServiceRow.name) {
+      return existing.requestId;
+    }
+
+    if (existing?.requestId && existing.serviceType === selectedServiceRow.name) {
+      await replaceClientNotarialRequestDocument({
+        requestId: existing.requestId,
+        file: uploadedFile,
+        documentName: uploadedFile.name,
+      });
+      draftRequestRef.current = {
+        requestId: existing.requestId,
+        fileName: uploadedFile.name,
+        serviceType: selectedServiceRow.name,
+      };
+      return existing.requestId;
+    }
+
+    const created = await createNotarialRequest({
+      clientId: profile?.id,
+      serviceType: selectedServiceRow?.name || 'Notarial Service',
+      notes,
+      file: uploadedFile,
+      documentName: uploadedFile.name,
+      amount: payableAmount,
+    });
+    const requestId = created?.requestId || null;
+    if (!requestId) {
+      throw new Error('Request was saved but payment could not start. Please try again.');
+    }
+    draftRequestRef.current = {
+      requestId,
+      fileName: uploadedFile.name,
+      serviceType: selectedServiceRow.name,
+    };
+    return requestId;
   };
 
   const handleSubmit = async () => {
-    if (!profile?.id || selectedService === null || !uploadedFile) {
+    if (!profile?.id || !selectedServiceRow || !uploadedFile) {
       setErrorMessage('Please select one service and upload a file');
       setShowError(true);
       return;
     }
+    if (!Number.isFinite(payableAmount) || payableAmount <= 0) {
+      setErrorMessage('This service has no payable amount.');
+      setShowError(true);
+      return;
+    }
+
+    let checkoutWindow = null;
+    let checkoutReady = false;
+    cancelRequestedRef.current = false;
+    checkoutWindowRef.current = null;
 
     try {
-      const selectedServiceRow = notarialServices.find((item) => item.id === selectedService);
-      await createNotarialRequest({
-        clientId: profile?.id,
-        serviceType: selectedServiceRow?.name || 'Notarial Service',
-        notes,
-        file: uploadedFile,
-        documentName: uploadedFile.name,
-        amount: selectedServiceRow?.amount || 1,
+      checkoutWindow = window.open('', '_blank');
+      checkoutWindowRef.current = checkoutWindow;
+      if (checkoutWindow) {
+        try {
+          checkoutWindow.document.title = 'LegalLink Payment';
+          checkoutWindow.document.body.innerHTML =
+            '<p style="font-family: sans-serif; padding: 16px;">Preparing PayMongo checkout…</p>';
+        } catch {
+          // Ignore restricted document access.
+        }
+      }
+    } catch {
+      checkoutWindow = null;
+    }
+
+    try {
+      setIsPaying(true);
+      setShowError(false);
+      setPendingCheckoutUrl('');
+      setPaymentReference('');
+      setPaymentPhase('paying');
+
+      const requestId = await ensureDraftRequest();
+      const session = await payForNotarialRequestViaPaymongo({
+        requestId,
+        clientId: profile.id,
+        amount: payableAmount,
+        method: 'qrph',
       });
-      setShowConfirmation(true);
+
+      const checkoutUrl = String(session?.checkoutUrl || '').trim();
+      if (!checkoutUrl) {
+        throw new Error('Checkout URL is missing. Please try again.');
+      }
+
+      setPendingCheckoutUrl(checkoutUrl);
+      checkoutReady = true;
+
+      let checkoutOpened = false;
+      if (checkoutWindow && !checkoutWindow.closed) {
+        try {
+          checkoutWindow.location.replace(checkoutUrl);
+          checkoutOpened = true;
+        } catch {
+          checkoutOpened = false;
+        }
+      }
+      if (!checkoutOpened) {
+        const fallbackWindow = window.open(checkoutUrl, '_blank', 'noopener,noreferrer');
+        checkoutOpened = Boolean(fallbackWindow && !fallbackWindow.closed);
+      }
+
+      const startedAt = Date.now();
+      const timeoutMs = 5 * 60 * 1000;
+      let paid = false;
+      let pollDelayMs = 2500;
+      const waitForNextPoll = (delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs));
+
+      while (Date.now() - startedAt < timeoutMs) {
+        if (cancelRequestedRef.current) {
+          throw new Error('Payment window closed. Your file is saved — open PayMongo again to finish payment.');
+        }
+
+        await waitForNextPoll(pollDelayMs);
+
+        if (cancelRequestedRef.current) {
+          throw new Error('Payment window closed. Your file is saved — open PayMongo again to finish payment.');
+        }
+
+        const statusResult = await getNotarialPaymentStatus(session.transactionId);
+        const status = String(statusResult?.status || 'pending').toLowerCase();
+        if (status === 'paid') {
+          paid = true;
+          break;
+        }
+        if (status === 'failed') {
+          throw new Error('Payment failed. Please try again.');
+        }
+        pollDelayMs = Math.min(6000, pollDelayMs + 500);
+      }
+
+      if (!paid) {
+        throw new Error('Payment is still pending. Keep the PayMongo tab open and finish checkout, then press Proceed to Payment again.');
+      }
+
+      setPaymentReference(session?.transactionId || '');
+      setPendingCheckoutUrl('');
+      setPaymentPhase('paid');
     } catch (error) {
-      setErrorMessage(error.message || 'Failed to submit request.');
+      if (!checkoutReady && checkoutWindow && !checkoutWindow.closed) {
+        try {
+          checkoutWindow.close();
+        } catch {
+          // ignore
+        }
+      }
+      setPaymentPhase(null);
+      setErrorMessage(error?.message || 'Unable to open PayMongo. Please try again.');
       setShowError(true);
+    } finally {
+      cancelRequestedRef.current = false;
+      setIsPaying(false);
+    }
+  };
+
+  const handleCancelPayment = () => {
+    cancelRequestedRef.current = true;
+    const checkoutWindow = checkoutWindowRef.current;
+    if (checkoutWindow && !checkoutWindow.closed) {
+      try {
+        checkoutWindow.close();
+      } catch {
+        // ignore
+      }
     }
   };
 
@@ -126,12 +303,16 @@ function NotarialRequest({ onNavigate, profile }) {
   };
 
   const closeConfirmation = () => {
-    setShowConfirmation(false);
+    if (paymentPhase !== 'paid') return;
+    setPaymentPhase(null);
     pendingTimeoutRef.current = setTimeout(() => {
+      draftRequestRef.current = null;
       setSelectedService(null);
       setUploadedFile(null);
       setNotes('');
-      onNavigate('my-notarial-requests');
+      setPaymentReference('');
+      setPendingCheckoutUrl('');
+      onNavigate('client-notary-tracking');
       pendingTimeoutRef.current = null;
     }, 300);
   };
@@ -179,7 +360,7 @@ function NotarialRequest({ onNavigate, profile }) {
       <main className="nr-main">
         <div className="nr-header">
           <h1>Request Notarial Service</h1>
-          <p>Choose the notarial services you need and upload your documents</p>
+          <p>Choose a service, attach your file, then pay with PayMongo.</p>
         </div>
 
         <div className="nr-container">
@@ -242,10 +423,36 @@ function NotarialRequest({ onNavigate, profile }) {
             />
           </div>
 
+          {selectedServiceRow && uploadedFile ? (
+            <div className="nr-pay-summary">
+              <div className="nr-pay-summary__row">
+                <span>Service</span>
+                <strong>{selectedServiceRow.name}</strong>
+              </div>
+              <div className="nr-pay-summary__row">
+                <span>Document</span>
+                <strong>{uploadedFile.name}</strong>
+              </div>
+              <div className="nr-pay-summary__row nr-pay-summary__row--total">
+                <span>Amount due</span>
+                <strong>{formatPeso(payableAmount)}</strong>
+              </div>
+              <p className="nr-pay-summary__note">
+                GCash, Maya, and QR Ph are available on the PayMongo page.
+              </p>
+            </div>
+          ) : null}
+
           {/* Submit Button */}
           <div className="nr-actions">
-            <button className="nr-btn nr-btn--submit" onClick={handleSubmit}>Submit Notarial Service Request</button>
-            <button className="nr-btn nr-btn--cancel" onClick={() => onNavigate('home-logged')}>Cancel</button>
+            <button
+              className="nr-btn nr-btn--submit"
+              onClick={handleSubmit}
+              disabled={isPaying || !selectedServiceRow || !uploadedFile}
+            >
+              {isPaying ? 'Opening PayMongo…' : 'Proceed to Payment'}
+            </button>
+            <button className="nr-btn nr-btn--cancel" onClick={() => onNavigate('home-logged')} disabled={isPaying}>Cancel</button>
           </div>
         </div>
       </main>
@@ -266,47 +473,101 @@ function NotarialRequest({ onNavigate, profile }) {
         </div>
       )}
 
-      {/* Confirmation Modal */}
-      {showConfirmation && (
-        <div className="nr-confirmation-overlay" onClick={closeConfirmation}>
+      {/* PayMongo checkout / paid confirmation */}
+      {paymentPhase && (
+        <div className="nr-confirmation-overlay" onClick={paymentPhase === 'paid' ? closeConfirmation : undefined}>
           <div className="nr-confirmation-modal" onClick={(e) => e.stopPropagation()}>
             <div className="nr-confirmation-content">
-              <div className="nr-confirmation-icon-wrapper">
-                <div className="nr-confirmation-icon">✓</div>
-              </div>
-              
-              <h2 className="nr-confirmation-title">Request Submitted!</h2>
-              
-              <div className="nr-confirmation-message">
-                <p>Your notarial service request for <strong>{notarialServices.find(s => s.id === selectedService)?.name}</strong> has been successfully submitted.</p>
-              </div>
-
-              <div className="nr-confirmation-what-next">
-                <h4 className="nr-what-next-title">What Happens Next?</h4>
-                <ul className="nr-what-next-list">
-                  <li>Your request status is now <strong>Pending</strong> and ready for payment</li>
-                  <li>After payment, it will appear in the admin notarial queue for processing</li>
-                  <li>You can track status updates in My Notarial Requests</li>
-                </ul>
-              </div>
-
-              <div className="nr-request-details">
-                <h4 className="nr-details-title">Request Details:</h4>
-                <div className="nr-details-list">
-                  <div className="nr-detail-item">
-                    <span className="nr-detail-label">Service:</span>
-                    <span className="nr-detail-value">
-                      {notarialServices.find(s => s.id === selectedService)?.name}
-                    </span>
+              {paymentPhase === 'paying' ? (
+                <>
+                  <div className="nr-confirmation-icon-wrapper">
+                    <div className="nr-confirmation-icon nr-confirmation-icon--pay">₱</div>
                   </div>
-                  <div className="nr-detail-item">
-                    <span className="nr-detail-label">Document:</span>
-                    <span className="nr-detail-value">{uploadedFile?.name}</span>
+                  <h2 className="nr-confirmation-title">Pay with PayMongo</h2>
+                  <div className="nr-confirmation-message">
+                    <p>
+                      Finish payment for <strong>{selectedServiceRow?.name}</strong> in the PayMongo tab.
+                      This page will update when the payment is confirmed.
+                    </p>
                   </div>
-                </div>
-              </div>
-
-              <button className="nr-confirmation-btn" onClick={closeConfirmation}>Go to My Notarial Requests</button>
+                  <div className="nr-request-details">
+                    <h4 className="nr-details-title">Payment details</h4>
+                    <div className="nr-details-list">
+                      <div className="nr-detail-item">
+                        <span className="nr-detail-label">Service</span>
+                        <span className="nr-detail-value">{selectedServiceRow?.name}</span>
+                      </div>
+                      <div className="nr-detail-item">
+                        <span className="nr-detail-label">Document</span>
+                        <span className="nr-detail-value">{uploadedFile?.name}</span>
+                      </div>
+                      <div className="nr-detail-item">
+                        <span className="nr-detail-label">Amount</span>
+                        <span className="nr-detail-value">{formatPeso(payableAmount)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  {pendingCheckoutUrl ? (
+                    <a
+                      className="nr-confirmation-btn nr-confirmation-btn--link"
+                      href={pendingCheckoutUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Open PayMongo
+                    </a>
+                  ) : (
+                    <p className="nr-pay-waiting">Preparing secure checkout…</p>
+                  )}
+                  <button type="button" className="nr-confirmation-btn nr-confirmation-btn--ghost" onClick={handleCancelPayment}>
+                    Cancel payment
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="nr-confirmation-icon-wrapper">
+                    <div className="nr-confirmation-icon">✓</div>
+                  </div>
+                  <h2 className="nr-confirmation-title">Payment successful</h2>
+                  <div className="nr-confirmation-message">
+                    <p>
+                      Your notarial request for <strong>{selectedServiceRow?.name}</strong> is paid and now in the admin queue.
+                    </p>
+                  </div>
+                  <div className="nr-confirmation-what-next">
+                    <h4 className="nr-what-next-title">What happens next</h4>
+                    <ul className="nr-what-next-list">
+                      <li>PayMongo confirmed your payment</li>
+                      <li>The request is in the admin notarial queue for processing</li>
+                      <li>Track updates under Notary Status</li>
+                    </ul>
+                  </div>
+                  <div className="nr-request-details">
+                    <h4 className="nr-details-title">Receipt</h4>
+                    <div className="nr-details-list">
+                      <div className="nr-detail-item">
+                        <span className="nr-detail-label">Service</span>
+                        <span className="nr-detail-value">{selectedServiceRow?.name}</span>
+                      </div>
+                      <div className="nr-detail-item">
+                        <span className="nr-detail-label">Document</span>
+                        <span className="nr-detail-value">{uploadedFile?.name}</span>
+                      </div>
+                      <div className="nr-detail-item">
+                        <span className="nr-detail-label">Amount paid</span>
+                        <span className="nr-detail-value">{formatPeso(payableAmount)}</span>
+                      </div>
+                      {paymentReference ? (
+                        <div className="nr-detail-item">
+                          <span className="nr-detail-label">Reference</span>
+                          <span className="nr-detail-value">{paymentReference}</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                  <button className="nr-confirmation-btn" onClick={closeConfirmation}>Go to Notary Status</button>
+                </>
+              )}
             </div>
           </div>
         </div>

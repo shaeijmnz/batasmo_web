@@ -393,14 +393,14 @@
 
 .nr-btn--submit {
   flex: 1;
-  background: var(--ui-accent);
-  color: #fff;
-  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.3);
+  background: linear-gradient(135deg, #d4af37 0%, #e4c46a 100%);
+  color: #152238;
+  box-shadow: 0 6px 20px rgba(212, 175, 55, 0.28);
 }
 
 .nr-btn--submit:hover {
   transform: translateY(-2px);
-  box-shadow: 0 10px 30px rgba(37, 99, 235, 0.4);
+  box-shadow: 0 10px 30px rgba(212, 175, 55, 0.38);
 }
 
 .nr-btn--cancel {
@@ -434,14 +434,16 @@
 }
 
 .nr-confirmation-modal {
-  background: #fff;
+  background: #152238;
+  border: 1px solid rgba(212, 175, 55, 0.22);
   border-radius: 24px;
   width: calc(100% - 40px);
   max-width: 550px;
   max-height: 85vh;
   overflow-y: auto;
-  box-shadow: 0 30px 90px rgba(0,0,0,0.4);
+  box-shadow: 0 30px 90px rgba(0,0,0,0.45);
   animation: scaleIn .3s ease-out;
+  color: #f5f4f1;
 }
 
 @keyframes scaleIn {
@@ -489,14 +491,14 @@
 
 .nr-confirmation-title {
   font-size: 1.8rem;
-  font-weight: 800;
-  color: #1a1a2e;
+  font-weight: 700;
+  color: #f5f4f1 !important;
   margin: 0 0 12px 0;
 }
 
 .nr-confirmation-message {
   font-size: 0.95rem;
-  color: #6b7280;
+  color: #b8c2d1;
   margin-bottom: 24px;
   line-height: 1.6;
 }
@@ -506,8 +508,8 @@
 }
 
 .nr-confirmation-what-next {
-  background: #fefce8;
-  border-left: 4px solid #f5a623;
+  background: rgba(212, 175, 55, 0.12);
+  border-left: 4px solid #d4af37;
   border-radius: 8px;
   padding: 20px;
   margin-bottom: 24px;
@@ -517,7 +519,7 @@
 .nr-what-next-title {
   font-size: 0.95rem;
   font-weight: 700;
-  color: #1a1a2e;
+  color: #f5f4f1 !important;
   margin: 0 0 12px 0;
 }
 
@@ -529,7 +531,7 @@
 
 .nr-what-next-list li {
   font-size: 0.9rem;
-  color: #6b7280;
+  color: #b8c2d1;
   margin-bottom: 8px;
   line-height: 1.5;
 }
@@ -546,18 +548,18 @@
 }
 
 .nr-request-details {
-  background: #f9fafb;
+  background: rgba(11, 19, 33, 0.45);
   border-radius: 8px;
   padding: 20px;
   margin-bottom: 28px;
   text-align: left;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #2c4266;
 }
 
 .nr-details-title {
   font-size: 0.95rem;
   font-weight: 700;
-  color: #1a1a2e;
+  color: #f5f4f1 !important;
   margin: 0 0 16px 0;
 }
 
@@ -571,8 +573,9 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16px;
   padding-bottom: 12px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid #2c4266;
 }
 
 .nr-detail-item:last-child {
@@ -583,21 +586,23 @@
 .nr-detail-label {
   font-size: 0.9rem;
   font-weight: 600;
-  color: #6b7280;
+  color: #b8c2d1;
 }
 
 .nr-detail-value {
   font-size: 0.9rem;
   font-weight: 600;
-  color: #1a1a2e;
+  color: #f5f4f1;
+  text-align: right;
+  word-break: break-word;
 }
 
 .nr-confirmation-btn {
   width: 100%;
   max-width: 300px;
   padding: 14px 28px;
-  background: var(--ui-accent);
-  color: #fff;
+  background: linear-gradient(135deg, #d4af37 0%, #e4c46a 100%);
+  color: #152238;
   border: none;
   border-radius: 10px;
   font-size: 0.95rem;
@@ -606,12 +611,85 @@
   transition: all .2s;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.3);
+  box-shadow: 0 6px 20px rgba(212, 175, 55, 0.28);
+  display: inline-block;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
+.nr-confirmation-btn--link {
+  margin-bottom: 10px;
+}
+
+.nr-confirmation-btn--ghost {
+  margin-top: 10px;
+  background: transparent;
+  color: #f5f4f1;
+  border: 1px solid #2c4266;
+  box-shadow: none;
+}
+
+.nr-confirmation-icon--pay {
+  background: linear-gradient(135deg, #d4af37 0%, #e4c46a 100%);
+  color: #152238;
+  font-size: 2.2rem;
+  box-shadow: 0 10px 30px rgba(212, 175, 55, 0.28);
+}
+
+.nr-pay-waiting {
+  color: #b8c2d1;
+  margin: 0 0 12px;
+}
+
+.nr-pay-summary {
+  margin: 8px 0 18px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: rgba(11, 19, 33, 0.35);
+  border: 1px solid rgba(212, 175, 55, 0.22);
+}
+
+.nr-pay-summary__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+  color: #b8c2d1;
+  font-size: 0.92rem;
+}
+
+.nr-pay-summary__row strong {
+  color: #f5f4f1;
+  font-weight: 600;
+  text-align: right;
+  word-break: break-word;
+}
+
+.nr-pay-summary__row--total strong {
+  color: #e4c46a;
+  font-size: 1.05rem;
+}
+
+.nr-pay-summary__note {
+  margin: 8px 0 0;
+  color: #7d8da6;
+  font-size: 0.82rem;
+}
+
+.nr-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .nr-confirmation-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 10px 30px rgba(37, 99, 235, 0.4);
+  box-shadow: 0 10px 30px rgba(212, 175, 55, 0.35);
+}
+
+.nr-confirmation-btn--ghost:hover {
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: none;
 }
 
 /* Chat FAB */
@@ -684,7 +762,7 @@
 .nr-error-title {
   font-size: 1.5rem;
   font-weight: 800;
-  color: #1a1a2e;
+  color: #152238 !important;
   margin: 0 0 12px 0;
 }
 
