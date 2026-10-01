@@ -86,6 +86,7 @@ function NotarialRequest({ onNavigate, profile }) {
   const [pendingCheckoutUrl, setPendingCheckoutUrl] = useState('');
   const [paymentReference, setPaymentReference] = useState('');
   const [showError, setShowError] = useState(false);
+  const [errorTitle, setErrorTitle] = useState('Missing Information');
   const [errorMessage, setErrorMessage] = useState('');
   const pendingTimeoutRef = useRef(null);
   const cancelRequestedRef = useRef(false);
@@ -115,6 +116,7 @@ function NotarialRequest({ onNavigate, profile }) {
     if (!file) return;
     if (file.size > MAX_NOTARIAL_FILE_BYTES) {
       setUploadedFile(null);
+      setErrorTitle('Missing Information');
       setErrorMessage('File is too large. Please keep it under 10 MB.');
       setShowError(true);
       e.target.value = '';
@@ -165,11 +167,13 @@ function NotarialRequest({ onNavigate, profile }) {
 
   const handleSubmit = async () => {
     if (!profile?.id || !selectedServiceRow || !uploadedFile) {
+      setErrorTitle('Missing Information');
       setErrorMessage('Please select one service and upload a file');
       setShowError(true);
       return;
     }
     if (!Number.isFinite(payableAmount) || payableAmount <= 0) {
+      setErrorTitle('Missing Information');
       setErrorMessage('This service has no payable amount.');
       setShowError(true);
       return;
@@ -278,6 +282,7 @@ function NotarialRequest({ onNavigate, profile }) {
         }
       }
       setPaymentPhase(null);
+      setErrorTitle('Payment not completed');
       setErrorMessage(error?.message || 'Unable to open PayMongo. Please try again.');
       setShowError(true);
     } finally {
@@ -465,7 +470,7 @@ function NotarialRequest({ onNavigate, profile }) {
               <div className="nr-error-icon-wrapper">
                 <div className="nr-error-icon">⚠</div>
               </div>
-              <h2 className="nr-error-title">Missing Information</h2>
+              <h2 className="nr-error-title">{errorTitle}</h2>
               <p className="nr-error-message">{errorMessage}</p>
               <button className="nr-error-btn" onClick={closeError}>OK</button>
             </div>
