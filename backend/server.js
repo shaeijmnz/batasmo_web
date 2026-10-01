@@ -811,7 +811,7 @@ const clearUnpaidNotarialQueueOnce = async () => {
     })
   }
 
-  const flagResponse = await fetch(`${SUPABASE_URL}/rest/v1/app_config`, {
+  const flagResponse = await fetch(`${SUPABASE_URL}/rest/v1/app_config?on_conflict=key`, {
     method: 'POST',
     headers: {
       ...supabaseRestHeaders(),
