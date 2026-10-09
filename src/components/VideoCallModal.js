@@ -235,7 +235,7 @@ const buildTwoParticipantLayout = (participantIds, localParticipantId) => {
   };
 };
 
-function MeetingView({ meetingId, onLeave }) {
+function MeetingView({ meetingId, onLeave, onJoined }) {
   const [joinState, setJoinState] = useState('IDLE');
   const [joinError, setJoinError] = useState('');
   const [participantLayoutEpoch, setParticipantLayoutEpoch] = useState(0);
@@ -264,6 +264,7 @@ function MeetingView({ meetingId, onLeave }) {
       retryCountRef.current = 0;
       setJoinState('JOINED');
       bumpParticipantLayout();
+      if (typeof onJoined === 'function') onJoined();
     },
     onMeetingLeft: onLeave,
     onParticipantJoined: () => {
@@ -449,6 +450,7 @@ export default function VideoCallModal({ meetingId, token, participantName, onCl
   const [tracksReady, setTracksReady] = useState(false);
   const [tracksError, setTracksError] = useState('');
   const trackCleanupRef = useRef(null);
+  const hasJoinedMeetingRef = useRef(false);
 
   // Build HD tracks before mounting MeetingProvider so the participant joins
   // directly at the preferred quality, instead of falling back to SDK defaults.
@@ -497,7 +499,11 @@ export default function VideoCallModal({ meetingId, token, participantName, onCl
       trackCleanupRef.current();
       trackCleanupRef.current = null;
     }
-    if (typeof onClose === 'function') onClose();
+    if (typeof onClose === 'function') onClose({ joined: hasJoinedMeetingRef.current });
+  };
+
+  const handleJoined = () => {
+    hasJoinedMeetingRef.current = true;
   };
 
   return (
@@ -533,7 +539,7 @@ export default function VideoCallModal({ meetingId, token, participantName, onCl
               joinWithoutUserInteraction={false}
               reinitialiseMeetingOnConfigChange={false}
             >
-              <MeetingView meetingId={meetingId} onLeave={handleLeave} />
+              <MeetingView meetingId={meetingId} onLeave={handleLeave} onJoined={handleJoined} />
             </MeetingProvider>
           ) : (
             <div className="vc-connecting">
