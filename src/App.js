@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
-import { supabase } from './lib/supabaseClient';
+import { supabase, getSharedSession, isAuthLockError } from './lib/supabaseClient';
 import {
   ensureAppConfigLoaded,
   getCurrentSessionProfile,
@@ -328,7 +328,15 @@ function App() {
 
     loadSession();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+    // Supabase holds the auth lock while this callback runs; awaiting other auth calls
+    // inside it deadlocks until the lock is stolen, so the work is deferred out of the lock.
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      setTimeout(() => {
+        handleAuthStateChange(event, session);
+      }, 0);
+    });
+
+    async function handleAuthStateChange(event, session) {
       if (!isMounted) return;
 
       try {
@@ -405,7 +413,7 @@ function App() {
       } catch (listenerError) {
         console.error('[auth] onAuthStateChange listener failed', listenerError)
       }
-    });
+    }
 
     return () => {
       isMounted = false;
@@ -453,9 +461,10 @@ function App() {
         const {
           data: { session },
           error,
-        } = await supabase.auth.getSession()
+        } = await getSharedSession()
 
         if (disposed) return
+        if (error && isAuthLockError(error)) return
         if (error) {
           console.error('[auth] periodic session check failed', error)
           forceResetToLogin('periodic session check failed')
@@ -466,7 +475,7 @@ function App() {
           forceResetToLogin('periodic session missing user')
         }
       } catch (error) {
-        if (disposed) return
+        if (disposed || isAuthLockError(error)) return
         console.error('[auth] periodic session check crashed', error)
         forceResetToLogin('periodic session check crashed')
       }
@@ -641,7 +650,7 @@ function App() {
       }
 
       let cancelled = false
-      supabase.auth.getSession().then(({ data: { session } }) => {
+      getSharedSession().then(({ data: { session } }) => {
         if (cancelled) return
         if (!session?.user) return
 
