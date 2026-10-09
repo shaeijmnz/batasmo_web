@@ -2882,41 +2882,6 @@ async function resolveClientDisplayName(clientId) {
   }
 }
 
-/** Fan-out helper: insert one notification row per attorney user_id. */
-async function insertNotificationForAttorneys({ attorneyIds, title, body, type = 'general' }) {
-  const unique = [...new Set((attorneyIds || []).filter(Boolean))]
-  if (!unique.length) return
-
-  const nowIso = new Date().toISOString()
-  const rows = unique.map((userId) => ({
-    user_id: userId,
-    title: String(title || 'Notification'),
-    body: String(body || ''),
-    type: String(type || 'general'),
-    is_read: false,
-    created_at: nowIso,
-  }))
-
-  const { error } = await supabase.from('notifications').insert(rows)
-  if (error) {
-    console.warn('[notify] attorney fan-out insert failed', error)
-  }
-}
-
-/** Lookup verified attorneys so we can broadcast notarial-request alerts. */
-async function fetchVerifiedAttorneyUserIds() {
-  const { data, error } = await supabase
-    .from('attorney_profiles')
-    .select('user_id')
-    .eq('is_verified', true)
-
-  if (error) {
-    console.warn('[notify] failed to load verified attorneys', error)
-    return []
-  }
-  return (data || []).map((row) => row?.user_id).filter(Boolean)
-}
-
 /**
  * Idempotent insert of a "Client Feedback Received" notification for the
  * attorney. Includes the appointment id marker so polling/retries do not
