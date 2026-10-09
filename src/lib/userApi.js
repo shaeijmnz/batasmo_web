@@ -1,4 +1,4 @@
-import { supabase } from './supabaseClient'
+import { supabase, getAuthUser, getSharedSession, isAuthLockError } from './supabaseClient'
 import { parseNotificationImageUrl } from './announcementImages'
 import {
   isSignupVerificationComplete,
@@ -386,7 +386,7 @@ export async function sendClientSupportMessage({ clientId, message }) {
 
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getAuthUser()
   if (!user?.id) throw new Error('Not authenticated.')
   if (String(user.id) !== String(clientId)) {
     throw new Error('You can only send messages from your own account.')
@@ -434,10 +434,15 @@ export async function markClientSupportMessagesAsRead(clientId) {
   }
 }
 
+// supabase.channel() reuses an existing channel with the same name, so each subscriber
+// needs its own name or one unmount tears down the other's realtime feed.
+let clientSupportChannelSeq = 0
+
 export function subscribeToClientSupport(clientId, onChange) {
   if (!clientId) return () => {}
+  clientSupportChannelSeq += 1
   const channel = supabase
-    .channel(`support_client_${clientId}`)
+    .channel(`support_client_${clientId}_${clientSupportChannelSeq}`)
     .on(
       'postgres_changes',
       {
@@ -544,7 +549,7 @@ export async function sendAdminSupportMessage({ clientId, message }) {
 
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getAuthUser()
   if (!user?.id) throw new Error('Not authenticated.')
 
   const { data, error } = await supabase
@@ -702,7 +707,7 @@ export async function fetchClientActiveAppointmentsForAdmin(clientId) {
   // Prefer the Render backend (service role) so the admin can see ALL the
   // client's active appointments regardless of RLS on the browser client.
   try {
-    const session = (await supabase.auth.getSession())?.data?.session
+    const session = (await getSharedSession())?.data?.session
     if (session?.access_token) {
       const baseUrl = resolvePaymentApiBaseUrl()
       const response = await fetch(
@@ -759,7 +764,7 @@ export async function fetchClientActiveAppointmentsForAdmin(clientId) {
  * Admin walk-in: create a Client auth user (email confirmed) + profile via Render backend.
  */
 export async function adminCreateWalkInClient({ email, password, fullName }) {
-  const session = (await supabase.auth.getSession())?.data?.session
+  const session = (await getSharedSession())?.data?.session
   if (!session?.access_token) {
     throw new Error('You must be signed in as admin to add a client.')
   }
@@ -791,7 +796,7 @@ export async function adminCreateWalkInClient({ email, password, fullName }) {
  * Admin: create an Attorney auth user (email confirmed) + profile via Render backend.
  */
 export async function adminCreateWalkInAttorney({ email, password, fullName, specialty }) {
-  const session = (await supabase.auth.getSession())?.data?.session
+  const session = (await getSharedSession())?.data?.session
   if (!session?.access_token) {
     throw new Error('You must be signed in as admin to add an attorney.')
   }
@@ -830,7 +835,7 @@ export async function adminCreateWalkInAttorney({ email, password, fullName, spe
  * browser client if the backend is unreachable.
  */
 export async function adminRescheduleAppointment({ appointmentId, newSlotId }) {
-  const session = (await supabase.auth.getSession())?.data?.session
+  const session = (await getSharedSession())?.data?.session
   if (session?.access_token) {
     try {
       const baseUrl = resolvePaymentApiBaseUrl()
@@ -1361,11 +1366,6 @@ const SESSION_PROFILE_CACHE_TTL_MS = 5000
 export async function getCurrentSessionProfile() {
   const now = Date.now()
 
-  const isAuthLockError = (error) => {
-    const text = String(error?.message || error || '').toLowerCase()
-    return text.includes('lock broken') || text.includes("'steal' option") || text.includes('aborterror')
-  }
-  
   // Return cached profile if still fresh
   if (sessionProfileCache && now - lastSessionProfileTime < SESSION_PROFILE_CACHE_TTL_MS) {
     return sessionProfileCache
@@ -1375,32 +1375,17 @@ export async function getCurrentSessionProfile() {
   let sessionError = null
 
   try {
-    const sessionRes = await supabase.auth.getSession()
+    const sessionRes = await getSharedSession()
     session = sessionRes?.data?.session || null
     sessionError = sessionRes?.error || null
   } catch (error) {
     sessionError = error
   }
 
-  // Retry once if auth lock contention occurs in browser.
-  if (sessionError && isAuthLockError(sessionError)) {
-    await new Promise((resolve) => setTimeout(resolve, 80))
-    try {
-      const retryRes = await supabase.auth.getSession()
-      session = retryRes?.data?.session || null
-      sessionError = retryRes?.error || null
-    } catch (retryError) {
-      sessionError = retryError
-    }
-  }
-
   if (sessionError) {
-    // Return safe fallback instead of crashing UI on lock contention.
+    // Lock contention is transient: return a safe fallback but never cache it as "logged out".
     if (isAuthLockError(sessionError)) {
-      const fallback = { session: null, profile: null }
-      sessionProfileCache = fallback
-      lastSessionProfileTime = now
-      return fallback
+      return { session: null, profile: null }
     }
     throw sessionError
   }
@@ -3369,7 +3354,7 @@ export async function findAttorneyAvailabilitySlotId(attorneyId, scheduledAtIso)
 export async function rescheduleClientAppointment({ appointmentId, scheduledAt, note }) {
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getAuthUser()
   if (!user?.id) throw new Error('Not authenticated.')
 
   const { data: appt, error: fetchErr } = await supabase
@@ -4302,7 +4287,7 @@ export async function createAppointmentBooking({
 }) {
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getAuthUser()
 
   if (!user?.id) {
     throw new Error('Not authenticated')
@@ -4797,7 +4782,7 @@ const mapRoomMessage = (row, roomId, isClosed, currentUserId) => ({
 export async function fetchAppointmentMessages(appointmentId) {
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getAuthUser()
   if (!user) throw new Error('Not authenticated')
 
   const { data, error } = await supabase
@@ -4847,7 +4832,7 @@ export async function fetchAppointmentMessages(appointmentId) {
 export async function sendAppointmentMessage(appointmentId, messageText) {
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getAuthUser()
   if (!user) throw new Error('Not authenticated')
 
   const room = await getOrCreateConsultationRoom(appointmentId)
@@ -4880,7 +4865,7 @@ export async function sendAppointmentMessage(appointmentId, messageText) {
 export async function sendAppointmentAttachment(appointmentId, file, caption = '') {
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getAuthUser()
 
   if (!user) throw new Error('Not authenticated')
   if (!file) throw new Error('No file selected.')
@@ -4953,7 +4938,7 @@ export async function sendAppointmentAttachment(appointmentId, file, caption = '
 export async function deleteAppointmentMessage({ appointmentId, messageId }) {
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getAuthUser()
 
   if (!user) throw new Error('Not authenticated')
   if (!appointmentId || !messageId) throw new Error('Missing message details.')
@@ -5004,7 +4989,7 @@ export async function deleteAppointmentMessage({ appointmentId, messageId }) {
 export async function endConsultationSession(appointmentId) {
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getAuthUser()
 
   if (!user) throw new Error('Not authenticated')
   if (!appointmentId) throw new Error('Appointment is required.')
@@ -5059,7 +5044,7 @@ export async function endConsultationSession(appointmentId) {
 export async function notifyClientConsultationTimeWarning(appointmentId) {
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getAuthUser()
 
   if (!user) throw new Error('Not authenticated')
   if (!appointmentId) throw new Error('Appointment is required.')
@@ -5097,7 +5082,7 @@ export async function notifyClientConsultationTimeWarning(appointmentId) {
 export async function fetchConsultationFeedback(appointmentId) {
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getAuthUser()
 
   if (!user || !appointmentId) {
     return { submitted: false, rating: 0, comment: '' }
@@ -5147,7 +5132,7 @@ export async function fetchConsultationFeedback(appointmentId) {
 export async function submitConsultationFeedback({ appointmentId, rating, comment = '' }) {
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getAuthUser()
 
   if (!user) throw new Error('Not authenticated')
   if (!appointmentId) throw new Error('Appointment is required.')
@@ -5295,7 +5280,7 @@ export async function getSignedUrlForAppointmentMessage({ fileBucket, filePath }
 export async function subscribeToAppointmentMessages(appointmentId, onInsert) {
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getAuthUser()
 
   if (!user) throw new Error('Not authenticated')
 
@@ -5690,7 +5675,7 @@ export async function createNotarialRequest({ clientId, serviceType, preferredDa
 export async function replaceClientNotarialRequestDocument({ requestId, file, documentName }) {
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getAuthUser()
   if (!user?.id) throw new Error('Not authenticated')
   if (!requestId) throw new Error('requestId is required.')
 
@@ -5824,7 +5809,7 @@ export async function fetchAttorneyConsultationLogs(userId, options = {}) {
 export async function fetchConsultationTranscriptForAppointment(appointmentId) {
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getAuthUser()
 
   if (!user) throw new Error('Not authenticated')
   if (!appointmentId) throw new Error('Appointment is required.')
@@ -6338,7 +6323,7 @@ export async function getVideoSdkToken() {
 export async function fetchAdminOngoingVideoCallCount() {
   const {
     data: { session },
-  } = await supabase.auth.getSession()
+  } = await getSharedSession()
   if (!session?.access_token) return 0
 
   const baseUrl = resolvePublicApiBaseUrl()
@@ -6370,7 +6355,7 @@ export async function getOrCreateVideoMeeting(appointmentId) {
 
   const {
     data: { session },
-  } = await supabase.auth.getSession()
+  } = await getSharedSession()
   if (!session?.access_token) throw new Error('Not authenticated')
 
   const res = await fetch(`${VIDEOSDK_BACKEND_URL}/videosdk-meeting-for-appointment`, {
@@ -6577,7 +6562,7 @@ export async function saveAttorneyConsultationBranch({ appointmentId, branch }) 
 
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getAuthUser()
   if (!user?.id) throw new Error('Not authenticated')
 
   const { data: appt, error: fetchError } = await supabase
