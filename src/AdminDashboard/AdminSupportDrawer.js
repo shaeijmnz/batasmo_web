@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { CalendarClock } from 'lucide-react';
 import {
   adminRescheduleAppointment,
   fetchAdminSupportMessages,
@@ -73,6 +74,11 @@ export default function AdminSupportDrawer({ open, onClose, onUnreadChange, mode
   const [scheduleBusy, setScheduleBusy] = useState(false);
   const [scheduleError, setScheduleError] = useState('');
   const [scheduleNotice, setScheduleNotice] = useState('');
+
+  const activeClientName = useMemo(
+    () => threads.find((t) => t.clientId === activeClientId)?.clientName || 'Client',
+    [threads, activeClientId],
+  );
 
   const totalUnread = useMemo(
     () => threads.reduce((acc, t) => acc + (t.unreadFromClient || 0), 0),
@@ -429,6 +435,19 @@ export default function AdminSupportDrawer({ open, onClose, onUnreadChange, mode
               </div>
             ) : (
               <>
+                <div className="adm-support-chat-head">
+                  <span className="adm-support-chat-head__name">{activeClientName}</span>
+                  <button
+                    type="button"
+                    className={`adm-support-drawer__sched-btn adm-support-chat-head__resched ${scheduleOpen ? 'adm-support-drawer__sched-btn--on' : ''}`}
+                    onClick={() => setScheduleOpen((v) => !v)}
+                    title="Set a new schedule for this client's appointment"
+                  >
+                    <CalendarClock size={15} aria-hidden="true" />
+                    {scheduleOpen ? 'Close reschedule' : 'Reschedule'}
+                  </button>
+                </div>
+
                 <div className="adm-support-drawer__thread" ref={scrollRef}>
                   {messages.length === 0 ? (
                     <p className="adm-support-drawer__empty">No messages yet.</p>
@@ -448,7 +467,7 @@ export default function AdminSupportDrawer({ open, onClose, onUnreadChange, mode
                 {scheduleOpen ? (
                   <div className="adm-support-sched">
                     <div className="adm-support-sched__head">
-                      <strong>Schedule helper</strong>
+                      <strong>Reschedule {activeClientName}</strong>
                       <button type="button" onClick={resetSchedulePanel} aria-label="Close">
                         ✕
                       </button>
@@ -591,24 +610,6 @@ export default function AdminSupportDrawer({ open, onClose, onUnreadChange, mode
                 ) : null}
 
                 <div className="adm-support-drawer__composer-wrap">
-                  <div className="adm-support-drawer__composer-actions">
-                    <button
-                      type="button"
-                      className={`adm-support-drawer__sched-btn ${scheduleOpen ? 'adm-support-drawer__sched-btn--on' : ''}`}
-                      onClick={() => setScheduleOpen((v) => !v)}
-                      title="Send available schedule or set a new schedule"
-                    >
-                      {scheduleOpen ? (
-                        <>
-                          <span aria-hidden="true">−</span> Hide schedule helper
-                        </>
-                      ) : (
-                        <>
-                          <span aria-hidden="true">+</span> Schedule helper
-                        </>
-                      )}
-                    </button>
-                  </div>
                   <form className="adm-support-drawer__composer" onSubmit={handleSend}>
                     <textarea
                       value={draft}
