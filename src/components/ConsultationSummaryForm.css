@@ -64,44 +64,70 @@
   color: rgba(148, 163, 184, 0.55);
 }
 
-/* Attorney cream theme — Logs modal + Messages wrap-up modal */
-.al-summary-panel .csf-form__intro,
-.am-summary-modal .csf-form__intro {
+/* Attorney cream theme — Logs modal */
+.al-summary-panel .csf-form__intro {
   color: #6f6a62;
 }
 
-.al-summary-panel .csf-section,
-.am-summary-modal .csf-section {
+.al-summary-panel .csf-section {
   border: 1px solid #e2d4c0;
   background: linear-gradient(180deg, #fffaf3 0%, #f5ebdc 100%);
 }
 
-.al-summary-panel .csf-section__header,
-.am-summary-modal .csf-section__header {
+.al-summary-panel .csf-section__header {
   color: #152238;
 }
 
-.al-summary-panel .csf-section__subheader,
-.am-summary-modal .csf-section__subheader {
+.al-summary-panel .csf-section__subheader {
   color: #6f6a62;
 }
 
-.al-summary-panel .csf-section__body,
-.am-summary-modal .csf-section__body {
+.al-summary-panel .csf-section__body {
   border: 1px solid #d9c8b1;
   background: #fffaf2;
   color: #1b2432;
 }
 
-.al-summary-panel .csf-section__body::placeholder,
-.am-summary-modal .csf-section__body::placeholder {
+.al-summary-panel .csf-section__body::placeholder {
   color: #8b857d;
 }
 
-.al-summary-panel .csf-section__body:focus,
-.am-summary-modal .csf-section__body:focus {
+.al-summary-panel .csf-section__body:focus {
   border-color: #152238;
   box-shadow: 0 0 0 3px rgba(21, 34, 56, 0.12);
+}
+
+/* Attorney navy-and-gold theme — Messages wrap-up modal */
+.am-summary-modal .csf-form__intro {
+  color: var(--at-ui-muted, #b8c2d1);
+}
+
+.am-summary-modal .csf-section {
+  border: 1px solid rgba(212, 175, 55, 0.14);
+  background: rgba(15, 26, 45, 0.6);
+}
+
+.am-summary-modal .csf-section__header {
+  color: var(--at-ui-text, #f5f4f1);
+}
+
+.am-summary-modal .csf-section__subheader {
+  color: var(--at-ui-muted, #b8c2d1);
+}
+
+.am-summary-modal .csf-section__body {
+  border: 1px solid rgba(212, 175, 55, 0.14);
+  background: rgba(11, 19, 33, 0.9);
+  color: var(--at-ui-text, #f5f4f1);
+}
+
+.am-summary-modal .csf-section__body::placeholder {
+  color: rgba(184, 194, 209, 0.6);
+}
+
+.am-summary-modal .csf-section__body:focus {
+  border-color: var(--at-ui-accent, #d4af37);
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.14);
 }
 
 /* Client read view */
