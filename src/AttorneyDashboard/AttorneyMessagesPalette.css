@@ -57,7 +57,7 @@
 .am-confirm-btn--ghost {
   background: rgba(27, 43, 71, 0.94) !important;
   border: 1px solid rgba(212, 175, 55, 0.16) !important;
-  color: #152238 !important;
+  color: var(--at-ui-text) !important;
 }
 
 .am-confirm-btn--ghost:hover:not(:disabled) {
@@ -149,7 +149,26 @@
 
 .am-summary-modal__select,
 .am-summary-modal__textarea {
-  background: #fffaf2 !important;
+  background: rgba(15, 26, 45, 0.95) !important;
   color: var(--at-ui-text) !important;
-  border: 1px solid var(--at-ui-border) !important;
+  border: 1px solid rgba(212, 175, 55, 0.14) !important;
+}
+
+.am-summary-modal__select option {
+  background: var(--at-ui-surface) !important;
+  color: var(--at-ui-text) !important;
+}
+
+.am-summary-modal__select:focus,
+.am-summary-modal__textarea:focus {
+  border-color: var(--at-ui-accent) !important;
+  box-shadow: 0 0 0 3px var(--at-ui-accent-soft) !important;
+}
+
+.am-summary-modal__section-heading {
+  color: var(--at-ui-accent) !important;
+}
+
+.am-summary-modal__error {
+  color: #fca5a5 !important;
 }
