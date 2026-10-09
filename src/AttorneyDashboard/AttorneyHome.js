@@ -10,6 +10,8 @@ import {
   subscribeToAttorneyNotifications,
   calendarDaysFromTodayLocal,
   runAttorneyConsultationScheduleNotifications,
+  parseAppointmentScheduleDate,
+  ATTORNEY_QUEUE_SLOT_DURATION_MS,
 } from '../lib/userApi';
 import { attachLiveDataRefresh } from '../lib/liveDataRefresh';
 import { watchConsultationPresenceAlerts, watchConsultationVideoCallAlerts } from '../lib/consultationChatPresence';
@@ -91,9 +93,6 @@ function AttorneyHome({ onNavigate, profile }) {
   const [notifications, setNotifications] = useState([]);
   const [markAllReadCutoffIso, setMarkAllReadCutoffIso] = useState('');
   const [isMarkingNotificationsRead, setIsMarkingNotificationsRead] = useState(false);
-  const [statsData, setStatsData] = useState({
-    myAppointmentCount: 0,
-  });
   const [loadError, setLoadError] = useState('');
   const [waitingPopup, setWaitingPopup] = useState(null);
   const [videoCallPopup, setVideoCallPopup] = useState(null);
@@ -122,7 +121,6 @@ function AttorneyHome({ onNavigate, profile }) {
         if (isMounted) {
           setConsultations(data.consultations);
           setNotifications(data.notifications);
-          setStatsData(data.stats);
           setLoadError('');
         }
       } catch (error) {
@@ -169,11 +167,6 @@ function AttorneyHome({ onNavigate, profile }) {
     return () => window.clearInterval(id);
   }, []);
 
-  const stats = [
-    { label: 'My Appointments', value: String(statsData.myAppointmentCount), icon: <CalendarCheckIcon />, bg: '#eff6ff', border: '#3b82f6', nav: 'upcoming-appointments' },
-    { label: 'Analytics', value: 'View Graph', icon: <AnalyticsIcon />, bg: '#ecfdf5', border: '#10b981', nav: 'attorney-analytics' },
-  ];
-
   const sortedConsultations = useMemo(
     () =>
       [...consultations]
@@ -189,6 +182,12 @@ function AttorneyHome({ onNavigate, profile }) {
             nowTick,
           ),
         )
+        .filter((item) => {
+          // Past slots stay hidden here even when the admin schedule-window toggle is off.
+          const scheduled = parseAppointmentScheduleDate(item);
+          if (!scheduled || Number.isNaN(scheduled.getTime())) return false;
+          return nowTick.getTime() < scheduled.getTime() + ATTORNEY_QUEUE_SLOT_DURATION_MS;
+        })
         .sort((a, b) => new Date(a.date) - new Date(b.date)),
     [consultations, nowTick],
   );
@@ -236,6 +235,10 @@ function AttorneyHome({ onNavigate, profile }) {
   }, [profile?.id, presenceWatchKey, presenceWatches]);
 
   const upcomingCount = sortedConsultations.length;
+  const stats = [
+    { label: 'My Appointments', value: String(upcomingCount), icon: <CalendarCheckIcon />, bg: '#eff6ff', border: '#3b82f6', nav: 'upcoming-appointments' },
+    { label: 'Analytics', value: 'View Graph', icon: <AnalyticsIcon />, bg: '#ecfdf5', border: '#10b981', nav: 'attorney-analytics' },
+  ];
   const cutoffTime = markAllReadCutoffIso ? new Date(markAllReadCutoffIso).getTime() : 0;
   const displayNotifications = notifications.map((n) => {
     const notificationTime = new Date(n.createdAt || 0).getTime() || 0;
