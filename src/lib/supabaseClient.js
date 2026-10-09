@@ -102,3 +102,57 @@ export const supabase = createClient(
     },
   },
 )
+
+/** True for browser auth-lock contention errors ("lock was stolen", "Lock broken ... 'steal' option"). */
+export function isAuthLockError(error) {
+  const text = String(error?.message || error || '').toLowerCase()
+  return (
+    String(error?.name || '') === 'AbortError' ||
+    text.includes('aborterror') ||
+    text.includes('lock broken') ||
+    text.includes("'steal' option") ||
+    text.includes('stolen') ||
+    text.includes('navigatorlock')
+  )
+}
+
+let inflightSessionRequest = null
+
+const readSessionWithLockRetry = async () => {
+  const MAX_ATTEMPTS = 3
+  let lastResult = { data: { session: null }, error: null }
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+    try {
+      lastResult = await supabase.auth.getSession()
+      if (!lastResult?.error || !isAuthLockError(lastResult.error)) return lastResult
+    } catch (error) {
+      if (!isAuthLockError(error)) throw error
+      lastResult = { data: { session: null }, error }
+    }
+    await sleep(120 * (attempt + 1))
+  }
+  return lastResult
+}
+
+/**
+ * Same result shape as supabase.auth.getSession(), but concurrent callers share one
+ * request and auth-lock contention is retried instead of surfacing as a logout.
+ */
+export function getSharedSession() {
+  if (!inflightSessionRequest) {
+    inflightSessionRequest = readSessionWithLockRetry().finally(() => {
+      inflightSessionRequest = null
+    })
+  }
+  return inflightSessionRequest
+}
+
+/**
+ * Same result shape as supabase.auth.getUser(), read from the local session.
+ * auth.getUser() holds the auth lock for a network round-trip, which makes parallel
+ * dashboard requests time out and steal the lock from each other.
+ */
+export async function getAuthUser() {
+  const { data, error } = await getSharedSession()
+  return { data: { user: data?.session?.user ?? null }, error: error ?? null }
+}
