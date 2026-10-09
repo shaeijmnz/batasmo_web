@@ -120,11 +120,15 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
   const [videoCallLoading, setVideoCallLoading] = useState(false);
   const [videoCallError, setVideoCallError] = useState('');
   const videoCallRef = useRef(null);
+  const dismissedVideoMeetingIdRef = useRef('');
+  const endSessionInFlightRef = useRef(false);
+  const endedAppointmentIdRef = useRef('');
   const messagesEndRef = useRef(null);
 
   const openVideoCall = (callData) => {
     // Re-opening the same meeting would remount the SDK and force a rejoin.
     if (videoCallRef.current?.meetingId === callData?.meetingId) return;
+    dismissedVideoMeetingIdRef.current = '';
     videoCallRef.current = callData;
     setVideoCall(callData);
   };
@@ -146,6 +150,8 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
 
   const tryOpenExistingVideoCall = async ({ videoMeetingId, roomId, isClosed: closed }) => {
     if (closed || !videoMeetingId || videoCallRef.current) return;
+    // Background polling must not pop a call back open after the attorney closed it.
+    if (dismissedVideoMeetingIdRef.current === videoMeetingId) return;
     try {
       const token = await getVideoSdkToken();
       openVideoCall({
@@ -699,12 +705,15 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
 
   const handleEndSession = async () => {
     if (!activeAppointmentId || isClosed || endingSession) return;
+    if (endSessionInFlightRef.current || endedAppointmentIdRef.current === activeAppointmentId) return;
+    endSessionInFlightRef.current = true;
 
     try {
       setEndingSession(true);
       setEndSessionConfirmOpen(false);
       closeVideoCall();
       await endConsultationSession(activeAppointmentId);
+      endedAppointmentIdRef.current = activeAppointmentId;
       setIsClosed(true);
       setLoadError('');
       setPostSessionAppointmentId(activeAppointmentId);
@@ -715,6 +724,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
     } catch (error) {
       setLoadError(error.message || 'Failed to end consultation session.');
     } finally {
+      endSessionInFlightRef.current = false;
       setEndingSession(false);
     }
   };
@@ -815,9 +825,14 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
     }
   };
 
-  // Leave the call UI only — keep video_meeting_id so both sides can rejoin
-  // the same room until the attorney ends the consultation session.
-  const handleCloseVideoCall = closeVideoCall;
+  // Leaving a call the attorney actually joined ends the consultation and opens
+  // the wrap-up. Closing a call that never connected only hides it; the attorney
+  // can rejoin with the "Video Call" button.
+  const handleCloseVideoCall = ({ joined } = {}) => {
+    dismissedVideoMeetingIdRef.current = videoCallRef.current?.meetingId || '';
+    closeVideoCall();
+    if (joined) void handleEndSession();
+  };
 
   // Auto-open video call when client starts one (video_meeting_id appears in DB)
   useEffect(() => {
