@@ -15,15 +15,10 @@ import './AdminTheme.css';
 import './AdminMessages.css';
 
 const NavItem = ({ icon, label, active, open, onClick }) => (
-  <button
-    type="button"
-    className={`nav-item ${active ? 'active' : ''}`}
-    onClick={onClick}
-    title={open ? '' : label}
-  >
-    <span className="nav-icon">{icon}</span>
-    {open ? <span className="nav-label">{label}</span> : null}
-  </button>
+  <div className={`nav-item ${active ? 'active' : ''}`} onClick={onClick} title={open ? '' : label}>
+    {icon}
+    {open && <span>{label}</span>}
+  </div>
 );
 
 const AdminMessages = ({ onNavigate, onSignOut }) => {
