@@ -8,7 +8,7 @@ import {
   getQueueRequestDisplayStatus,
   isOngoingVideoCallRoom,
 } from '../lib/consultationStatus';
-import { supabase } from '../lib/supabaseClient';
+import { supabase, getAuthUser } from '../lib/supabaseClient';
 import AttorneyNotificationDropdown from '../AttorneyDashboard/AttorneyNotificationDropdown';
 import './AdminNotificationDropdown.css';
 import AdminSupportDrawer from './AdminSupportDrawer';
@@ -965,7 +965,7 @@ const Dashboard = ({ onNavigate, onSignOut }) => {
       .subscribe();
 
     const consultationRoomChannel = supabase
-      .channel('admin-dashboard-consultation-rooms')
+      .channel('admin-dashboard-completed-rooms')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'consultation_rooms' },
@@ -1015,7 +1015,7 @@ const Dashboard = ({ onNavigate, onSignOut }) => {
     const loadSession = async () => {
       const {
         data: { user },
-      } = await supabase.auth.getUser();
+      } = await getAuthUser();
       if (mounted && user?.id) setAdminUserId(user.id);
     };
     loadSession();
