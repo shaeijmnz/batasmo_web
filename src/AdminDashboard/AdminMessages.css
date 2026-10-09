@@ -1,11 +1,41 @@
+:root {
+  --ui-bg-card: rgba(27, 43, 71, 0.94);
+  --ui-accent: #152238;
+  --ui-accent-hover: #223656;
+  --ui-text-primary: #f5f4f1;
+  --ui-text-secondary: #b8c2d1;
+  --ui-text-muted: #7d8da6;
+  --ui-border: #2c4266;
+  --ui-glass-bg: rgba(15, 26, 45, 0.78);
+  --ui-glass-border: rgba(212, 175, 55, 0.18);
+  --ui-glass-border-gradient: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.02) 100%);
+  --ui-shadow-glow: 0 0 20px rgba(212, 175, 55, 0.08);
+  --ui-shadow-strong: 0 18px 44px rgba(7, 12, 22, 0.3);
+  --ui-radius-sm: 10px;
+  --ui-radius-xl: 26px;
+  --ui-glass-blur: 14px;
+}
+
+.app-container {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* Left padding clears the fixed admin sidebar (24px offset + 280px width + gap). */
 .adm-messages-main {
   display: flex;
   flex-direction: column;
-  padding: 24px;
-  min-height: 100vh;
+  padding: 24px 24px 24px 332px;
+  height: 100vh;
+  min-height: 0;
+  box-sizing: border-box;
   background:
     radial-gradient(circle at top left, rgba(212, 175, 55, 0.08), transparent 30%),
     linear-gradient(180deg, #0b1321 0%, #152238 100%);
+}
+
+.sidebar.closed ~ .adm-messages-main {
+  padding-left: 128px;
 }
 
 .adm-messages-page {
@@ -27,6 +57,8 @@
 
 @media (max-width: 768px) {
   .adm-messages-main {
-    padding: 12px;
+    padding-top: 12px;
+    padding-right: 12px;
+    padding-bottom: 12px;
   }
 }
