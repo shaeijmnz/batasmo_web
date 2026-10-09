@@ -295,6 +295,8 @@ export default function ClientShell({
     };
   }, [profile?.id]);
 
+  const refreshSupportUnreadRef = useRef(() => {});
+
   useEffect(() => {
     let cancelled = false;
 
@@ -311,13 +313,18 @@ export default function ClientShell({
       }
     };
 
-    refreshSupportUnread();
+    refreshSupportUnreadRef.current = refreshSupportUnread;
     const unsubscribe = subscribeToClientSupport(profile?.id, refreshSupportUnread);
 
     return () => {
       cancelled = true;
+      refreshSupportUnreadRef.current = () => {};
       unsubscribe();
     };
+  }, [profile?.id]);
+
+  useEffect(() => {
+    refreshSupportUnreadRef.current();
   }, [profile?.id, currentPage]);
 
   useEffect(() => {
