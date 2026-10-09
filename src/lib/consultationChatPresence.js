@@ -48,6 +48,11 @@ const listPresences = (channel) => {
   return all
 }
 
+// Mobile dashboards track `{ inChat: false, watching: true }` on the same topic; those
+// are not in the chatroom and must not trigger "is waiting" popups.
+const isInChatEntry = (entry, otherRole) =>
+  entry?.role === otherRole && entry?.inChat !== false && !entry?.watching
+
 const earliestJoinedAt = (entries) => {
   const stamps = (entries || [])
     .map((entry) => entry?.joinedAt)
@@ -80,7 +85,7 @@ export function watchConsultationPresenceAlerts({ watches = [], role, onWaitingP
 
     const channel = supabase.channel(`consultation-presence:${appointmentId}`)
     const maybeAlert = () => {
-      const others = listPresences(channel).filter((entry) => entry.role === otherRole)
+      const others = listPresences(channel).filter((entry) => isInChatEntry(entry, otherRole))
       if (!others.length) return
       fireWaitingPopup({
         appointmentId,
@@ -94,7 +99,7 @@ export function watchConsultationPresenceAlerts({ watches = [], role, onWaitingP
     channel
       .on('presence', { event: 'sync' }, maybeAlert)
       .on('presence', { event: 'join' }, ({ newPresences }) => {
-        const otherJoined = (newPresences || []).some((entry) => entry.role === otherRole)
+        const otherJoined = (newPresences || []).some((entry) => isInChatEntry(entry, otherRole))
         if (otherJoined) maybeAlert()
       })
       .subscribe()
@@ -138,7 +143,7 @@ export function attachConsultationChatPresence({
     if (!selfTracked || hasShownWaitingAlert(appointmentId, normalizedRole)) return
 
     const presences = listPresences(channel)
-    const others = presences.filter((entry) => entry.role === otherRole)
+    const others = presences.filter((entry) => isInChatEntry(entry, otherRole))
     if (!others.length) return
 
     const otherFirstAt = earliestJoinedAt(others)
@@ -168,6 +173,7 @@ export function attachConsultationChatPresence({
           displayName:
             String(displayName || '').trim() ||
             (normalizedRole === 'attorney' ? 'Attorney' : 'Client'),
+          inChat: true,
           joinedAt: selfJoinedAt,
         })
         selfTracked = true
