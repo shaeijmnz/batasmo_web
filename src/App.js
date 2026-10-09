@@ -28,6 +28,7 @@ import Login from './LoginAuth/Login';
 import ForgotPassword from './LoginAuth/ForgotPassword';
 import ResetPassword from './LoginAuth/ResetPassword';
 import ClientShell from './ClientDashboard/ClientShell';
+import AdminSupportNotifier from './AdminDashboard/AdminSupportNotifier';
 
 /* ── Dashboard Pages (lazy-loaded to reduce initial bundle size) ── */
 const HomePage = lazy(() => import('./ClientDashboard/HomePage'));
@@ -620,6 +621,13 @@ function App() {
       </ClientShell>,
     )
 
+  const renderAdmin = (node) => (
+    <>
+      {renderLazy(node)}
+      <AdminSupportNotifier currentPage={page} onNavigate={handleNavigate} />
+    </>
+  )
+
   useEffect(() => {
     if (!currentProfile?.role) return
     const role = normalizeRole(currentProfile.role)
@@ -712,14 +720,14 @@ function App() {
     );
   if (page === 'attorney-announcements') return renderLazy(<AttorneyAnnouncements onNavigate={handleNavigate} profile={currentProfile} />);
   if (page === 'attorney-profile') return renderLazy(<AttorneyProfile onNavigate={handleNavigate} profile={currentProfile} onSignOut={handleSignOut} onProfileUpdated={setCurrentProfile} />);
-  if (page === 'admin-home') return renderLazy(<AdminDashboard onNavigate={handleNavigate} onSignOut={handleSignOut} />);
-  if (page === 'admin-clients') return renderLazy(<AdminClients onNavigate={handleNavigate} onSignOut={handleSignOut} />);
-  if (page === 'admin-attorneys') return renderLazy(<AdminAttorneys onNavigate={handleNavigate} onSignOut={handleSignOut} />);
-  if (page === 'admin-requests') return renderLazy(<AdminRequests onNavigate={handleNavigate} />);
-  if (page === 'admin-consultations') return renderLazy(<AdminConsultations onNavigate={handleNavigate} onSignOut={handleSignOut} />);
-  if (page === 'admin-reports') return renderLazy(<AdminReports onNavigate={handleNavigate} onSignOut={handleSignOut} />);
-  if (page === 'admin-settings') return renderLazy(<AdminSettingsPage onNavigate={handleNavigate} onSignOut={handleSignOut} />);
-  if (page === 'admin-messages') return renderLazy(<AdminMessages onNavigate={handleNavigate} onSignOut={handleSignOut} />);
+  if (page === 'admin-home') return renderAdmin(<AdminDashboard onNavigate={handleNavigate} onSignOut={handleSignOut} />);
+  if (page === 'admin-clients') return renderAdmin(<AdminClients onNavigate={handleNavigate} onSignOut={handleSignOut} />);
+  if (page === 'admin-attorneys') return renderAdmin(<AdminAttorneys onNavigate={handleNavigate} onSignOut={handleSignOut} />);
+  if (page === 'admin-requests') return renderAdmin(<AdminRequests onNavigate={handleNavigate} />);
+  if (page === 'admin-consultations') return renderAdmin(<AdminConsultations onNavigate={handleNavigate} onSignOut={handleSignOut} />);
+  if (page === 'admin-reports') return renderAdmin(<AdminReports onNavigate={handleNavigate} onSignOut={handleSignOut} />);
+  if (page === 'admin-settings') return renderAdmin(<AdminSettingsPage onNavigate={handleNavigate} onSignOut={handleSignOut} />);
+  if (page === 'admin-messages') return renderAdmin(<AdminMessages onNavigate={handleNavigate} onSignOut={handleSignOut} />);
 
   return <LandingPage onNavigate={handleNavigate} />;
 }
