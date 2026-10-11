@@ -361,7 +361,7 @@ function AttorneyHome({ onNavigate, profile }) {
               style={{ borderTop: `3px solid ${s.border}` }}
               onClick={() => s.nav && onNavigate(s.nav)}
             >
-              <div className="att-stat-card__icon" style={{ background: s.bg }}>
+              <div className="att-stat-card__icon" style={{ background: s.bg, color: s.border }}>
                 {s.icon}
               </div>
               <span className="att-stat-card__label">{s.label}</span>
