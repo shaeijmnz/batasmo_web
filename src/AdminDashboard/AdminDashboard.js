@@ -32,6 +32,25 @@ const persistDashboardCache = (patch) => {
   patchAdminPageCache(DASHBOARD_CACHE_KEY, patch);
 };
 
+// Pending notary request ids the admin has already seen; null until the first load.
+const NOTARY_SEEN_KEY = 'admin-notary-seen-ids';
+const readSeenNotaryIds = () => {
+  try {
+    const raw = window.localStorage.getItem(NOTARY_SEEN_KEY);
+    const ids = raw ? JSON.parse(raw) : null;
+    return Array.isArray(ids) ? ids : null;
+  } catch {
+    return null;
+  }
+};
+const storeSeenNotaryIds = (ids) => {
+  try {
+    window.localStorage.setItem(NOTARY_SEEN_KEY, JSON.stringify(ids));
+  } catch {
+    // Keep the in-memory list when storage is blocked.
+  }
+};
+
 const ACTIVE_QUEUE_STATUSES = ['pending', 'confirmed', 'rescheduled', 'started'];
 
 const formatDateTimeForUi = (value) => {
@@ -234,6 +253,7 @@ const Dashboard = ({ onNavigate, onSignOut }) => {
   const [pendingNotaryRequests, setPendingNotaryRequests] = useState(
     () => dashboardBoot?.pendingNotaryRequests || [],
   );
+  const [seenNotaryIds, setSeenNotaryIds] = useState(readSeenNotaryIds);
   const [isUpdatingNotary, setIsUpdatingNotary] = useState(false);
   const [completedConsultations, setCompletedConsultations] = useState(
     () => dashboardBoot?.completedConsultations || [],
@@ -296,6 +316,19 @@ const Dashboard = ({ onNavigate, onSignOut }) => {
 
     setPendingNotaryRequests(mapped);
     persistDashboardCache({ pendingNotaryRequests: mapped });
+    // The first load counts everything already pending as seen, so the card starts from zero.
+    setSeenNotaryIds((seen) => {
+      if (seen) return seen;
+      const ids = mapped.map((item) => String(item.id));
+      storeSeenNotaryIds(ids);
+      return ids;
+    });
+  };
+
+  const markNotaryRequestsSeen = () => {
+    const ids = pendingNotaryRequests.map((item) => String(item.id));
+    storeSeenNotaryIds(ids);
+    setSeenNotaryIds(ids);
   };
 
   useEffect(() => {
@@ -1085,7 +1118,9 @@ const Dashboard = ({ onNavigate, onSignOut }) => {
     { label: 'Settings', icon: <Settings size={20} />, path: '/settings' },
   ];
 
-  const pendingNotaryCount = pendingNotaryRequests.length;
+  const pendingNotaryCount = seenNotaryIds
+    ? pendingNotaryRequests.filter((item) => !seenNotaryIds.includes(String(item.id))).length
+    : 0;
   const stats = [
     { label: 'Total Clients', value: totalClients, color: '#1e3a8a', icon: <Users size={20}/>, page: '/clients' },
     { label: 'Total Attorneys', value: totalAttorneys, color: '#eab308', icon: <Scale size={20}/>, page: '/attorneys' },
@@ -1106,6 +1141,7 @@ const Dashboard = ({ onNavigate, onSignOut }) => {
       color: '#ef4444',
       icon: <FileText size={20}/>,
       page: '/requests',
+      onOpen: markNotaryRequestsSeen,
       alert: pendingNotaryCount > 0,
       alertText: `${pendingNotaryCount} new ${pendingNotaryCount === 1 ? 'request' : 'requests'}`,
     },
@@ -1221,7 +1257,13 @@ const Dashboard = ({ onNavigate, onSignOut }) => {
               <h3 className="action-title">View Consultations</h3>
               <p className="action-description">Manage upcoming consultations</p>
             </div>
-            <div className="action-card" onClick={() => navigate('/requests')}>
+            <div
+              className="action-card"
+              onClick={() => {
+                markNotaryRequestsSeen();
+                navigate('/requests');
+              }}
+            >
               <FileText size={32} className="action-icon" />
               <h3 className="action-title">Notarial Requests</h3>
               <p className="action-description">Review pending notary requests</p>
@@ -1236,7 +1278,11 @@ const Dashboard = ({ onNavigate, onSignOut }) => {
               <div
                 key={i}
                 className={`stat-card clickable-card ${stat.alert ? 'stat-card--alert' : ''}`}
-                onClick={() => (stat.page ? navigate(stat.page) : setActiveModal(stat.modal))}
+                onClick={() => {
+                  stat.onOpen?.();
+                  if (stat.page) navigate(stat.page);
+                  else setActiveModal(stat.modal);
+                }}
               >
                 {stat.alert ? <span className="stat-card__pulse" aria-hidden="true" /> : null}
                 <div className="stat-label">
