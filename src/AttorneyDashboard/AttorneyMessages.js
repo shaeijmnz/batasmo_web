@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState, useRef, useEffect, useMemo } from 'react';
+import { Fragment, Suspense, lazy, useState, useRef, useEffect, useMemo } from 'react';
 import './AttorneyMessages.css';
 import './AttorneyTheme.css';
 import './AttorneyMessagesPalette.css';
@@ -28,6 +28,25 @@ import { consultationSummaryHasContent, parseConsultationSummary } from '../lib/
 import ConsultationSummaryForm from '../components/ConsultationSummaryForm';
 import { attachLiveDataRefresh } from '../lib/liveDataRefresh';
 const VideoCallModal = lazy(() => import('../components/VideoCallModal'));
+
+// Page params are lost on refresh; remember the open thread so it doesn't jump to another client.
+const ACTIVE_THREAD_KEY = 'batasmo_attorney_active_thread';
+
+const readStoredThread = (attorneyId) => {
+  try {
+    return sessionStorage.getItem(`${ACTIVE_THREAD_KEY}:${attorneyId}`) || '';
+  } catch {
+    return '';
+  }
+};
+
+const storeThread = (attorneyId, appointmentId) => {
+  try {
+    sessionStorage.setItem(`${ACTIVE_THREAD_KEY}:${attorneyId}`, String(appointmentId));
+  } catch {
+    /* storage unavailable */
+  }
+};
 
 const CONSULTATION_TIMER_TOTAL_SECONDS = 60 * 60;
 
@@ -227,6 +246,8 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
             return String(initialAppointmentId)
           }
           if (prev && activeRows.some((row) => String(row.id) === String(prev))) return prev
+          const stored = readStoredThread(profile.id)
+          if (stored && activeRows.some((row) => String(row.id) === stored)) return stored
           return String(activeRows[0].id)
         })
 
@@ -256,6 +277,10 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
       detachLiveRefresh();
     };
   }, [profile?.id, initialAppointmentId]);
+
+  useEffect(() => {
+    if (profile?.id && activeAppointmentId) storeThread(profile.id, activeAppointmentId);
+  }, [profile?.id, activeAppointmentId]);
 
   useEffect(() => {
     if (!initialAppointmentId || !appointments.length) return;
@@ -799,11 +824,10 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
     }
   };
 
-  // Leaving a call the client actually joined ends the consultation and opens the
-  // wrap-up. Leaving an unanswered call only closes it; the attorney can call again.
-  const handleCloseVideoCall = ({ joined, hadRemoteParticipant } = {}) => {
+  // Leaving the call (or the client ending it) never ends the consultation;
+  // only the attorney's "End Session" button does.
+  const handleCloseVideoCall = () => {
     closeVideoCall();
-    if (joined && hadRemoteParticipant) void handleEndSession();
   };
 
   useEffect(() => {
@@ -944,7 +968,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
           {messages.map((msg, idx) => {
             const showDate = idx === 0 || messages[idx - 1].date !== msg.date;
             return (
-              <div key={msg.id}>
+              <Fragment key={msg.id}>
                 {showDate && (
                   <div className="am-date-divider">
                     <span>{msg.date}</span>
@@ -959,7 +983,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
                     <span className="am-bubble__time">{msg.time}</span>
                   </div>
                 </div>
-              </div>
+              </Fragment>
             );
           })}
           <div ref={messagesEndRef} />
