@@ -1,0 +1,146 @@
+.atty-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(7, 12, 22, 0.55);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+  z-index: 210;
+}
+
+.atty-drawer-overlay--open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.atty-drawer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: min(84vw, 272px);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  background: linear-gradient(180deg, #0f1a2d 0%, #152238 100%);
+  border-right: 1px solid rgba(212, 175, 55, 0.14);
+  box-shadow: 14px 0 36px rgba(0, 0, 0, 0.42);
+  color: #f5f4f1;
+  font-family: "Inter", "Space Grotesk", "Segoe UI", Tahoma, sans-serif;
+  transform: translateX(-100%);
+  visibility: hidden;
+  transition: transform 0.28s ease, visibility 0s linear 0.28s;
+  z-index: 220;
+}
+
+.atty-drawer--open {
+  transform: translateX(0);
+  visibility: visible;
+  transition: transform 0.28s ease, visibility 0s;
+}
+
+.atty-drawer__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 84px;
+  padding: 20px 18px;
+  box-sizing: border-box;
+  border-bottom: 1px solid rgba(212, 175, 55, 0.14);
+}
+
+.atty-drawer__logo {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  background: #0b1321;
+  box-shadow: 0 8px 18px rgba(7, 12, 22, 0.28);
+}
+
+.atty-drawer__brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.atty-drawer__title {
+  font-family: "Poppins", "Space Grotesk", "Segoe UI", Tahoma, sans-serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff6e2;
+}
+
+.atty-drawer__subtitle {
+  font-size: 0.71rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9eb5d5;
+}
+
+.atty-drawer__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 12px;
+  overflow-y: auto;
+}
+
+.atty-drawer__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 46px;
+  margin: 0;
+  padding: 11px 14px;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #b8c2d1;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.atty-drawer__item:hover {
+  background: rgba(212, 175, 55, 0.1);
+  color: #f5f4f1;
+}
+
+.atty-drawer__item:focus-visible {
+  outline: 2px solid #e4c46a;
+  outline-offset: 2px;
+}
+
+.atty-drawer__item--active,
+.atty-drawer__item--active:hover {
+  background: linear-gradient(135deg, #d4af37 0%, #e4c46a 100%);
+  color: #152238;
+  box-shadow: 0 8px 20px rgba(212, 175, 55, 0.18);
+}
+
+.atty-drawer__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  color: inherit;
+}
+
+.atty-drawer__label {
+  color: inherit;
+}
