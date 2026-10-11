@@ -29,6 +29,7 @@ import ForgotPassword from './LoginAuth/ForgotPassword';
 import ResetPassword from './LoginAuth/ResetPassword';
 import ClientShell from './ClientDashboard/ClientShell';
 import AdminSupportNotifier from './AdminDashboard/AdminSupportNotifier';
+import ConsultationPresenceHost from './components/ConsultationPresenceHost';
 
 /* ── Dashboard Pages (lazy-loaded to reduce initial bundle size) ── */
 const HomePage = lazy(() => import('./ClientDashboard/HomePage'));
@@ -607,15 +608,23 @@ function App() {
     : 'anonymous'
 
   const renderLazy = (node) => (
-    <Suspense fallback={null}>
-      <PageLifecycleTrace
-        key={`${page}:${profileScopeKey}:v${authScopeVersion}`}
-        page={page}
+    <>
+      <Suspense fallback={null}>
+        <PageLifecycleTrace
+          key={`${page}:${profileScopeKey}:v${authScopeVersion}`}
+          page={page}
+          profile={currentProfile}
+        >
+          {node}
+        </PageLifecycleTrace>
+      </Suspense>
+      <ConsultationPresenceHost
+        key={`consult-presence:${profileScopeKey}:v${authScopeVersion}`}
         profile={currentProfile}
-      >
-        {node}
-      </PageLifecycleTrace>
-    </Suspense>
+        currentPage={page}
+        onNavigate={handleNavigate}
+      />
+    </>
   )
 
   const renderClientShell = (node) =>
@@ -708,7 +717,7 @@ function App() {
       />,
     );
   }
-  if (page === 'chat-room') return renderClientShell(<ChatRoom onNavigate={handleNavigate} profile={currentProfile} initialAppointmentId={pageParams?.appointmentId || ''} />);
+  if (page === 'chat-room') return renderClientShell(<ChatRoom onNavigate={handleNavigate} profile={currentProfile} initialAppointmentId={pageParams?.appointmentId || ''} autoJoinCall={Boolean(pageParams?.joinCall)} />);
   if (page === 'my-notarial-requests') return renderClientShell(<MyNotarialRequests onNavigate={handleNavigate} profile={currentProfile} />);
   if (page === 'announcements') return renderClientShell(<Announcements onNavigate={handleNavigate} profile={currentProfile} />);
   if (page === 'transaction-history') return renderClientShell(<TransactionHistory onNavigate={handleNavigate} profile={currentProfile} />);
@@ -722,7 +731,7 @@ function App() {
     return renderLazy(<AttorneyAvailability onNavigate={handleNavigate} profile={currentProfile} />);
   if (page === 'notarial-requests-atty') return renderLazy(<NotarialRequestsAtty onNavigate={handleNavigate} profile={currentProfile} />);
   if (page === 'attorney-analytics') return renderLazy(<AttorneyAnalytics onNavigate={handleNavigate} profile={currentProfile} />);
-  if (page === 'attorney-messages') return renderLazy(<AttorneyMessages onNavigate={handleNavigate} profile={currentProfile} initialAppointmentId={pageParams?.appointmentId || ''} />);
+  if (page === 'attorney-messages') return renderLazy(<AttorneyMessages onNavigate={handleNavigate} profile={currentProfile} initialAppointmentId={pageParams?.appointmentId || ''} autoJoinCall={Boolean(pageParams?.joinCall)} />);
   if (page === 'attorney-logs')
     return renderLazy(
       <AttorneyLogs onNavigate={handleNavigate} profile={currentProfile} initialAppointmentId={pageParams?.appointmentId || ''} />,
