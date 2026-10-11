@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import ConsultationWaitingPopup from './ConsultationWaitingPopup'
 import {
-  RING_TIMEOUT_MS,
   acquireConsultationPresence,
-  isRecentIso,
+  isCallHandled,
+  isConsultationChatOpen,
+  markCallHandled,
   otherConsultRole,
   roleNoun,
   startCallRinging,
@@ -67,7 +68,6 @@ export default function ConsultationPresenceHost({ profile, currentPage, onNavig
   const namesRef = useRef({})
   const displayNameRef = useRef('')
   const seenJoinsRef = useRef(new Set())
-  const seenCallsRef = useRef(new Set())
   onChatPageRef.current = onChatPage
   displayNameRef.current = profile?.full_name || profile?.name || profile?.email || ''
   namesRef.current = Object.fromEntries(watches.map((item) => [item.appointmentId, item.otherPartyName]))
@@ -121,28 +121,35 @@ export default function ConsultationPresenceHost({ profile, currentPage, onNavig
       })
       if (!handle) return () => {}
       handles.set(appointmentId, handle)
-      let isFirst = true
+
+      // Ring whenever the other party is in the call, however long ago they joined.
+      // Once this consultation's chat page is open, the page rings instead.
+      const evaluateCall = (summary) => {
+        const callStartedAt = summary?.inCall ? summary.callStartedAt : null
+        const ring =
+          callStartedAt &&
+          !isConsultationChatOpen(appointmentId) &&
+          !isCallHandled(appointmentId, callStartedAt)
+        if (!ring) {
+          setIncomingCall((current) => (current?.appointmentId === appointmentId ? null : current))
+          return
+        }
+        const name = summary.displayName || namesRef.current[appointmentId] || fallbackName
+        setIncomingCall((current) =>
+          current?.appointmentId === appointmentId && current.callStartedAt === callStartedAt
+            ? current
+            : { appointmentId, name, callStartedAt },
+        )
+      }
+
+      const stopLocal = handle.onLocalChange(() => evaluateCall(handle.lastPeer()))
 
       const stopPeer = handle.onPeer((summary) => {
-        const first = isFirst
-        isFirst = false
         const name = summary.displayName || namesRef.current[appointmentId] || fallbackName
-        // On the chat page the notices belong to the page; only remember what was seen.
+        // On the chat page the "in the chatroom" notice belongs to the page; only remember it.
         const silent = onChatPageRef.current
 
-        if (summary.inCall && summary.callStartedAt) {
-          const callKey = `${appointmentId}:${summary.callStartedAt}`
-          if (!seenCallsRef.current.has(callKey)) {
-            seenCallsRef.current.add(callKey)
-            const ringing = !first || isRecentIso(summary.callStartedAt, RING_TIMEOUT_MS)
-            if (!silent && ringing) {
-              setIncomingCall({ appointmentId, name, callStartedAt: summary.callStartedAt })
-            }
-          }
-        }
-        if (!summary.inCall) {
-          setIncomingCall((current) => (current?.appointmentId === appointmentId ? null : current))
-        }
+        evaluateCall(summary)
 
         if (summary.joinedAt) {
           const joinKey = `${appointmentId}:${summary.joinedAt}`
@@ -157,6 +164,7 @@ export default function ConsultationPresenceHost({ profile, currentPage, onNavig
 
       return () => {
         stopPeer()
+        stopLocal()
         handle.release()
         if (handles.get(appointmentId) === handle) handles.delete(appointmentId)
       }
@@ -170,31 +178,36 @@ export default function ConsultationPresenceHost({ profile, currentPage, onNavig
   }, [role, userId, watchKey])
 
   useEffect(() => {
-    if (!onChatPage) return
-    setEnteredNotice(null)
-    setIncomingCall(null)
+    if (onChatPage) setEnteredNotice(null)
   }, [onChatPage])
 
   useEffect(() => {
     if (!incomingCall) return undefined
-    return startCallRinging({ onTimeout: () => setIncomingCall(null) })
+    return startCallRinging({
+      onTimeout: () => {
+        markCallHandled(incomingCall.appointmentId, incomingCall.callStartedAt)
+        setIncomingCall(null)
+      },
+    })
   }, [incomingCall])
 
-  if (!role || onChatPage) return null
+  if (!role) return null
 
   if (incomingCall) {
-    const { appointmentId, name } = incomingCall
+    const { appointmentId, name, callStartedAt } = incomingCall
     return (
       <ConsultationWaitingPopup
         title={`${name} is calling you`}
         body="Video call for your consultation. Tap Join to connect."
         actionLabel="Join"
         onAction={() => {
+          markCallHandled(appointmentId, callStartedAt)
           setIncomingCall(null)
           onNavigate(chatPage, { appointmentId, joinCall: true })
         }}
         closeLabel="Decline"
         onClose={() => {
+          markCallHandled(appointmentId, callStartedAt)
           setIncomingCall(null)
           handlesRef.current.get(appointmentId)?.sendCallDeclined({ name: displayNameRef.current })
         }}
@@ -202,6 +215,8 @@ export default function ConsultationPresenceHost({ profile, currentPage, onNavig
       />
     )
   }
+
+  if (onChatPage) return null
 
   if (enteredNotice) {
     const { appointmentId, name } = enteredNotice
