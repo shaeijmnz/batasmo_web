@@ -71,6 +71,30 @@ const TEARDOWN_GRACE_MS = 1500
 const registry = new Map()
 const pendingTeardowns = new Map()
 
+// Calls the user already answered, declined, or let ring out; shared by the chat page
+// and the global watcher so one call never rings twice.
+const handledCalls = new Set()
+const callKey = (appointmentId, callStartedAt) => `${appointmentId}:${callStartedAt}`
+
+export const isCallHandled = (appointmentId, callStartedAt) =>
+  handledCalls.has(callKey(String(appointmentId), callStartedAt))
+
+export const markCallHandled = (appointmentId, callStartedAt) => {
+  if (appointmentId && callStartedAt) handledCalls.add(callKey(String(appointmentId), callStartedAt))
+}
+
+/** True while this tab has the consultation chat page open for the appointment. */
+export const isConsultationChatOpen = (appointmentId) =>
+  (registry.get(String(appointmentId))?.chatHolders || 0) > 0
+
+const notifyLocalChange = (entry) => {
+  entry.localListeners.forEach((listener) => {
+    setTimeout(() => {
+      if (entry.localListeners.has(listener)) listener()
+    }, 0)
+  })
+}
+
 const buildTrackPayload = (entry) => {
   const inChat = entry.chatHolders > 0
   const inCall = inChat && entry.inCall
@@ -144,6 +168,7 @@ const ensureEntry = ({ appointmentId, role, userId, displayName }) => {
     teardownTimer: null,
     peerListeners: new Set(),
     declineListeners: new Set(),
+    localListeners: new Set(),
     channel: null,
   }
   registry.set(appointmentId, entry)
@@ -244,9 +269,11 @@ export function acquireConsultationPresence({ appointmentId, role, userId, displ
     entry.watchHolders += 1
   }
   pushTrack(entry)
+  if (isChat) notifyLocalChange(entry)
 
   const ownPeerListeners = new Set()
   const ownDeclineListeners = new Set()
+  const ownLocalListeners = new Set()
   let released = false
 
   return {
@@ -273,6 +300,18 @@ export function acquireConsultationPresence({ appointmentId, role, userId, displ
         ownDeclineListeners.delete(listener)
       }
     },
+    /** Fires when this tab opens/closes the chat page or joins/leaves the call. */
+    onLocalChange(listener) {
+      entry.localListeners.add(listener)
+      ownLocalListeners.add(listener)
+      return () => {
+        entry.localListeners.delete(listener)
+        ownLocalListeners.delete(listener)
+      }
+    },
+    lastPeer() {
+      return entry.synced && entry.channel ? summarizePeer(entry.channel, myRole) : null
+    },
     setInCall(value) {
       if (!isChat || released) return
       const next = Boolean(value)
@@ -280,6 +319,7 @@ export function acquireConsultationPresence({ appointmentId, role, userId, displ
       entry.inCall = next
       entry.callStartedAt = next ? new Date().toISOString() : null
       pushTrack(entry)
+      notifyLocalChange(entry)
     },
     sendCallDeclined({ name } = {}) {
       if (released || !entry.channel) return
@@ -302,6 +342,7 @@ export function acquireConsultationPresence({ appointmentId, role, userId, displ
       released = true
       ownPeerListeners.forEach((listener) => entry.peerListeners.delete(listener))
       ownDeclineListeners.forEach((listener) => entry.declineListeners.delete(listener))
+      ownLocalListeners.forEach((listener) => entry.localListeners.delete(listener))
 
       if (isChat) {
         entry.chatHolders = Math.max(0, entry.chatHolders - 1)
@@ -315,6 +356,7 @@ export function acquireConsultationPresence({ appointmentId, role, userId, displ
       }
 
       pushTrack(entry)
+      if (isChat) notifyLocalChange(entry)
       if (holderCount(entry) === 0) scheduleTeardown(entry)
     },
   }
