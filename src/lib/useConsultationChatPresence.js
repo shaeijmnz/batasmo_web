@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   acquireConsultationPresence,
+  isCallHandled,
+  markCallHandled,
   normalizeConsultRole,
   otherConsultRole,
   roleNoun,
@@ -29,6 +31,7 @@ export default function useConsultationChatPresence({
   const [callNotice, setCallNotice] = useState(null)
   const handleRef = useRef(null)
   const myInCallRef = useRef(false)
+  const peerRef = useRef(null)
   const displayNameRef = useRef(displayName)
   const otherNameRef = useRef(otherPartyName)
   const onJoinRef = useRef(onJoinIncomingCall)
@@ -50,6 +53,7 @@ export default function useConsultationChatPresence({
     setIncomingCall(null)
     setCallNotice(null)
     myInCallRef.current = false
+    peerRef.current = null
     if (!enabled || !appointmentId || !userId) return undefined
 
     const handle = acquireConsultationPresence({
@@ -63,22 +67,28 @@ export default function useConsultationChatPresence({
     handleRef.current = handle
 
     let previous = null
-    const seenCalls = new Set()
     const shownJoins = new Set()
 
     const stopPeer = handle.onPeer((summary) => {
       const isFirst = previous === null
       const prev = previous
       previous = summary
+      peerRef.current = summary
       setPeer(summary)
 
-      if (summary.inCall && summary.callStartedAt && !seenCalls.has(summary.callStartedAt)) {
-        seenCalls.add(summary.callStartedAt)
-        if (!isFirst && !myInCallRef.current) {
-          setIncomingCall({ name: resolvePeerName(summary), callStartedAt: summary.callStartedAt })
-        }
+      // Ring whenever the other party is in the call and I'm not, including when
+      // they were already in it before I opened the chat.
+      const callStartedAt = summary.inCall ? summary.callStartedAt : null
+      if (!callStartedAt) {
+        setIncomingCall(null)
+      } else if (myInCallRef.current) {
+        markCallHandled(appointmentId, callStartedAt)
+      } else if (!isCallHandled(appointmentId, callStartedAt)) {
+        const name = resolvePeerName(summary)
+        setIncomingCall((current) =>
+          current?.callStartedAt === callStartedAt ? current : { name, callStartedAt },
+        )
       }
-      if (!summary.inCall) setIncomingCall(null)
 
       // First summary only records who is already here; the header shows them online.
       if (isFirst) return
@@ -110,14 +120,26 @@ export default function useConsultationChatPresence({
 
   useEffect(() => {
     if (!incomingCall) return undefined
-    return startCallRinging({ onTimeout: () => setIncomingCall(null) })
-  }, [incomingCall])
+    return startCallRinging({
+      onTimeout: () => {
+        markCallHandled(appointmentId, incomingCall.callStartedAt)
+        setIncomingCall(null)
+      },
+    })
+  }, [incomingCall, appointmentId])
 
-  const setInCall = useCallback((value) => {
-    myInCallRef.current = Boolean(value)
-    if (value) setIncomingCall(null)
-    handleRef.current?.setInCall(Boolean(value))
-  }, [])
+  const setInCall = useCallback(
+    (value) => {
+      myInCallRef.current = Boolean(value)
+      if (value) {
+        const peerCall = peerRef.current?.inCall ? peerRef.current.callStartedAt : null
+        markCallHandled(appointmentId, peerCall)
+        setIncomingCall(null)
+      }
+      handleRef.current?.setInCall(Boolean(value))
+    },
+    [appointmentId],
+  )
 
   const showNoAnswer = useCallback(() => {
     setCallNotice({
@@ -127,14 +149,16 @@ export default function useConsultationChatPresence({
   }, [peer, resolvePeerName])
 
   const declineIncomingCall = useCallback(() => {
+    markCallHandled(appointmentId, incomingCall?.callStartedAt)
     setIncomingCall(null)
     handleRef.current?.sendCallDeclined({ name: displayNameRef.current })
-  }, [])
+  }, [appointmentId, incomingCall])
 
   const joinIncomingCall = useCallback(() => {
+    markCallHandled(appointmentId, incomingCall?.callStartedAt)
     setIncomingCall(null)
     if (typeof onJoinRef.current === 'function') onJoinRef.current()
-  }, [])
+  }, [appointmentId, incomingCall])
 
   let popup = null
   if (incomingCall) {
