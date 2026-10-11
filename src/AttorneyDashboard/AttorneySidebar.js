@@ -124,7 +124,7 @@ export default function AttorneySidebar({ open, onClose, active, onNavigate }) {
                 className={`atty-drawer__item ${isActive ? 'atty-drawer__item--active' : ''}`}
                 aria-current={isActive ? 'page' : undefined}
                 onClick={() => {
-                  onClose();
+                  if (!isDesktop) onClose();
                   if (!isActive) onNavigate(item.nav);
                 }}
               >
