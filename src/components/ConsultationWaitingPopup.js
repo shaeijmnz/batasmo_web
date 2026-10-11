@@ -7,20 +7,19 @@ export default function ConsultationWaitingPopup({
   onClose,
   actionLabel,
   onAction,
+  closeLabel,
+  closeOnBackdrop = true,
 }) {
   if (!title && !body) return null
 
-  const handleAction = () => {
-    if (typeof onAction === 'function') {
-      onAction()
-    }
-    if (typeof onClose === 'function') {
-      onClose()
-    }
-  }
+  const hasAction = Boolean(actionLabel) && typeof onAction === 'function'
 
   return (
-    <div className="consult-wait-overlay" onClick={onClose} role="presentation">
+    <div
+      className="consult-wait-overlay"
+      onClick={closeOnBackdrop ? onClose : undefined}
+      role="presentation"
+    >
       <div
         className="consult-wait-modal"
         role="dialog"
@@ -31,13 +30,13 @@ export default function ConsultationWaitingPopup({
         <h3 id="consult-wait-title">{title}</h3>
         <p>{body}</p>
         <div className="consult-wait-actions">
-          {actionLabel && typeof onAction === 'function' ? (
-            <button type="button" className="consult-wait-btn consult-wait-btn--primary" onClick={handleAction}>
+          {hasAction ? (
+            <button type="button" className="consult-wait-btn consult-wait-btn--primary" onClick={onAction}>
               {actionLabel}
             </button>
           ) : null}
           <button type="button" className="consult-wait-btn" onClick={onClose}>
-            {actionLabel ? 'Dismiss' : 'OK'}
+            {closeLabel || (hasAction ? 'Dismiss' : 'OK')}
           </button>
         </div>
       </div>
