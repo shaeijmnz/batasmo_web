@@ -15,6 +15,7 @@ import {
 } from '../lib/userApi';
 import { attachLiveDataRefresh } from '../lib/liveDataRefresh';
 import AttorneyNotificationDropdown from './AttorneyNotificationDropdown';
+import AttorneySidebar from './AttorneySidebar';
 
 /* ── Icons ── */
 const ScalesIcon = ({ size = 24, color = '#f5a623' }) => (
@@ -49,32 +50,6 @@ const AnalyticsIcon = () => (
     <line x1="4" y1="20" x2="20" y2="20" /><rect x="6" y="11" width="3" height="7" /><rect x="11" y="8" width="3" height="10" /><rect x="16" y="5" width="3" height="13" />
   </svg>
 );
-const DashboardIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
-  </svg>
-);
-const MyApptIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-  </svg>
-);
-const ProfileIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-  </svg>
-);
-const LogsIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><polyline points="14 2 14 8 20 8"/>
-  </svg>
-);
-const AnnouncementIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-  </svg>
-);
-
 const formatNotifBadgeCount = (count) => {
   const safeCount = Number(count || 0);
   if (safeCount <= 0) return '';
@@ -85,7 +60,6 @@ const formatNotifBadgeCount = (count) => {
 function AttorneyHome({ onNavigate, profile }) {
   const markAllReadStorageKey = `attorney-notifications-read-cutoff:${profile?.id || 'unknown'}`;
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [activePage, setActivePage] = useState('Dashboard');
   const [notifOpen, setNotifOpen] = useState(false);
   const [consultations, setConsultations] = useState([]);
   const [notifications, setNotifications] = useState([]);
@@ -240,42 +214,12 @@ function AttorneyHome({ onNavigate, profile }) {
 
   return (
     <div className="att-page">
-      {/* Sidebar overlay */}
-      {sidebarOpen && <div className="att-sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
-
-      {/* Sidebar */}
-      <aside className={`att-sidebar ${sidebarOpen ? 'att-sidebar--open' : ''}`}>
-        <div className="att-sidebar__logo">
-          <img src="/logo/logo.jpg" alt="LegalLink logo" className="att-brand-logo" />
-          <div className="att-brand-text-wrap">
-            <span className="att-brand-title">LegalLink</span>
-            <span className="att-brand-sub">Attorney Console</span>
-          </div>
-        </div>
-        <nav className="att-sidebar__nav">
-          {[
-            { label: 'Dashboard',     icon: <DashboardIcon />, nav: 'attorney-home' },
-            { label: 'Consultation Management',   icon: <MyApptIcon />,    nav: 'upcoming-appointments' },
-            { label: 'My Availability', icon: <MyApptIcon />, nav: 'attorney-availability' },
-            { label: 'Logs',          icon: <LogsIcon />,      nav: 'attorney-logs' },
-            { label: 'Announcement',  icon: <AnnouncementIcon />, nav: 'attorney-announcements' },
-            { label: 'Profile',       icon: <ProfileIcon />,   nav: 'attorney-profile' },
-          ].map(item => (
-            <button
-              key={item.label}
-              className={`att-sidebar__item ${activePage === item.label ? 'att-sidebar__item--active' : ''}`}
-              onClick={() => {
-                setActivePage(item.label);
-                setSidebarOpen(false);
-                if (item.nav) onNavigate(item.nav);
-              }}
-            >
-              <span className="att-sidebar__item-icon">{item.icon}</span>
-              {item.label}
-            </button>
-          ))}
-        </nav>
-      </aside>
+      <AttorneySidebar
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        active="attorney-home"
+        onNavigate={onNavigate}
+      />
 
       {/* Topbar */}
       <header className="att-topbar">
