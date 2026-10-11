@@ -14,9 +14,6 @@ import {
   subscribeToClientAppointments,
 } from '../lib/userApi';
 import { attachLiveDataRefresh } from '../lib/liveDataRefresh';
-import { watchConsultationPresenceAlerts } from '../lib/consultationChatPresence';
-import ConsultationWaitingPopup from '../components/ConsultationWaitingPopup';
-
 const MenuIcon = () => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
@@ -116,7 +113,6 @@ function MyAppointments({ onNavigate, profile }) {
   const [loadError, setLoadError] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
-  const [waitingPopup, setWaitingPopup] = useState(null);
   const [nowTick, setNowTick] = useState(() => Date.now());
 
   useEffect(() => {
@@ -198,34 +194,6 @@ function MyAppointments({ onNavigate, profile }) {
     String(name || 'Attorney')
       .replace(/^\s*(atty\.?\s*)+/i, '')
       .trim();
-
-  const presenceWatches = useMemo(
-    () =>
-      queueAppointments
-        .filter(
-          (item) =>
-            item.chatAccessible &&
-            item.payment === 'PAID' &&
-            String(item.status || '').toUpperCase() !== 'COMPLETED',
-        )
-        .map((item) => ({
-          appointmentId: item.id,
-          otherPartyName: formatAttorneyName(item.attorney),
-        })),
-    [queueAppointments],
-  );
-  const presenceWatchKey = presenceWatches.map((item) => item.appointmentId).join(',');
-
-  useEffect(() => {
-    if (!profile?.id || !presenceWatches.length) {
-      return undefined;
-    }
-    return watchConsultationPresenceAlerts({
-      watches: presenceWatches,
-      role: 'client',
-      onWaitingPopup: (payload) => setWaitingPopup(payload),
-    });
-  }, [profile?.id, presenceWatchKey, presenceWatches]);
 
   const getInitials = (name) =>
     String(name || 'AT')
@@ -1154,14 +1122,6 @@ function MyAppointments({ onNavigate, profile }) {
           </div>
         </div>
       )}
-
-      {waitingPopup ? (
-        <ConsultationWaitingPopup
-          title={waitingPopup.title}
-          body={waitingPopup.body}
-          onClose={() => setWaitingPopup(null)}
-        />
-      ) : null}
 
       {/* AI Chat FAB */}
       <button className="ma-chat-fab" title="AI Assistant">
