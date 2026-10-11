@@ -2,7 +2,8 @@ import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import './ChatRoom.css';
 import './ClientTheme.css';
 import ConsultationWaitingPopup from '../components/ConsultationWaitingPopup';
-import { attachConsultationChatPresence } from '../lib/consultationChatPresence';
+import { NO_ANSWER_TIMEOUT_MS } from '../lib/consultationChatPresence';
+import useConsultationChatPresence from '../lib/useConsultationChatPresence';
 import {
   fetchAppointmentMessages,
   fetchClientNotifications,
@@ -56,7 +57,7 @@ const mergeMessage = (existing, incoming) => {
   );
 };
 
-function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
+function ChatRoom({ onNavigate, profile, initialAppointmentId = '', autoJoinCall = false }) {
   const [threads, setThreads] = useState([]);
   const [activeAppointmentId, setActiveAppointmentId] = useState('');
   const [messages, setMessages] = useState([]);
@@ -66,12 +67,11 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
   const [loadError, setLoadError] = useState('');
   const [signedUrlsByMessageId, setSignedUrlsByMessageId] = useState({});
   const [timeWarningPopup, setTimeWarningPopup] = useState(null);
-  const [waitingPopup, setWaitingPopup] = useState(null);
   const [videoCall, setVideoCall] = useState(null);
   const [videoCallLoading, setVideoCallLoading] = useState(false);
   const [videoCallError, setVideoCallError] = useState('');
-  const [incomingCallData, setIncomingCallData] = useState(null);
   const videoCallRef = useRef(null);
+  const autoJoinHandledRef = useRef(false);
   const sessionWasActiveRef = useRef(false);
   const lastAppointmentRef = useRef('');
   const messagesEndRef = useRef(null);
@@ -193,18 +193,6 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
 
         setMessages((response.messages || []).map(mapMessage));
         setIsClosed(Boolean(response.isClosed));
-
-        if (response.videoMeetingId && response.roomId && !videoCallRef.current) {
-          try {
-            await openIncomingByMeetingId({
-              meetingId: response.videoMeetingId,
-              roomId: response.roomId,
-            });
-          } catch {
-            // Keep chat usable; user can still join from fallback button.
-          }
-        }
-
       } catch (error) {
         if (!isMounted) return;
         setMessages([]);
@@ -237,69 +225,38 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
     sessionWasActiveRef.current = false;
     videoCallRef.current = null;
     setVideoCall(null);
-    setIncomingCallData(null);
     onNavigate('home-logged');
   }, [activeAppointmentId, isClosed, onNavigate]);
 
   useEffect(() => {
     if (!activeAppointmentId) return undefined;
 
-    const unsubscribe = subscribeToConsultationRoomStatus(
-      activeAppointmentId,
-      async ({ isClosed, videoMeetingId, consultationRoomId }) => {
-        setIsClosed(Boolean(isClosed));
-
-        // The attorney ended the session — drop out of the call immediately.
-        if (isClosed) {
-          videoCallRef.current = null;
-          setVideoCall(null);
-          setIncomingCallData(null);
-          return;
-        }
-
-        // Auto-open when attorney starts video (same meetingId for both parties)
-        if (videoMeetingId && consultationRoomId && !videoCallRef.current) {
-          try {
-            await openIncomingByMeetingId({
-              meetingId: videoMeetingId,
-              roomId: consultationRoomId,
-            });
-          } catch (error) {
-            setVideoCallError(
-              error?.message || 'Incoming call is ready. Tap "Join Incoming Call" to connect.',
-            );
-          }
-        }
-      },
-    );
+    // Calls never open on their own: this only tracks the room closing.
+    const unsubscribe = subscribeToConsultationRoomStatus(activeAppointmentId, ({ isClosed }) => {
+      setIsClosed(Boolean(isClosed));
+      if (isClosed) {
+        videoCallRef.current = null;
+        setVideoCall(null);
+      }
+    });
 
     return () => {
       unsubscribe();
     };
-  }, [activeAppointmentId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeAppointmentId]);
 
-  useEffect(() => {
-    if (!activeAppointmentId || !profile?.id || isClosed) {
-      setWaitingPopup(null);
-      return undefined;
-    }
-
-    const detachPresence = attachConsultationChatPresence({
-      appointmentId: activeAppointmentId,
-      role: 'client',
-      userId: profile.id,
-      displayName: profile.full_name || profile.email || 'Client',
-      otherPartyName: activeThread?.name || 'Attorney',
-      onWaitingPopup: (payload) => {
-        playTimeWarningCue();
-        setWaitingPopup(payload);
-      },
-    });
-
-    return () => {
-      detachPresence();
-    };
-  }, [activeAppointmentId, profile?.id, profile?.full_name, profile?.email, isClosed, activeThread?.name]);
+  const chatPresence = useConsultationChatPresence({
+    appointmentId: activeAppointmentId,
+    role: 'client',
+    userId: profile?.id,
+    displayName: profile?.full_name || profile?.email || 'Client',
+    otherPartyName: activeThread?.name || 'Attorney',
+    enabled: !isClosed,
+    onJoinIncomingCall: () => {
+      void handleJoinCall();
+    },
+  });
+  const { peerInCall, setInCall: setPresenceInCall } = chatPresence;
 
   useEffect(() => {
     if (!profile?.id) return undefined;
@@ -565,9 +522,9 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
   };
 
   const openVideoCall = (callData) => {
-    setIncomingCallData(null);
     // Re-opening the same meeting would remount the SDK and force a rejoin.
     if (videoCallRef.current?.meetingId === callData?.meetingId) return;
+    setPresenceInCall(true);
     videoCallRef.current = callData;
     setVideoCall(callData);
   };
@@ -582,26 +539,17 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
     }
   };
 
-  const tryOpenIncomingCall = async (callData) => {
-    setIncomingCallData(callData);
-    await warmupMediaPermissions();
-    openVideoCall(callData);
-  };
-
-  const openIncomingByMeetingId = async ({ meetingId, roomId }) => {
-    if (!meetingId || !roomId) return;
-    const token = await getVideoSdkToken();
-    await tryOpenIncomingCall({ meetingId, roomId, token });
-  };
-
-  const handleStartVideoCall = async () => {
-    if (!activeAppointmentId || videoCallLoading) return;
+  // Start or join: both go through the shared meeting for this appointment.
+  // Whoever starts while the other party is not in the call is the caller.
+  const handleJoinCall = async () => {
+    if (!activeAppointmentId || videoCallLoading || videoCallRef.current) return;
+    const isCaller = !peerInCall;
     setVideoCallLoading(true);
     setVideoCallError('');
     try {
       const { meetingId, roomId, token } = await getOrCreateVideoMeeting(activeAppointmentId);
       await warmupMediaPermissions();
-      openVideoCall({ meetingId, roomId, token });
+      openVideoCall({ meetingId, roomId, token, isCaller });
     } catch (err) {
       setVideoCallError(err.message || 'Failed to start video call.');
     } finally {
@@ -612,22 +560,15 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
   const handleCloseVideoCall = () => {
     videoCallRef.current = null;
     setVideoCall(null);
+    setPresenceInCall(false);
   };
 
-  const handleJoinIncomingCall = async () => {
-    if (!incomingCallData || videoCallLoading) return;
-    setVideoCallLoading(true);
-    setVideoCallError('');
-    try {
-      await tryOpenIncomingCall(incomingCallData);
-    } catch (error) {
-      setVideoCallError(
-        error?.message || 'Unable to connect yet. Please check internet and try joining again.',
-      );
-    } finally {
-      setVideoCallLoading(false);
-    }
-  };
+  useEffect(() => {
+    if (!autoJoinCall || autoJoinHandledRef.current) return;
+    if (!activeAppointmentId || String(activeAppointmentId) !== String(initialAppointmentId) || isClosed) return;
+    autoJoinHandledRef.current = true;
+    void handleJoinCall();
+  }, [autoJoinCall, activeAppointmentId, initialAppointmentId, isClosed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!activeAppointmentId || isClosed || videoCall) return;
@@ -657,9 +598,9 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
             <button
               type="button"
               className="cr-video-call-btn"
-              onClick={handleStartVideoCall}
+              onClick={handleJoinCall}
               disabled={!activeAppointmentId || videoCallLoading || isClosed}
-              title="Start Video Call"
+              title={peerInCall ? 'Join Video Call' : 'Start Video Call'}
             >
               {videoCallLoading ? (
                 'Connecting…'
@@ -669,7 +610,7 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
                     <polygon points="23 7 16 12 23 17 23 7" />
                     <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
                   </svg>
-                  Video Call
+                  {peerInCall ? 'Join Call' : 'Video Call'}
                 </>
               )}
             </button>
@@ -691,15 +632,15 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
         {videoCallError ? (
           <div className="cr-video-error">{videoCallError}</div>
         ) : null}
-        {incomingCallData && !videoCall ? (
+        {peerInCall && !videoCall && !isClosed ? (
           <div className="cr-video-incoming">
             <button
               type="button"
               className="cr-video-call-btn"
-              onClick={handleJoinIncomingCall}
+              onClick={handleJoinCall}
               disabled={videoCallLoading}
             >
-              {videoCallLoading ? 'Connecting…' : 'Join Incoming Call'}
+              {videoCallLoading ? 'Connecting…' : `${activeThread?.name || 'Attorney'} is in the call — Join`}
             </button>
           </div>
         ) : null}
@@ -808,13 +749,7 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
         </form>
       </div>
 
-      {waitingPopup ? (
-        <ConsultationWaitingPopup
-          title={waitingPopup.title}
-          body={waitingPopup.body}
-          onClose={() => setWaitingPopup(null)}
-        />
-      ) : null}
+      {chatPresence.popup && !videoCall ? <ConsultationWaitingPopup {...chatPresence.popup} /> : null}
 
       {timeWarningPopup ? (
         <div className="cr-time-warning-overlay" onClick={() => setTimeWarningPopup(null)}>
@@ -837,7 +772,11 @@ function ChatRoom({ onNavigate, profile, initialAppointmentId = '' }) {
             token={videoCall.token || ''}
             participantName={profile?.full_name || profile?.email || 'Client'}
             onClose={handleCloseVideoCall}
-          />
+            noAnswerTimeoutMs={videoCall.isCaller ? NO_ANSWER_TIMEOUT_MS : 0}
+            onNoAnswer={chatPresence.showNoAnswer}
+          >
+            {chatPresence.popup ? <ConsultationWaitingPopup {...chatPresence.popup} /> : null}
+          </VideoCallModal>
         </Suspense>
       ) : null}
     </div>
