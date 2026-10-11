@@ -14,8 +14,6 @@ import {
   ATTORNEY_QUEUE_SLOT_DURATION_MS,
 } from '../lib/userApi';
 import { attachLiveDataRefresh } from '../lib/liveDataRefresh';
-import { watchConsultationPresenceAlerts, watchConsultationVideoCallAlerts } from '../lib/consultationChatPresence';
-import ConsultationWaitingPopup from '../components/ConsultationWaitingPopup';
 import AttorneyNotificationDropdown from './AttorneyNotificationDropdown';
 
 /* ── Icons ── */
@@ -94,8 +92,6 @@ function AttorneyHome({ onNavigate, profile }) {
   const [markAllReadCutoffIso, setMarkAllReadCutoffIso] = useState('');
   const [isMarkingNotificationsRead, setIsMarkingNotificationsRead] = useState(false);
   const [loadError, setLoadError] = useState('');
-  const [waitingPopup, setWaitingPopup] = useState(null);
-  const [videoCallPopup, setVideoCallPopup] = useState(null);
   const [nowTick, setNowTick] = useState(() => new Date());
 
   useEffect(() => {
@@ -191,49 +187,6 @@ function AttorneyHome({ onNavigate, profile }) {
         .sort((a, b) => new Date(a.date) - new Date(b.date)),
     [consultations, nowTick],
   );
-  const presenceWatches = useMemo(
-    () =>
-      sortedConsultations
-        .filter((item) =>
-          isConsultationChatEnterAllowed({
-            status: item.status,
-            scheduledAt: item.scheduledAt,
-            slotDate: item.slotDate,
-            slotTime: item.slotTime,
-            paymentStatus: item.paymentStatus || 'unpaid',
-            nowValue: nowTick,
-          }),
-        )
-        .map((item) => ({
-          appointmentId: item.id,
-          otherPartyName: item.name || 'Client',
-        })),
-    [sortedConsultations, nowTick],
-  );
-  const presenceWatchKey = presenceWatches.map((item) => item.appointmentId).join(',');
-
-  useEffect(() => {
-    if (!profile?.id || !presenceWatches.length) {
-      return undefined;
-    }
-    return watchConsultationPresenceAlerts({
-      watches: presenceWatches,
-      role: 'attorney',
-      onWaitingPopup: (payload) => setWaitingPopup(payload),
-    });
-  }, [profile?.id, presenceWatchKey, presenceWatches]);
-
-  useEffect(() => {
-    if (!profile?.id || !presenceWatches.length) {
-      return undefined;
-    }
-    return watchConsultationVideoCallAlerts({
-      watches: presenceWatches,
-      role: 'attorney',
-      onVideoCallPopup: (payload) => setVideoCallPopup(payload),
-    });
-  }, [profile?.id, presenceWatchKey, presenceWatches]);
-
   const upcomingCount = sortedConsultations.length;
   const stats = [
     { label: 'My Appointments', value: String(upcomingCount), icon: <CalendarCheckIcon />, bg: '#eff6ff', border: '#3b82f6', nav: 'upcoming-appointments' },
@@ -522,26 +475,6 @@ function AttorneyHome({ onNavigate, profile }) {
         </div>
       </main>
 
-      {waitingPopup ? (
-        <ConsultationWaitingPopup
-          title={waitingPopup.title}
-          body={waitingPopup.body}
-          onClose={() => setWaitingPopup(null)}
-        />
-      ) : null}
-      {videoCallPopup ? (
-        <ConsultationWaitingPopup
-          title={videoCallPopup.title}
-          body={videoCallPopup.body}
-          actionLabel="Join Video Call"
-          onAction={() => {
-            if (videoCallPopup.appointmentId) {
-              onNavigate('attorney-messages', { appointmentId: videoCallPopup.appointmentId });
-            }
-          }}
-          onClose={() => setVideoCallPopup(null)}
-        />
-      ) : null}
     </div>
   );
 }
