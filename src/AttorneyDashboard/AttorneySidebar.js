@@ -1,6 +1,21 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import './AttorneySidebar.css';
+
+// Must match the desktop breakpoint in AttorneyTheme.css that reserves the sidebar column.
+const DESKTOP_QUERY = '(min-width: 1120px)';
+
+const useIsDesktop = () => {
+  const [isDesktop, setIsDesktop] = useState(() => window.matchMedia(DESKTOP_QUERY).matches);
+  useEffect(() => {
+    const media = window.matchMedia(DESKTOP_QUERY);
+    const handleChange = () => setIsDesktop(media.matches);
+    handleChange();
+    media.addEventListener('change', handleChange);
+    return () => media.removeEventListener('change', handleChange);
+  }, []);
+  return isDesktop;
+};
 
 const NavIcon = ({ children }) => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -67,23 +82,31 @@ const NAV_ITEMS = [
 
 // Rendered into document.body so page-level attorney CSS cannot restyle it.
 export default function AttorneySidebar({ open, onClose, active, onNavigate }) {
+  const isDesktop = useIsDesktop();
+  const visible = open || isDesktop;
+
   useEffect(() => {
-    if (!open) return undefined;
+    if (!open || isDesktop) return undefined;
     const handleKey = (event) => {
       if (event.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [open, onClose]);
+  }, [open, isDesktop, onClose]);
 
   return createPortal(
     <>
       <div
-        className={`atty-drawer-overlay ${open ? 'atty-drawer-overlay--open' : ''}`}
+        className={`atty-drawer-overlay ${open && !isDesktop ? 'atty-drawer-overlay--open' : ''}`}
         onClick={onClose}
         role="presentation"
       />
-      <aside className={`atty-drawer ${open ? 'atty-drawer--open' : ''}`} aria-label="Attorney navigation" aria-hidden={!open} inert={!open}>
+      <aside
+        className={`atty-drawer ${visible ? 'atty-drawer--open' : ''} ${isDesktop ? 'atty-drawer--docked' : ''}`}
+        aria-label="Attorney navigation"
+        aria-hidden={!visible}
+        inert={!visible}
+      >
         <div className="atty-drawer__brand">
           <img src="/logo/logo.jpg" alt="" className="atty-drawer__logo" />
           <div className="atty-drawer__brand-text">
