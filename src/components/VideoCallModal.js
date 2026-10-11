@@ -235,7 +235,10 @@ const buildTwoParticipantLayout = (participantIds, localParticipantId) => {
   };
 };
 
-function MeetingView({ meetingId, onLeave, onJoined }) {
+const remoteParticipantCount = (participants, localParticipantId) =>
+  [...(participants?.keys?.() || [])].filter((pid) => String(pid) !== String(localParticipantId)).length;
+
+function MeetingView({ meetingId, onLeave, onJoined, onRemoteJoined, noAnswerTimeoutMs, onNoAnswer }) {
   const [joinState, setJoinState] = useState('IDLE');
   const [joinError, setJoinError] = useState('');
   const [participantLayoutEpoch, setParticipantLayoutEpoch] = useState(0);
@@ -244,6 +247,10 @@ function MeetingView({ meetingId, onLeave, onJoined }) {
   const leaveRef = useRef(null);
   const timeoutRef = useRef(null);
   const retryCountRef = useRef(0);
+  const noAnswerTimerRef = useRef(null);
+  const remoteCountRef = useRef(0);
+  const onNoAnswerRef = useRef(onNoAnswer);
+  onNoAnswerRef.current = onNoAnswer;
 
   const bumpParticipantLayout = useCallback(() => {
     setParticipantLayoutEpoch((value) => value + 1);
@@ -265,6 +272,13 @@ function MeetingView({ meetingId, onLeave, onJoined }) {
       setJoinState('JOINED');
       bumpParticipantLayout();
       if (typeof onJoined === 'function') onJoined();
+      if (noAnswerTimeoutMs > 0 && !noAnswerTimerRef.current) {
+        noAnswerTimerRef.current = setTimeout(() => {
+          if (remoteCountRef.current === 0 && typeof onNoAnswerRef.current === 'function') {
+            onNoAnswerRef.current();
+          }
+        }, noAnswerTimeoutMs);
+      }
     },
     onMeetingLeft: onLeave,
     onParticipantJoined: () => {
@@ -335,6 +349,13 @@ function MeetingView({ meetingId, onLeave, onJoined }) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   leaveRef.current = leave;
+  remoteCountRef.current = remoteParticipantCount(participants, localParticipant?.id);
+
+  useEffect(() => {
+    if (remoteCountRef.current > 0 && typeof onRemoteJoined === 'function') onRemoteJoined();
+  });
+
+  useEffect(() => () => clearTimeout(noAnswerTimerRef.current), []);
 
   // Always signal VideoSDK that we left, including when the modal is closed
   // from the outside (attorney ends the session). Without this the other
@@ -445,12 +466,21 @@ function MeetingView({ meetingId, onLeave, onJoined }) {
 
 // ─── Public modal wrapper ────────────────────────────────────────────────────
 
-export default function VideoCallModal({ meetingId, token, participantName, onClose }) {
+export default function VideoCallModal({
+  meetingId,
+  token,
+  participantName,
+  onClose,
+  noAnswerTimeoutMs = 0,
+  onNoAnswer,
+  children,
+}) {
   const [preparedTracks, setPreparedTracks] = useState(null);
   const [tracksReady, setTracksReady] = useState(false);
   const [tracksError, setTracksError] = useState('');
   const trackCleanupRef = useRef(null);
   const hasJoinedMeetingRef = useRef(false);
+  const hadRemoteParticipantRef = useRef(false);
 
   // Build HD tracks before mounting MeetingProvider so the participant joins
   // directly at the preferred quality, instead of falling back to SDK defaults.
@@ -499,11 +529,20 @@ export default function VideoCallModal({ meetingId, token, participantName, onCl
       trackCleanupRef.current();
       trackCleanupRef.current = null;
     }
-    if (typeof onClose === 'function') onClose({ joined: hasJoinedMeetingRef.current });
+    if (typeof onClose === 'function') {
+      onClose({
+        joined: hasJoinedMeetingRef.current,
+        hadRemoteParticipant: hadRemoteParticipantRef.current,
+      });
+    }
   };
 
   const handleJoined = () => {
     hasJoinedMeetingRef.current = true;
+  };
+
+  const handleRemoteJoined = () => {
+    hadRemoteParticipantRef.current = true;
   };
 
   return (
@@ -539,7 +578,14 @@ export default function VideoCallModal({ meetingId, token, participantName, onCl
               joinWithoutUserInteraction={false}
               reinitialiseMeetingOnConfigChange={false}
             >
-              <MeetingView meetingId={meetingId} onLeave={handleLeave} onJoined={handleJoined} />
+              <MeetingView
+                meetingId={meetingId}
+                onLeave={handleLeave}
+                onJoined={handleJoined}
+                onRemoteJoined={handleRemoteJoined}
+                noAnswerTimeoutMs={noAnswerTimeoutMs}
+                onNoAnswer={onNoAnswer}
+              />
             </MeetingProvider>
           ) : (
             <div className="vc-connecting">
@@ -552,6 +598,7 @@ export default function VideoCallModal({ meetingId, token, participantName, onCl
           )}
         </VideoErrorBoundary>
       </div>
+      {children}
     </div>
   );
 }
