@@ -3,7 +3,8 @@ import './AttorneyMessages.css';
 import './AttorneyTheme.css';
 import './AttorneyMessagesPalette.css';
 import ConsultationWaitingPopup from '../components/ConsultationWaitingPopup';
-import { attachConsultationChatPresence } from '../lib/consultationChatPresence';
+import { NO_ANSWER_TIMEOUT_MS } from '../lib/consultationChatPresence';
+import useConsultationChatPresence from '../lib/useConsultationChatPresence';
 import {
   endConsultationSession,
   fetchAppointmentMessages,
@@ -80,7 +81,7 @@ const SendIcon = () => (
   </svg>
 );
 
-export default function AttorneyMessages({ onNavigate, profile, initialAppointmentId = '' }) {
+export default function AttorneyMessages({ onNavigate, profile, initialAppointmentId = '', autoJoinCall = false }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -120,7 +121,8 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
   const [videoCallLoading, setVideoCallLoading] = useState(false);
   const [videoCallError, setVideoCallError] = useState('');
   const videoCallRef = useRef(null);
-  const dismissedVideoMeetingIdRef = useRef('');
+  const autoJoinHandledRef = useRef(false);
+  const setPresenceInCallRef = useRef(() => {});
   const endSessionInFlightRef = useRef(false);
   const endedAppointmentIdRef = useRef('');
   const messagesEndRef = useRef(null);
@@ -128,7 +130,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
   const openVideoCall = (callData) => {
     // Re-opening the same meeting would remount the SDK and force a rejoin.
     if (videoCallRef.current?.meetingId === callData?.meetingId) return;
-    dismissedVideoMeetingIdRef.current = '';
+    setPresenceInCallRef.current(true);
     videoCallRef.current = callData;
     setVideoCall(callData);
   };
@@ -136,6 +138,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
   const closeVideoCall = () => {
     videoCallRef.current = null;
     setVideoCall(null);
+    setPresenceInCallRef.current(false);
   };
 
   const warmupMediaPermissions = async () => {
@@ -148,28 +151,10 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
     }
   };
 
-  const tryOpenExistingVideoCall = async ({ videoMeetingId, roomId, isClosed: closed }) => {
-    if (closed || !videoMeetingId || videoCallRef.current) return;
-    // Background polling must not pop a call back open after the attorney closed it.
-    if (dismissedVideoMeetingIdRef.current === videoMeetingId) return;
-    try {
-      const token = await getVideoSdkToken();
-      openVideoCall({
-        meetingId: videoMeetingId,
-        roomId,
-        token,
-      });
-    } catch {
-      // Attorney can still tap "Video Call" to join the shared room.
-    }
-  };
   const imagePickerRef = useRef(null);
   const filePickerRef = useRef(null);
   const timerStartedAtByAppointmentRef = useRef({});
   const tenMinuteReminderSentByAppointmentRef = useRef({});
-  const appointmentsRef = useRef([]);
-  const [waitingPopup, setWaitingPopup] = useState(null);
-
   const mergeRealtimeMessage = (incoming) => {
     setMessages((previous) => {
       const existingById = new Map(previous.map((item) => [item.id, item]));
@@ -333,7 +318,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
     const currentAppointmentId = activeAppointmentId;
     const loadMessages = async () => {
       try {
-        const { messages: rows, isClosed: closed, roomId, videoMeetingId } = await fetchAppointmentMessages(currentAppointmentId);
+        const { messages: rows, isClosed: closed } = await fetchAppointmentMessages(currentAppointmentId);
         if (!isMounted) return;
         const mapped = rows.map((item) => ({
           id: item.id,
@@ -358,7 +343,6 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
         setMessages(mapped);
         setIsClosed(closed);
         setLoadError('');
-        await tryOpenExistingVideoCall({ videoMeetingId, roomId, isClosed: closed });
       } catch (error) {
         if (!isMounted) return;
         setLoadError(error.message || 'Unable to load messages.');
@@ -468,32 +452,20 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
     };
   }, [activeAppointmentId, isClosed]);
 
-  appointmentsRef.current = appointments;
-
-  useEffect(() => {
-    if (!activeAppointmentId || !profile?.id || isClosed) {
-      setWaitingPopup(null);
-      return undefined;
-    }
-
-    const activeRow = appointmentsRef.current.find(
-      (item) => String(item.id) === String(activeAppointmentId),
-    );
-    const otherPartyName = activeRow?.name || 'Client';
-
-    const detachPresence = attachConsultationChatPresence({
-      appointmentId: activeAppointmentId,
-      role: 'attorney',
-      userId: profile.id,
-      displayName: profile.full_name || profile.name || profile.email || 'Attorney',
-      otherPartyName,
-      onWaitingPopup: (payload) => setWaitingPopup(payload),
-    });
-
-    return () => {
-      detachPresence();
-    };
-  }, [activeAppointmentId, profile?.id, profile?.full_name, profile?.name, profile?.email, isClosed]);
+  const chatPresence = useConsultationChatPresence({
+    appointmentId: activeAppointmentId,
+    role: 'attorney',
+    userId: profile?.id,
+    displayName: profile?.full_name || profile?.name || profile?.email || 'Attorney',
+    otherPartyName:
+      appointments.find((item) => String(item.id) === String(activeAppointmentId))?.name || 'Client',
+    enabled: !isClosed,
+    onJoinIncomingCall: () => {
+      void handleStartVideoCall();
+    },
+  });
+  const { peerInCall } = chatPresence;
+  setPresenceInCallRef.current = chatPresence.setInCall;
 
   useEffect(() => {
     if (!activeAppointmentId) return undefined;
@@ -502,7 +474,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
 
     const refreshMessages = async () => {
       try {
-        const { messages: rows, isClosed: closed, roomId, videoMeetingId } = await fetchAppointmentMessages(activeAppointmentId);
+        const { messages: rows, isClosed: closed } = await fetchAppointmentMessages(activeAppointmentId);
         if (cancelled) return;
 
         const mapped = rows.map((item) => ({
@@ -536,7 +508,6 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
           );
         });
         setIsClosed(Boolean(closed));
-        await tryOpenExistingVideoCall({ videoMeetingId, roomId, isClosed: closed });
       } catch {
         // Preserve current state when background refresh fails.
       }
@@ -810,14 +781,17 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
   const timerLabel = formatTimerLabel(remainingSeconds);
   const isTenMinuteWindow = remainingSeconds <= 10 * 60;
 
+  // Start or join: both go through the shared meeting for this appointment.
+  // Whoever starts while the client is not in the call is the caller.
   const handleStartVideoCall = async () => {
-    if (!activeAppointmentId || videoCallLoading) return;
+    if (!activeAppointmentId || videoCallLoading || videoCallRef.current) return;
+    const isCaller = !peerInCall;
     setVideoCallLoading(true);
     setVideoCallError('');
     try {
       const { meetingId, roomId, token } = await getOrCreateVideoMeeting(activeAppointmentId);
       await warmupMediaPermissions();
-      openVideoCall({ meetingId, roomId, token });
+      openVideoCall({ meetingId, roomId, token, isCaller });
     } catch (err) {
       setVideoCallError(err.message || 'Failed to start video call.');
     } finally {
@@ -825,37 +799,29 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
     }
   };
 
-  // Leaving a call the attorney actually joined ends the consultation and opens
-  // the wrap-up. Closing a call that never connected only hides it; the attorney
-  // can rejoin with the "Video Call" button.
-  const handleCloseVideoCall = ({ joined } = {}) => {
-    dismissedVideoMeetingIdRef.current = videoCallRef.current?.meetingId || '';
+  // Leaving a call the client actually joined ends the consultation and opens the
+  // wrap-up. Leaving an unanswered call only closes it; the attorney can call again.
+  const handleCloseVideoCall = ({ joined, hadRemoteParticipant } = {}) => {
     closeVideoCall();
-    if (joined) void handleEndSession();
+    if (joined && hadRemoteParticipant) void handleEndSession();
   };
 
-  // Auto-open video call when client starts one (video_meeting_id appears in DB)
+  useEffect(() => {
+    if (!autoJoinCall || autoJoinHandledRef.current) return;
+    if (!activeAppointmentId || String(activeAppointmentId) !== String(initialAppointmentId) || isClosed) return;
+    autoJoinHandledRef.current = true;
+    void handleStartVideoCall();
+  }, [autoJoinCall, activeAppointmentId, initialAppointmentId, isClosed]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Calls never open on their own: this only tracks the room closing.
   useEffect(() => {
     if (!activeAppointmentId) return undefined;
 
-    const unsubscribe = subscribeToConsultationRoomStatus(
-      activeAppointmentId,
-      async ({ isClosed: closed, videoMeetingId, consultationRoomId }) => {
-        setIsClosed(Boolean(closed));
-
-        // Ending the session (from any device) tears down the call right away.
-        if (closed || !videoMeetingId) {
-          if (closed) closeVideoCall();
-          return;
-        }
-
-        await tryOpenExistingVideoCall({
-          videoMeetingId,
-          roomId: consultationRoomId,
-          isClosed: closed,
-        });
-      },
-    );
+    const unsubscribe = subscribeToConsultationRoomStatus(activeAppointmentId, ({ isClosed: closed }) => {
+      setIsClosed(Boolean(closed));
+      // Ending the session (from any device) tears down the call right away.
+      if (closed) closeVideoCall();
+    });
 
     return () => unsubscribe();
   }, [activeAppointmentId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -943,7 +909,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
               className="am-video-call-btn"
               onClick={handleStartVideoCall}
               disabled={videoCallLoading}
-              title="Start Video Call"
+              title={peerInCall ? `${chatName} is in the call — Join` : 'Start Video Call'}
             >
               {videoCallLoading ? (
                 'Connecting…'
@@ -953,7 +919,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
                     <polygon points="23 7 16 12 23 17 23 7" />
                     <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
                   </svg>
-                  Video Call
+                  {peerInCall ? 'Join Call' : 'Video Call'}
                 </>
               )}
             </button>
@@ -1147,13 +1113,7 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
         </div>
       ) : null}
 
-      {waitingPopup ? (
-        <ConsultationWaitingPopup
-          title={waitingPopup.title}
-          body={waitingPopup.body}
-          onClose={() => setWaitingPopup(null)}
-        />
-      ) : null}
+      {chatPresence.popup && !videoCall ? <ConsultationWaitingPopup {...chatPresence.popup} /> : null}
 
       {videoCall ? (
         <Suspense fallback={null}>
@@ -1162,7 +1122,11 @@ export default function AttorneyMessages({ onNavigate, profile, initialAppointme
             token={videoCall.token || ''}
             participantName={profile?.full_name || profile?.email || 'Attorney'}
             onClose={handleCloseVideoCall}
-          />
+            noAnswerTimeoutMs={videoCall.isCaller ? NO_ANSWER_TIMEOUT_MS : 0}
+            onNoAnswer={chatPresence.showNoAnswer}
+          >
+            {chatPresence.popup ? <ConsultationWaitingPopup {...chatPresence.popup} /> : null}
+          </VideoCallModal>
         </Suspense>
       ) : null}
     </div>
