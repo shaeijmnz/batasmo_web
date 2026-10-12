@@ -504,3 +504,72 @@ export async function upsertCmsAttorneyDirectoryEntry({
 
   if (error) throw error
 }
+
+const isMissingFunctionError = (error) =>
+  error?.code === '42883' ||
+  error?.code === 'PGRST202' ||
+  String(error?.message || '').toLowerCase().includes('could not find the function')
+
+/** Failed sign-ins and lockouts. Returns null when the SQL helper has not been installed yet. */
+export async function fetchLoginSecurityActivity(days = 7) {
+  const { data, error } = await withTimeout(
+    supabase.rpc('admin_get_login_security', { p_days: days }),
+    'Fetch login security activity',
+  )
+
+  if (error) {
+    if (isMissingFunctionError(error)) return null
+    throw error
+  }
+
+  return {
+    failed: Array.isArray(data?.failed) ? data.failed : [],
+    locked: Array.isArray(data?.locked) ? data.locked : [],
+  }
+}
+
+/** New accounts, bookings, payments, and notarial requests created since `days` ago. */
+export async function fetchRecentSystemActivity(days = 7) {
+  const sinceIso = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+  const limit = 200
+
+  const [profilesRes, appointmentsRes, transactionsRes, notarialRes] = await withTimeout(
+    Promise.all([
+      supabase
+        .from('profiles')
+        .select('id, full_name, email, role, created_at')
+        .gte('created_at', sinceIso)
+        .order('created_at', { ascending: false })
+        .limit(limit),
+      supabase
+        .from('appointments')
+        .select('id, title, status, created_at, client_id, client:client_id(full_name), attorney:attorney_id(full_name)')
+        .gte('created_at', sinceIso)
+        .order('created_at', { ascending: false })
+        .limit(limit),
+      supabase
+        .from('transactions')
+        .select('id, amount, payment_status, created_at, client_id, client:client_id(full_name)')
+        .gte('created_at', sinceIso)
+        .order('created_at', { ascending: false })
+        .limit(limit),
+      supabase
+        .from('notarial_requests')
+        .select('id, service_type, status, created_at, client_id, client:client_id(full_name)')
+        .gte('created_at', sinceIso)
+        .order('created_at', { ascending: false })
+        .limit(limit),
+    ]),
+    'Fetch recent activity',
+  )
+
+  const firstError = [profilesRes, appointmentsRes, transactionsRes, notarialRes].find((res) => res.error)?.error
+  if (firstError) throw firstError
+
+  return {
+    profiles: profilesRes.data || [],
+    appointments: appointmentsRes.data || [],
+    transactions: transactionsRes.data || [],
+    notarialRequests: notarialRes.data || [],
+  }
+}
