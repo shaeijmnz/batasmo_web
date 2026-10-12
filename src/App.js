@@ -208,6 +208,28 @@ const clearTransientAuthState = ({ includeRecovery = false } = {}) => {
   }
 }
 
+const buildProfileFromSessionUser = (user) => ({
+  id: user.id,
+  full_name: user.user_metadata?.full_name || '',
+  email: user.email || '',
+  role: normalizeRole(user.user_metadata?.role || 'Client'),
+  phone: '',
+  address: '',
+  age: null,
+  guardian_name: '',
+  guardian_contact: '',
+  guardian_details: '',
+})
+
+function AuthLoadingScreen() {
+  return (
+    <div className="app-auth-loading" role="status" aria-live="polite">
+      <div className="app-auth-loading__spinner" aria-hidden="true" />
+      <p>Loading your account…</p>
+    </div>
+  )
+}
+
 function PageLifecycleTrace({ page, profile, children }) {
   const userId = profile?.id || null
   const role = normalizeRole(profile?.role || '')
@@ -231,6 +253,8 @@ function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [authScopeVersion, setAuthScopeVersion] = useState(0);
   const activeAuthUserIdRef = useRef(null);
+  const currentProfileRef = useRef(null);
+  currentProfileRef.current = currentProfile;
   const previousRoleRef = useRef('');
   const paymongoReturnHandledRef = useRef(false);
 
@@ -272,7 +296,15 @@ function App() {
 
     const loadSession = async () => {
       try {
-        const { session, profile } = await getCurrentSessionProfile();
+        let { session, profile } = await getCurrentSessionProfile();
+        if (!session?.user) {
+          // A contended auth lock reads as "no session"; confirm before showing Login.
+          const { data: confirmed } = await getSharedSession();
+          if (confirmed?.session?.user) {
+            resetUserApiRuntimeState();
+            ({ session, profile } = await getCurrentSessionProfile());
+          }
+        }
         const sessionUserId = session?.user?.id || null;
         const previousUserId = activeAuthUserIdRef.current;
         if (previousUserId !== sessionUserId) {
@@ -386,31 +418,36 @@ function App() {
           return;
         }
 
-        // Fast path: update profile from session metadata immediately.
         clearTransientAuthState();
-        setCurrentProfile((prev) => ({
-          id: session.user.id,
-          full_name: session.user.user_metadata?.full_name || prev?.full_name || '',
-          email: session.user.email || prev?.email || '',
-          role: normalizeRole(session.user.user_metadata?.role || prev?.role || 'Client'),
-          phone: prev?.phone || '',
-          address: prev?.address || '',
-          age: prev?.age ?? null,
-          guardian_name: prev?.guardian_name || '',
-          guardian_contact: prev?.guardian_contact || '',
-          guardian_details: prev?.guardian_details || '',
-        }));
 
-        // Background hydration: fetch full profile without blocking UI.
-        getCurrentSessionProfile()
-          .then(({ profile }) => {
-            if (activeAuthUserIdRef.current !== sessionUserId) return;
-            if (!profile) return;
+        // Auth metadata role can be stale (e.g. an Admin tagged 'Client'), so routing must
+        // wait for profiles.role instead of guessing from the session.
+        const hasProfileForUser = currentProfileRef.current?.id === sessionUserId;
+        if (hasProfileForUser && event === 'TOKEN_REFRESHED') return;
+
+        if (!hasProfileForUser) {
+          setCurrentProfile(null);
+          setAuthLoading(true);
+        }
+
+        try {
+          const { profile } = await getCurrentSessionProfile();
+          if (!isMounted || activeAuthUserIdRef.current !== sessionUserId) return;
+          if (profile) {
             setCurrentProfile(profile);
-          })
-          .catch((profileError) => {
-            console.error('[auth] non-blocking profile hydration failed', profileError)
-          });
+          } else if (!hasProfileForUser) {
+            setCurrentProfile(buildProfileFromSessionUser(session.user));
+          }
+        } catch (profileError) {
+          console.error('[auth] profile hydration failed', profileError)
+          if (isMounted && !hasProfileForUser && activeAuthUserIdRef.current === sessionUserId) {
+            setCurrentProfile(buildProfileFromSessionUser(session.user));
+          }
+        } finally {
+          if (isMounted && !hasProfileForUser && activeAuthUserIdRef.current === sessionUserId) {
+            setAuthLoading(false);
+          }
+        }
       } catch (listenerError) {
         console.error('[auth] onAuthStateChange listener failed', listenerError)
       }
@@ -681,6 +718,10 @@ function App() {
     }
     return undefined
   }, [currentProfile, page, isPublicPage])
+
+  if (authLoading && !isPublicPage) {
+    return <AuthLoadingScreen />;
+  }
 
   if (!authLoading && !isPublicPage && !currentProfile) {
     return <Login onNavigate={handleNavigate} onAuthSuccess={handleAuthSuccess} />;
