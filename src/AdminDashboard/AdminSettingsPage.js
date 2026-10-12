@@ -8,6 +8,7 @@ import './AdminTheme.css';
 import './settings.css';
 import { getAppConfig, setAppConfig } from '../lib/userApi';
 import { performAdminLogout } from '../lib/adminLogout';
+import ActivityLogSection from './AdminActivityLog';
 
 const handleQuickAction = (message) => window.alert(message);
 
@@ -76,7 +77,7 @@ const Settings = ({ onNavigate, onSignOut }) => {
 
           {/* TAB NAVIGATION */}
           <div className="settings-tabs">
-            {['Profile', 'Security', 'Notifications'].map(tab => (
+            {['Profile', 'Security', 'Activity Log', 'Notifications'].map(tab => (
               <button 
                 key={tab} 
                 className={`settings-tab ${activeTab === tab ? 'active' : ''}`}
@@ -90,6 +91,7 @@ const Settings = ({ onNavigate, onSignOut }) => {
           <div className="settings-content">
             {activeTab === 'Profile' && <ProfileSection />}
             {activeTab === 'Security' && <SecuritySection />}
+            {activeTab === 'Activity Log' && <ActivityLogSection />}
             {activeTab === 'Notifications' && <NotificationsSection />}
           </div>
         </div>
