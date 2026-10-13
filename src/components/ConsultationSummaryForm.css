@@ -64,37 +64,38 @@
   color: rgba(148, 163, 184, 0.55);
 }
 
-/* Attorney cream theme — Logs modal */
-.al-summary-panel .csf-form__intro {
-  color: #6f6a62;
+/* Attorney navy-and-gold theme — Logs modal */
+.al-page .al-summary-panel .csf-form__intro {
+  color: #b8c2d1 !important;
 }
 
-.al-summary-panel .csf-section {
-  border: 1px solid #e2d4c0;
-  background: linear-gradient(180deg, #fffaf3 0%, #f5ebdc 100%);
+.al-page .al-summary-panel .csf-section {
+  border: 1px solid rgba(212, 175, 55, 0.18) !important;
+  border-left: 3px solid #d4af37 !important;
+  background: rgba(15, 26, 45, 0.6) !important;
 }
 
-.al-summary-panel .csf-section__header {
-  color: #152238;
+.al-page .al-summary-panel .csf-section__header {
+  color: #f5f4f1 !important;
 }
 
-.al-summary-panel .csf-section__subheader {
-  color: #6f6a62;
+.al-page .al-summary-panel .csf-section__subheader {
+  color: #b8c2d1 !important;
 }
 
-.al-summary-panel .csf-section__body {
-  border: 1px solid #d9c8b1;
-  background: #fffaf2;
-  color: #1b2432;
+.al-page .al-summary-panel .csf-section__body {
+  border: 1px solid rgba(212, 175, 55, 0.2) !important;
+  background: rgba(11, 19, 33, 0.9) !important;
+  color: #f5f4f1 !important;
 }
 
-.al-summary-panel .csf-section__body::placeholder {
-  color: #8b857d;
+.al-page .al-summary-panel .csf-section__body::placeholder {
+  color: rgba(184, 194, 209, 0.6) !important;
 }
 
-.al-summary-panel .csf-section__body:focus {
-  border-color: #152238;
-  box-shadow: 0 0 0 3px rgba(21, 34, 56, 0.12);
+.al-page .al-summary-panel .csf-section__body:focus {
+  border-color: #d4af37 !important;
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.16);
 }
 
 /* Attorney navy-and-gold theme — Messages wrap-up modal */
@@ -162,12 +163,28 @@
   white-space: pre-wrap;
 }
 
+.clogs-attorney-summary--standalone .csf-view {
+  gap: 12px;
+}
+
+.clogs-attorney-summary--standalone .csf-view__block {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(212, 175, 55, 0.16);
+  border-left: 3px solid #d4af37;
+  background: rgba(15, 26, 45, 0.6);
+}
+
 .clogs-attorney-summary--standalone .csf-view__header {
-  color: #1e3a5f;
+  color: #f5f4f1;
+}
+
+.clogs-attorney-summary--standalone .csf-view__subheader {
+  color: #9fb0c8;
 }
 
 .clogs-attorney-summary--standalone .csf-view__body {
-  color: #475569;
+  color: #e2e8f0;
 }
 
 .cr-feedback-summary .csf-view__header {
