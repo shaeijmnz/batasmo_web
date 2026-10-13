@@ -168,13 +168,72 @@
   .al-item { flex-direction: column; align-items: stretch; }
 }
 
-/* Page-scoped override: make 'View summary' button dark text on light/beige background */
-.al-page .al-list .al-item .al-view-btn {
-  background: linear-gradient(145deg, rgba(27, 43, 71, 0.94), rgba(15, 26, 45, 0.98)) !important;
-  color: #f5f4f1 !important;
-  border: 1px solid #d9c8b1 !important;
-  box-shadow: 0 6px 14px rgba(36, 29, 20, 0.06) !important;
+/* Navy-and-gold palette, scoped to the page so the shared attorney themes cannot override it. */
+.al-page .al-list .al-item .al-view-btn,
+.al-page .al-summary-panel .al-summary-save-btn {
+  background: linear-gradient(135deg, #d4af37 0%, #e4c46a 100%) !important;
+  color: #152238 !important;
+  border: 1px solid rgba(212, 175, 55, 0.45) !important;
+  box-shadow: 0 6px 16px rgba(212, 175, 55, 0.18) !important;
 }
-.al-page .al-list .al-item .al-view-btn:hover {
-  filter: brightness(0.98) !important;
+.al-page .al-list .al-item .al-view-btn:hover,
+.al-page .al-summary-panel .al-summary-save-btn:hover:not(:disabled) {
+  filter: brightness(1.05) !important;
+}
+.al-page .al-summary-panel .al-summary-save-btn:disabled {
+  opacity: 0.5;
+  box-shadow: none !important;
+}
+.al-page .al-modal__header .al-close-btn {
+  background: rgba(11, 19, 33, 0.9) !important;
+  color: #f5f4f1 !important;
+  border: 1px solid rgba(212, 175, 55, 0.3) !important;
+}
+.al-page .al-modal__header .al-close-btn:hover {
+  border-color: #d4af37 !important;
+}
+.al-page .al-error {
+  color: #fecaca !important;
+  background: rgba(220, 38, 38, 0.14);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 0.88rem;
+}
+.al-page .al-modal-overlay {
+  background: rgba(7, 12, 22, 0.6) !important;
+}
+.al-page .al-modal__header {
+  border-bottom: 1px solid rgba(212, 175, 55, 0.18) !important;
+}
+.al-page .al-modal__header .al-modal__header-meta {
+  color: #b8c2d1 !important;
+}
+.al-page .al-summary-panel .al-summary-panel__title {
+  color: #d4af37 !important;
+}
+.al-page .al-summary-panel .al-summary-panel__help {
+  color: #b8c2d1 !important;
+}
+.al-page .al-summary-panel .al-summary-panel__label {
+  color: #e4c46a !important;
+}
+.al-page .al-summary-panel .al-summary-panel__select {
+  background: rgba(11, 19, 33, 0.9) !important;
+  color: #f5f4f1 !important;
+  border: 1px solid rgba(212, 175, 55, 0.25) !important;
+}
+.al-page .al-summary-panel .al-summary-panel__select:focus {
+  border-color: #d4af37 !important;
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.16);
+}
+.al-page .al-summary-panel .al-summary-panel__select option {
+  background: #0f1a2d;
+  color: #f5f4f1;
+}
+.al-page .al-summary-panel .al-summary-panel__loading {
+  color: #b8c2d1 !important;
+}
+.al-page .al-summary-panel .al-summary-panel__notice {
+  color: #f5c66b !important;
 }
